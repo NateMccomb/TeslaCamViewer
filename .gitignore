@@ -1,0 +1,7 @@
+# User-specific config files
+Layout_Config.TeslaCam
+Layouts/
+
+# OS generated files
+.DS_Store
+Thumbs.db
