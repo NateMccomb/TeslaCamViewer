@@ -1,0 +1,621 @@
+{
+  "_meta": {
+    "language": "Spanish",
+    "locale": "es",
+    "status": "complete"
+  },
+
+  "app": {
+    "title": "TeslaCamViewer.com",
+    "description": "Ver grabaciones de la dashcam de Tesla con reproducción sincronizada"
+  },
+
+  "header": {
+    "github": "GitHub",
+    "donate": "Donar",
+    "statistics": "Estadísticas",
+    "keyboardShortcuts": "Atajos de teclado (?)",
+    "settings": "Configuración (,)",
+    "viewOnGitHub": "Ver en GitHub",
+    "supportProject": "Apoyar este proyecto"
+  },
+
+  "sidebar": {
+    "events": "Eventos",
+    "map": "Mapa",
+    "allDrives": "Todas las unidades",
+    "addDrive": "Agregar otra unidad",
+    "manageDrives": "Administrar unidades",
+    "syncDrives": "Sincronizar entre unidades",
+    "selectFolder": "Seleccionar carpeta TeslaCam",
+    "emptyState": "Haga clic en \"Seleccionar carpeta TeslaCam\" para comenzar",
+    "emptyStateHint": "Puede seleccionar la carpeta TeslaCam, o cualquier carpeta que contenga grabaciones de la dashcam de Tesla"
+  },
+
+  "player": {
+    "noEventSelected": "Ningún evento seleccionado",
+    "selectEventHint": "👈 Seleccione un evento de la barra lateral para ver",
+    "noEventLoaded": "Ningún evento cargado",
+    "hidden": "Ocultas:",
+    "fullscreen": "Pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa"
+  },
+
+  "cameras": {
+    "front": "Frontal",
+    "back": "Trasera",
+    "left": "Izquierda",
+    "right": "Derecha",
+    "hideFront": "Ocultar cámara frontal",
+    "hideBack": "Ocultar cámara trasera",
+    "hideLeft": "Ocultar cámara izquierda",
+    "hideRight": "Ocultar cámara derecha"
+  },
+
+  "controls": {
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "previousFrame": "Cuadro anterior (Mantener para cámara lenta)",
+    "nextFrame": "Siguiente cuadro (Mantener para cámara lenta)",
+    "previousClip": "Clip anterior",
+    "nextClip": "Siguiente clip",
+    "previousEvent": "Evento anterior",
+    "nextEvent": "Siguiente evento",
+    "screenshot": "Capturar pantalla",
+    "enhance": "Mejora de video",
+    "markIn": "Marcar punto de entrada",
+    "markOut": "Marcar punto de salida",
+    "clearMarks": "Borrar marcas",
+    "export": "Exportar todas las cámaras",
+    "exportOptions": "Opciones de exportación",
+    "zoomOut": "Alejar línea de tiempo",
+    "zoomIn": "Acercar línea de tiempo",
+    "resetZoom": "Restablecer zoom",
+    "loop": "Repetir",
+    "speed": "Velocidad:",
+    "layout": "Diseño:",
+    "camera": "Cámara:"
+  },
+
+  "bookmarks": {
+    "title": "Marcadores",
+    "previous": "Marcador anterior ([)",
+    "add": "Agregar marcador (B)",
+    "next": "Siguiente marcador (])",
+    "manage": "Administrar marcadores",
+    "clearAll": "Borrar todo",
+    "noBookmarks": "Sin marcadores aún",
+    "bookmark": {
+      "one": "{{count}} marcador",
+      "other": "{{count}} marcadores"
+    }
+  },
+
+  "export": {
+    "header": "Exportar cámara",
+    "allCameras": "Todas las cámaras (Cuadrícula)",
+    "frontOnly": "Solo frontal",
+    "rearOnly": "Solo trasera",
+    "leftOnly": "Solo izquierda",
+    "rightOnly": "Solo derecha",
+    "exporting": "Exportando {{percent}}%",
+    "preparing": "Preparando exportación...",
+    "encoding": "Codificando video...",
+    "complete": "Exportación completa",
+    "cancelled": "Exportación cancelada",
+    "failed": "Exportación fallida"
+  },
+
+  "layouts": {
+    "grid2x2": "Cuadrícula 2×2",
+    "layout63": "6:3 Centrado",
+    "layout43": "4:3 Principal",
+    "all169": "Todas 16:9",
+    "frontLeft": "Frontal + Izquierda",
+    "frontRight": "Frontal + Derecha",
+    "frontRepeaters": "Frontal + Repetidores",
+    "focus": "Modo enfoque"
+  },
+
+  "loading": {
+    "loading": "Cargando...",
+    "buffering": "Almacenando en búfer...",
+    "bufferHealth": "Estado del búfer"
+  },
+
+  "notes": {
+    "title": "Notas y etiquetas (N)",
+    "notes": "Notas",
+    "tags": "Etiquetas",
+    "tagPlaceholder": "Escriba etiqueta, presione Enter o clic +",
+    "addTag": "Agregar etiqueta",
+    "existingTags": "Etiquetas existentes",
+    "placeholder": "Agregar notas sobre este evento..."
+  },
+
+  "help": {
+    "title": "Atajos de teclado",
+    "close": "Cerrar",
+    "tip": "Consejo: La mayoría de los atajos solo funcionan cuando no está escribiendo en un campo de texto",
+
+    "sections": {
+      "playback": "Reproducción",
+      "navigation": "Navegación",
+      "viewLayout": "Vista y diseño",
+      "markingExport": "Marcado y exportación",
+      "bookmarks": "Marcadores",
+      "speedControl": "Control de velocidad",
+      "general": "General"
+    },
+
+    "shortcuts": {
+      "playPause": "Reproducir / Pausar",
+      "previousFrame": "Cuadro anterior",
+      "nextFrame": "Siguiente cuadro",
+      "slowMotion": "Reproducción en cámara lenta",
+      "previousClip": "Clip anterior",
+      "nextClip": "Siguiente clip",
+      "goToStart": "Ir al inicio",
+      "goToEnd": "Ir al final",
+      "previousEvent": "Evento anterior",
+      "nextEvent": "Siguiente evento",
+      "selectPreviousEvent": "Seleccionar evento anterior",
+      "selectNextEvent": "Seleccionar siguiente evento",
+      "cycleLayouts": "Cambiar diseños",
+      "focusCamera": "Enfocar cámara (1=Frontal, 2=Trasera, 3=Izquierda, 4=Derecha)",
+      "toggleFullscreen": "Alternar pantalla completa",
+      "focusCameraFullscreen": "Enfocar cámara en pantalla completa",
+      "markIn": "Marcar punto de entrada",
+      "markOut": "Marcar punto de salida",
+      "clearMarks": "Borrar marcas",
+      "takeScreenshot": "Tomar captura de pantalla",
+      "exportVideo": "Exportar video",
+      "addBookmark": "Agregar marcador en posición actual",
+      "jumpToPreviousBookmark": "Ir al marcador anterior",
+      "jumpToNextBookmark": "Ir al siguiente marcador",
+      "zoomTimeline": "Acercar/alejar (si está habilitado en configuración)",
+      "increaseSpeed": "Aumentar velocidad",
+      "decreaseSpeed": "Disminuir velocidad",
+      "resetSpeed": "Restablecer a velocidad 1x",
+      "showHelp": "Mostrar esta ayuda",
+      "openSettings": "Abrir configuración",
+      "closeModal": "Cerrar modal / Borrar marcas"
+    }
+  },
+
+  "settings": {
+    "title": "Configuración",
+    "close": "Cerrar",
+    "done": "Listo",
+    "resetToDefaults": "Restablecer valores predeterminados",
+    "confirmReset": "¿Restablecer todas las configuraciones a los valores predeterminados?",
+
+    "sections": {
+      "playback": "Reproducción",
+      "performance": "Rendimiento",
+      "ui": "Interfaz de usuario",
+      "timeline": "Línea de tiempo",
+      "session": "Sesión",
+      "offline": "Modo sin conexión",
+      "accessibility": "Accesibilidad",
+      "mobile": "Móvil",
+      "export": "Exportar",
+      "language": "Idioma"
+    },
+
+    "playback": {
+      "defaultSpeed": "Velocidad predeterminada",
+      "defaultLayout": "Diseño predeterminado",
+      "autoPlayNext": "Reproducir automáticamente siguiente evento",
+      "loopByDefault": "Repetir por defecto"
+    },
+
+    "performance": {
+      "preloadNextClip": "Precargar siguiente clip",
+      "preloadHint": "Reproducción más fluida, usa más memoria",
+      "memoryOptimization": "Optimización de memoria",
+      "memoryHint": "Liberar recursos de video no utilizados"
+    },
+
+    "ui": {
+      "theme": "Tema",
+      "themeDark": "Oscuro (Predeterminado)",
+      "themeLight": "Claro",
+      "themeMidnight": "Medianoche",
+      "themeTeslaRed": "Tesla Rojo",
+      "showKeyboardHints": "Mostrar sugerencias de teclado",
+      "showTimestampOverlay": "Mostrar superposición de marca de tiempo",
+      "showWhatsNew": "Mostrar indicadores de \"Novedades\"",
+      "whatsNewHint": "Puntos azules en nuevas funciones, notificaciones de actualización"
+    },
+
+    "timeline": {
+      "enableZoom": "Habilitar zoom de línea de tiempo",
+      "zoomHint": "Desplazar para acercar/alejar en la línea de tiempo",
+      "showClipMarkers": "Mostrar marcadores de clips"
+    },
+
+    "session": {
+      "rememberLastFolder": "Recordar última carpeta",
+      "folderHint": "Requiere permiso de carpeta al recargar"
+    },
+
+    "offline": {
+      "downloadPackage": "Descargar paquete sin conexión",
+      "downloadHint": "Crear una versión autónoma para unidades USB (~2-3 MB)",
+      "download": "Descargar",
+      "mapNote": "Incluye todos los archivos de la aplicación y bibliotecas. El mapa requiere conexión a Internet.",
+      "notAvailable": "El empaquetador sin conexión no está disponible. Por favor recargue la página e intente de nuevo."
+    },
+
+    "accessibility": {
+      "highContrast": "Modo de alto contraste",
+      "highContrastHint": "Aumenta el contraste del texto y los bordes",
+      "textSize": "Tamaño del texto",
+      "textSmall": "Pequeño",
+      "textMedium": "Mediano (Predeterminado)",
+      "textLarge": "Grande"
+    },
+
+    "mobile": {
+      "lockLandscape": "Bloquear horizontal durante reproducción",
+      "lockHint": "Bloquear pantalla en horizontal mientras se reproduce el video (solo móvil)"
+    },
+
+    "export": {
+      "videoFormat": "Formato de video",
+      "webm": "WebM (VP9) - Archivos más pequeños",
+      "mp4": "MP4 (H.264) - Mejor compatibilidad",
+      "formatHint": "Formato utilizado al exportar videos"
+    },
+
+    "language": {
+      "selectLanguage": "Idioma",
+      "languageHint": "Seleccione su idioma preferido"
+    }
+  },
+
+  "sync": {
+    "synced": "Sincronizado (las 4 cámaras en sincronía)",
+    "drifted": "Desincronizado (corrigiendo automáticamente)",
+    "videosSynced": "Los videos están sincronizados",
+    "videosDrifted": "Videos desincronizados - resincronizando"
+  },
+
+  "events": {
+    "stats": "{{total}} eventos ({{saved}} guardados, {{sentry}} centinela, {{recent}} recientes)",
+    "saved": "Guardado",
+    "sentry": "Centinela",
+    "recent": "Reciente",
+    "event": {
+      "one": "{{count}} evento",
+      "other": "{{count}} eventos"
+    }
+  },
+
+  "filter": {
+    "search": "Buscar eventos",
+    "type": "Tipo",
+    "date": "Fecha",
+    "all": "Todos",
+    "savedClips": "Clips guardados",
+    "sentryClips": "Clips de centinela",
+    "recentClips": "Clips recientes",
+    "clear": "Borrar filtros",
+    "filters": "Filtros",
+    "eventTypes": "Tipos de eventos",
+    "saved": "Guardado",
+    "sentry": "Centinela",
+    "recent": "Reciente",
+    "onlyBookmarked": "Solo eventos con marcadores",
+    "onlyWithNotes": "Solo eventos con notas/etiquetas",
+    "sortBy": "Ordenar por",
+    "newestFirst": "Más reciente primero",
+    "oldestFirst": "Más antiguo primero",
+    "searchPlaceholder": "Ciudad, ubicación, razón...",
+    "dateRange": "Rango de fechas",
+    "dateTo": "a",
+    "clearDates": "Borrar fechas",
+    "clearAllFilters": "Borrar todos los filtros",
+    "filterByTag": "Filtrar por etiqueta",
+    "allTags": "Todas las etiquetas"
+  },
+
+  "map": {
+    "noLocation": "Sin datos de ubicación",
+    "showAll": "Mostrar todos los eventos",
+    "centerOnEvent": "Centrar en evento",
+    "toggleHeatmap": "Alternar vista de mapa de calor",
+    "toggleStruggleZones": "Alternar zonas de dificultad del piloto automático",
+    "loadingStruggleZones": "Cargando datos de desconexión del PA...",
+    "struggleZonesLoaded": "{{count}} desconexiones del PA encontradas",
+    "togglePhantomBrakes": "Alternar puntos de frenado fantasma",
+    "loadingPhantomBrakes": "Cargando datos de frenado fantasma...",
+    "phantomBrakesLoaded": "{{count}} frenados fantasma encontrados",
+    "phantomBrakeHotspot": "Punto de frenado fantasma",
+    "phantomBrakesAtLocation": "{{count}} frenado(s) fantasma en esta ubicación",
+    "phantomBrakeTip": "Esta ubicación tiene frenado fantasma repetido - considera reportarlo a Tesla si es un falso positivo.",
+    "toggleDarkMode": "Alternar modo oscuro del mapa"
+  },
+
+  "statistics": {
+    "title": "Estadísticas",
+    "close": "Cerrar",
+    "recordingOverview": "Resumen de grabación",
+    "totalEvents": "Eventos totales",
+    "totalClips": "Clips totales",
+    "recordingTime": "Tiempo de grabación",
+    "estStorage": "Almacenamiento est.",
+    "eventsLast14Days": "Eventos - Últimos 14 días",
+    "eventTypes": "Tipos de eventos",
+    "saved": "Guardado",
+    "sentry": "Centinela",
+    "recent": "Reciente",
+    "triggerReasons": "Razones de activación",
+    "manualSave": "Guardado manual",
+    "objectDetected": "Objeto detectado",
+    "vehicleBump": "Golpe al vehículo",
+    "honk": "Bocina",
+    "other": "Otro",
+    "unknown": "Desconocido",
+    "topLocations": "10 ubicaciones principales (Todos los eventos)",
+    "sentryByTimeOfDay": "Eventos centinela por hora del día",
+    "topSentryLocations": "Principales ubicaciones centinela",
+    "dateRange": "Rango de fechas",
+    "eventTrends": "Tendencias de eventos",
+    "weekly": "Semanal",
+    "monthly": "Mensual",
+    "exportStatistics": "Exportar estadísticas",
+    "exportJson": "Exportar JSON",
+    "exportCsv": "Exportar CSV",
+    "noEvents": "No hay eventos cargados. Abre una carpeta TeslaCam primero.",
+    "noStatsToExport": "No hay estadísticas para exportar",
+    "noTimelineData": "No hay datos de línea de tiempo disponibles",
+    "noEventsLast14Days": "No hay eventos en los últimos 14 días",
+    "noSentryEvents": "No hay eventos centinela para analizar",
+    "noTrendData": "No hay datos de tendencia disponibles",
+    "noLocationData": "No hay datos de ubicación disponibles",
+    "noSentryLocationData": "No hay datos de ubicación centinela",
+    "events": "eventos"
+  },
+
+  "errors": {
+    "folderNotFound": "Carpeta no encontrada",
+    "noVideosFound": "No se encontraron videos en este evento",
+    "loadFailed": "Error al cargar video",
+    "exportFailed": "Error al exportar video",
+    "browserNotSupported": "Su navegador no soporta esta función",
+    "permissionDenied": "Permiso denegado",
+    "fileAccessError": "Error al acceder al archivo"
+  },
+
+  "time": {
+    "hours": "h",
+    "minutes": "m",
+    "seconds": "s",
+    "ago": "hace",
+    "justNow": "ahora mismo"
+  },
+
+  "quickstart": {
+    "skip": "Omitir",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "getStarted": "Comenzar",
+    "welcome": {
+      "title": "Bienvenido a TeslaCam Viewer",
+      "description": "Vea y administre sus grabaciones de dashcam de Tesla directamente en su navegador.",
+      "noUpload": "Sin necesidad de subir archivos",
+      "videosStay": "sus videos permanecen en su computadora.",
+      "language": "Idioma"
+    },
+    "step1": {
+      "title": "Paso 1: Seleccione su carpeta TeslaCam",
+      "description": "Haga clic en el botón \"Seleccionar carpeta TeslaCam\" para elegir su unidad USB o carpeta que contiene datos de TeslaCam.",
+      "hint": "Busque carpetas llamadas TeslaCam, SavedClips, SentryClips o RecentClips."
+    },
+    "step2": {
+      "title": "Paso 2: Explorar eventos",
+      "description": "Los eventos aparecen en la barra lateral izquierda, ordenados por fecha. Haga clic en cualquier evento para cargarlo.",
+      "saved": "Guardados manualmente desde la dashcam",
+      "sentry": "Grabaciones activadas por movimiento",
+      "recent": "Grabaciones de búfer continuo"
+    },
+    "step3": {
+      "title": "Paso 3: Ver 4 cámaras",
+      "description": "Vea los 4 ángulos de cámara sincronizados: Frontal, Trasera, Izquierda y Derecha.",
+      "tip": "Consejo",
+      "tipText": "Arrastre las cámaras para intercambiar posiciones, u oculte las que no necesite."
+    },
+    "shortcuts": {
+      "title": "Atajos de teclado",
+      "playPause": "Reproducir / Pausar",
+      "seek": "Avanzar 5 segundos",
+      "screenshot": "Captura de pantalla",
+      "markInOut": "Marcar entrada / salida",
+      "export": "Exportar",
+      "showAll": "Mostrar todos los atajos"
+    }
+  },
+
+  "driveManager": {
+    "title": "Administrar unidades",
+    "noDrives": "No hay unidades agregadas",
+    "events": "eventos",
+    "removeDrive": "Quitar unidad",
+    "addDrive": "Agregar unidad",
+    "changeColor": "Clic para cambiar color"
+  },
+
+  "driveSync": {
+    "title": "Sincronizar unidades",
+    "close": "Cerrar (Esc)",
+    "settings": "Configuración",
+    "sourceDestination": "Origen y destino",
+    "selectSource": "Seleccionar origen...",
+    "selectDestination": "Seleccionar destino...",
+    "compare": "Comparar",
+    "comparing": "Comparando...",
+    "comparisonStats": "Estadísticas de comparación",
+    "selectDrivesToCompare": "Seleccione unidades y compare para ver estadísticas",
+    "selectDrivesHint": "Seleccione unidades para comparar",
+    "quickLoad": "Carga rápida:",
+    "noPresets": "Sin preajustes guardados",
+    "save": "Guardar",
+    "copy": "Copiar",
+    "move": "Mover",
+    "cancel": "Cancelar",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "startSync": "Iniciar sincronización",
+    "done": "Listo",
+    "preparing": "Preparando...",
+    "syncComplete": "Sincronización completada",
+    "syncFailed": "Sincronización fallida",
+    "selected": "Seleccionados:",
+    "events": "eventos",
+    "missingOnDest": "Faltantes en destino",
+    "newerOnSource": "Más nuevos en origen",
+    "differentSize": "Tamaño diferente",
+    "alreadySynced": "Ya sincronizados",
+    "includeNotes": "Incluir notas y etiquetas",
+    "eta": "Tiempo estimado:",
+    "sourceEvents": "Eventos de origen",
+    "destEvents": "Eventos de destino",
+    "missing": "Faltantes",
+    "newerCount": "Más nuevos en origen",
+    "synced": "Ya sincronizados",
+    "syncCoverage": "Cobertura de sincronización",
+    "storageBreakdown": "Desglose de almacenamiento",
+    "sourceTotal": "Total de origen",
+    "destTotal": "Total de destino",
+    "toTransfer": "Por transferir",
+    "dateRange": "Rango de fechas",
+    "source": "Origen:",
+    "destination": "Destino:",
+    "eventsByType": "Eventos por tipo",
+    "topLocations": "Ubicaciones principales",
+    "noLocationData": "Sin datos de ubicación disponibles",
+    "eventsByMonth": "Eventos por mes",
+    "noMonthlyData": "Sin datos mensuales disponibles",
+    "detailedBreakdown": "Desglose detallado de eventos",
+    "allEvents": "Todos los eventos",
+    "missingOnly": "Solo faltantes",
+    "newerOnly": "Solo más nuevos",
+    "syncedOnly": "Solo sincronizados",
+    "showingFirst": "Mostrando primeros {{count}} de {{total}} eventos"
+  },
+
+  "syncSettings": {
+    "title": "Configuración de sincronización",
+    "verifyAfterCopy": "Verificar archivos después de copiar",
+    "syncNotes": "Sincronizar notas y etiquetas",
+    "writeSyncFile": "Escribir archivo de configuración en destino",
+    "confirmBeforeDelete": "Confirmar antes de eliminar archivos de origen",
+    "noteConflict": "Resolución de conflictos de notas:",
+    "askEachTime": "Preguntar cada vez",
+    "mergeAutomatically": "Fusionar automáticamente",
+    "saveSettings": "Guardar configuración",
+    "close": "Cerrar"
+  },
+
+  "presets": {
+    "title": "Administrar preajustes",
+    "noPresets": "Sin preajustes guardados. Seleccione unidades y haga clic en \"Guardar\" para crear uno.",
+    "importFromDrives": "Importar desde unidades",
+    "close": "Cerrar",
+    "delete": "Eliminar",
+    "importedFrom": "Importado desde",
+    "lastUsed": "Último uso:",
+    "deleteConfirm": "¿Eliminar preajuste \"{{name}}\"?",
+    "couldNotFind": "No se encontraron las unidades para este preajuste.",
+    "lookingFor": "Buscando:",
+    "sourceLabel": "Origen:",
+    "destLabel": "Destino:",
+    "makeSureLoaded": "Asegúrese de que ambas unidades estén cargadas.",
+    "enterName": "Ingrese un nombre para este preajuste:",
+    "savedSuccess": "¡Preajuste guardado exitosamente!",
+    "imported": "Importados {{count}} preajustes.",
+    "errors": "Errores:",
+    "noNewPresets": "No se encontraron nuevos preajustes en ninguna unidad."
+  },
+
+  "layoutEditor": {
+    "title": "Editor de diseño",
+    "close": "Cerrar",
+    "new": "Nuevo",
+    "newLayout": "Nuevo diseño",
+    "import": "Importar",
+    "importLayout": "Importar diseño",
+    "export": "Exportar",
+    "exportLayout": "Exportar diseño",
+    "snap": "Ajustar",
+    "aspect": "Aspecto:",
+    "aspectWide": "Ancho",
+    "aspectUltraWide": "Ultra ancho",
+    "aspectTriple": "Triple",
+    "aspectCinematic": "Cinemático",
+    "selectedCamera": "Cámara seleccionada",
+    "futureCamera": "Cámara futura - aún no disponible",
+    "position": "Posición",
+    "size": "Tamaño",
+    "layer": "Capa",
+    "sendBackward": "Enviar atrás",
+    "bringForward": "Traer adelante",
+    "fit": "Ajuste:",
+    "contain": "Contener",
+    "cover": "Cubrir",
+    "cropEdges": "Recortar bordes",
+    "top": "Arriba:",
+    "bottom": "Abajo:",
+    "left": "Izquierda:",
+    "right": "Derecha:",
+    "cameras": "Cámaras",
+    "savedLayouts": "Diseños guardados",
+    "noLayouts": "No hay diseños personalizados guardados",
+    "cancel": "Cancelar",
+    "saveLayout": "Guardar diseño",
+    "layoutName": "Nombre del diseño",
+    "hint": "Clic para seleccionar, arrastrar para mover, esquinas para redimensionar",
+    "untitled": "Diseño sin título",
+    "invalidLayout": "Diseño inválido:",
+    "deleteConfirm": "¿Eliminar \"{{name}}\"?",
+    "importFailed": "Error al importar:",
+    "readFailed": "Error al leer archivo:",
+    "failedToSave": "Error al guardar diseño",
+    "failedToUpdate": "Error al actualizar diseño",
+    "soon": "Pronto"
+  },
+
+  "common": {
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "add": "Agregar",
+    "remove": "Quitar",
+    "yes": "Sí",
+    "no": "No",
+    "ok": "OK",
+    "loading": "Cargando...",
+    "error": "Error",
+    "success": "Éxito",
+    "warning": "Advertencia"
+  },
+
+  "incidentDetection": {
+    "toggleSlowMo": "Alternar cámara lenta de incidentes",
+    "slowMoEnabled": "Cámara lenta de incidentes: ACTIVADA",
+    "slowMoDisabled": "Cámara lenta de incidentes: DESACTIVADA",
+    "slowMoIndicator": "CÁMARA LENTA",
+    "slowMoScore": "Puntuación: {{score}}/10",
+    "toggleBirdsEye": "Alternar vista aérea",
+    "birdsEyeTitle": "Vista Aérea",
+    "birdsEyeWaitingGps": "Esperando datos GPS...",
+    "birdsEyeRadius": "{{radius}}m de radio",
+    "birdsEyeLowG": "G Bajo",
+    "birdsEyeMedG": "G Medio",
+    "birdsEyeHighG": "G Alto"
+  }
+}

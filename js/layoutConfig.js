@@ -12,11 +12,13 @@ class LayoutConfig {
         'left_pillar', 'right_pillar', 'interior'
     ];
 
-    // Currently available cameras (Tesla's current setup)
+    // Currently available cameras (Tesla's current setup - 4 or 6 cameras)
     static CURRENT_CAMERAS = ['front', 'back', 'left_repeater', 'right_repeater'];
+    static PILLAR_CAMERAS = ['left_pillar', 'right_pillar'];
+    static SIX_CAMERA_SET = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
 
     // Future cameras (not yet available from Tesla)
-    static FUTURE_CAMERAS = ['left_pillar', 'right_pillar', 'interior'];
+    static FUTURE_CAMERAS = ['interior'];
 
     // Camera display names
     static CAMERA_NAMES = {
@@ -298,7 +300,7 @@ class LayoutConfig {
                 cameras: {
                     front: {
                         enabled: true,
-                        position: { x: 30.4, y: 0, width: 39.4, height: 57.4 },
+                        position: { x: 29, y: 0, width: 42, height: 57.4 },
                         zIndex: 11,
                         aspectRatio: 'auto',
                         objectFit: 'cover',
@@ -324,6 +326,22 @@ class LayoutConfig {
                         enabled: true,
                         position: { x: 0, y: 52, width: 33, height: 48 },
                         zIndex: 3,
+                        aspectRatio: 'auto',
+                        objectFit: 'cover',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    },
+                    left_pillar: {
+                        enabled: true,
+                        position: { x: 0, y: 0, width: 33, height: 50 },
+                        zIndex: 10,
+                        aspectRatio: 'auto',
+                        objectFit: 'cover',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    },
+                    right_pillar: {
+                        enabled: true,
+                        position: { x: 67, y: 0, width: 33, height: 50 },
+                        zIndex: 10,
                         aspectRatio: 'auto',
                         objectFit: 'cover',
                         crop: { top: 0, right: 0, bottom: 0, left: 0 }
@@ -575,6 +593,64 @@ class LayoutConfig {
                         crop: { top: 0, right: 0, bottom: 0, left: 0 }
                     }
                 }
+            },
+            // 6-camera layout: pillars on outer top, repeaters (swapped) on outer bottom, front/back center
+            'grid-3x2': {
+                version: 1,
+                id: 'preset-grid-3x2',
+                name: '3x2 Grid (6 Cameras)',
+                author: 'Built-in',
+                canvas: { aspectRatio: '6:3', backgroundColor: '#000000' },
+                cameras: {
+                    front: {
+                        enabled: true,
+                        position: { x: 33.33, y: 0, width: 33.34, height: 50 },
+                        zIndex: 1,
+                        aspectRatio: 'auto',
+                        objectFit: 'contain',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    },
+                    back: {
+                        enabled: true,
+                        position: { x: 33.33, y: 50, width: 33.34, height: 50 },
+                        zIndex: 1,
+                        aspectRatio: 'auto',
+                        objectFit: 'contain',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    },
+                    left_repeater: {
+                        enabled: true,
+                        position: { x: 66.67, y: 50, width: 33.33, height: 50 },
+                        zIndex: 1,
+                        aspectRatio: 'auto',
+                        objectFit: 'contain',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    },
+                    right_repeater: {
+                        enabled: true,
+                        position: { x: 0, y: 50, width: 33.33, height: 50 },
+                        zIndex: 1,
+                        aspectRatio: 'auto',
+                        objectFit: 'contain',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    },
+                    left_pillar: {
+                        enabled: true,
+                        position: { x: 0, y: 0, width: 33.33, height: 50 },
+                        zIndex: 1,
+                        aspectRatio: 'auto',
+                        objectFit: 'contain',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    },
+                    right_pillar: {
+                        enabled: true,
+                        position: { x: 66.67, y: 0, width: 33.33, height: 50 },
+                        zIndex: 1,
+                        aspectRatio: 'auto',
+                        objectFit: 'contain',
+                        crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                    }
+                }
             }
         };
 
@@ -623,19 +699,34 @@ class LayoutConfig {
 
     /**
      * Export config to JSON string for file download
+     * @param {Object} config - Layout configuration
+     * @param {Object} options - Export options
+     * @param {Object} options.telemetryOverlay - Telemetry overlay position { x, y }
      */
-    static exportToJSON(config) {
-        return JSON.stringify({
+    static exportToJSON(config, options = {}) {
+        const exportData = {
             teslacamviewer_layout: true,
             version: this.VERSION,
             exported: new Date().toISOString(),
             layout: config
-        }, null, 2);
+        };
+
+        // Include telemetry overlay position if provided
+        if (options.telemetryOverlay) {
+            exportData.telemetryOverlay = {
+                position: {
+                    x: options.telemetryOverlay.x,
+                    y: options.telemetryOverlay.y
+                }
+            };
+        }
+
+        return JSON.stringify(exportData, null, 2);
     }
 
     /**
      * Import config from JSON string
-     * @returns {{ success: boolean, config?: object, error?: string }}
+     * @returns {{ success: boolean, config?: object, telemetryOverlay?: object, error?: string }}
      */
     static importFromJSON(jsonString) {
         try {
@@ -660,7 +751,16 @@ class LayoutConfig {
             config.id = `imported-${Date.now()}`;
             config.modified = new Date().toISOString();
 
-            return { success: true, config };
+            // Extract telemetry overlay position if present
+            const result = { success: true, config };
+            if (data.telemetryOverlay && data.telemetryOverlay.position) {
+                result.telemetryOverlay = {
+                    x: data.telemetryOverlay.position.x,
+                    y: data.telemetryOverlay.position.y
+                };
+            }
+
+            return result;
         } catch (e) {
             return { success: false, error: `Failed to parse JSON: ${e.message}` };
         }

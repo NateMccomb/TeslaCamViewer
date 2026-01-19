@@ -11,6 +11,9 @@ class FilterPanel {
         this.searchDebounceTimer = null;
 
         this.render();
+
+        // Re-render when locale changes
+        window.addEventListener('localeChanged', () => this.render());
     }
 
     /**
@@ -25,11 +28,14 @@ class FilterPanel {
         const filterCount = this.eventFilter.getActiveFilterCount();
         const filters = this.eventFilter.getFilters();
 
+        // Helper function for translations
+        const t = (key) => window.i18n ? window.i18n.t(key) : key.split('.').pop();
+
         this.container.innerHTML = `
             <div class="filter-panel">
                 <div class="filter-header" id="filterHeader">
                     <div class="filter-header-content">
-                        <span>Filters</span>
+                        <span>${t('filter.filters')}</span>
                         ${filterCount > 0 ? `<span class="filter-badge" id="filterBadge">${filterCount}</span>` : ''}
                     </div>
                     <span class="collapse-icon">${this.isExpanded ? 'v' : '>'}</span>
@@ -38,25 +44,25 @@ class FilterPanel {
                 <div class="filter-content ${this.isExpanded ? 'expanded' : ''}">
                     <!-- Event Type Filters -->
                     <div class="filter-group">
-                        <label class="filter-label">Event Types</label>
+                        <label class="filter-label">${t('filter.eventTypes')}</label>
                         <div class="filter-checkboxes">
                             <label class="filter-checkbox-label">
                                 <input type="checkbox"
                                        id="filterSaved"
                                        ${filters.types.SavedClips ? 'checked' : ''}>
-                                <span class="event-type saved">Saved</span>
+                                <span class="event-type saved">${t('filter.saved')}</span>
                             </label>
                             <label class="filter-checkbox-label">
                                 <input type="checkbox"
                                        id="filterSentry"
                                        ${filters.types.SentryClips ? 'checked' : ''}>
-                                <span class="event-type sentry">Sentry</span>
+                                <span class="event-type sentry">${t('filter.sentry')}</span>
                             </label>
                             <label class="filter-checkbox-label">
                                 <input type="checkbox"
                                        id="filterRecent"
                                        ${filters.types.RecentClips ? 'checked' : ''}>
-                                <span class="event-type recent">Recent</span>
+                                <span class="event-type recent">${t('filter.recent')}</span>
                             </label>
                         </div>
                     </div>
@@ -67,7 +73,7 @@ class FilterPanel {
                             <input type="checkbox"
                                    id="filterBookmarked"
                                    ${filters.hasBookmarks ? 'checked' : ''}>
-                            <span class="bookmark-filter-text">Only Bookmarked Events</span>
+                            <span class="bookmark-filter-text">${t('filter.onlyBookmarked')}</span>
                         </label>
                     </div>
 
@@ -77,7 +83,7 @@ class FilterPanel {
                             <input type="checkbox"
                                    id="filterHasNotes"
                                    ${filters.hasNotes ? 'checked' : ''}>
-                            <span class="notes-filter-text">Only Events with Notes/Tags</span>
+                            <span class="notes-filter-text">${t('filter.onlyWithNotes')}</span>
                         </label>
                     </div>
 
@@ -86,33 +92,33 @@ class FilterPanel {
 
                     <!-- Sort Order -->
                     <div class="filter-group">
-                        <label class="filter-label" for="sortOrder">Sort By</label>
+                        <label class="filter-label" for="sortOrder">${t('filter.sortBy')}</label>
                         <select id="sortOrder" class="filter-select">
-                            <option value="newest" ${filters.sortOrder === 'newest' ? 'selected' : ''}>Newest First</option>
-                            <option value="oldest" ${filters.sortOrder === 'oldest' ? 'selected' : ''}>Oldest First</option>
+                            <option value="newest" ${filters.sortOrder === 'newest' ? 'selected' : ''}>${t('filter.newestFirst')}</option>
+                            <option value="oldest" ${filters.sortOrder === 'oldest' ? 'selected' : ''}>${t('filter.oldestFirst')}</option>
                         </select>
                     </div>
 
                     <!-- Search -->
                     <div class="filter-group">
-                        <label class="filter-label" for="searchInput">Search</label>
+                        <label class="filter-label" for="searchInput">${t('filter.search')}</label>
                         <input type="text"
                                id="searchInput"
                                class="search-input"
-                               placeholder="City, location, reason..."
+                               placeholder="${t('filter.searchPlaceholder')}"
                                value="${filters.searchQuery}">
                     </div>
 
                     <!-- Date Range -->
                     <div class="filter-group">
-                        <label class="filter-label">Date Range</label>
+                        <label class="filter-label">${t('filter.dateRange')}</label>
                         <div class="date-range-inputs">
                             <input type="date"
                                    id="dateStart"
                                    class="date-input"
                                    placeholder="Start"
                                    value="${filters.dateRange.start || ''}">
-                            <span class="date-separator">to</span>
+                            <span class="date-separator">${t('filter.dateTo')}</span>
                             <input type="date"
                                    id="dateEnd"
                                    class="date-input"
@@ -120,13 +126,13 @@ class FilterPanel {
                                    value="${filters.dateRange.end || ''}">
                         </div>
                         ${filters.dateRange.start || filters.dateRange.end ?
-                            '<button id="clearDates" class="clear-dates-btn">Clear Dates</button>' : ''}
+                            `<button id="clearDates" class="clear-dates-btn">${t('filter.clearDates')}</button>` : ''}
                     </div>
 
                     <!-- Clear All Filters -->
                     ${filterCount > 0 ? `
                         <button id="clearAllFilters" class="clear-all-filters-btn">
-                            Clear All Filters
+                            ${t('filter.clearAllFilters')}
                         </button>
                     ` : ''}
                 </div>
@@ -394,12 +400,13 @@ class FilterPanel {
         // Update clear all button visibility
         const clearAllBtn = document.getElementById('clearAllFilters');
         const filterContent = this.container.querySelector('.filter-content');
+        const t = (key) => window.i18n ? window.i18n.t(key) : key.split('.').pop();
 
         if (filterCount > 0 && !clearAllBtn && filterContent) {
             const btn = document.createElement('button');
             btn.id = 'clearAllFilters';
             btn.className = 'clear-all-filters-btn';
-            btn.textContent = 'Clear All Filters';
+            btn.textContent = t('filter.clearAllFilters');
             btn.addEventListener('click', () => this.clearAllFilters());
             filterContent.appendChild(btn);
         } else if (filterCount === 0 && clearAllBtn) {
@@ -414,6 +421,7 @@ class FilterPanel {
      */
     renderTagDropdown(filters) {
         const allTags = this.eventFilter.getAllTags();
+        const t = (key) => window.i18n ? window.i18n.t(key) : key.split('.').pop();
 
         if (allTags.length === 0) {
             return '';
@@ -421,9 +429,9 @@ class FilterPanel {
 
         return `
             <div class="filter-group">
-                <label class="filter-label" for="tagFilter">Filter by Tag</label>
+                <label class="filter-label" for="tagFilter">${t('filter.filterByTag')}</label>
                 <select id="tagFilter" class="filter-select">
-                    <option value="">All Tags</option>
+                    <option value="">${t('filter.allTags')}</option>
                     ${allTags.map(tag => `
                         <option value="${tag}" ${filters.selectedTag === tag ? 'selected' : ''}>
                             ${tag}

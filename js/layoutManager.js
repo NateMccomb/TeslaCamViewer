@@ -1,31 +1,41 @@
 /**
  * LayoutManager - Manages different camera view layouts
  * Supports both preset CSS-based layouts and custom config-based layouts
+ * Supports 4-camera and 6-camera (pillar) systems
  * Grid calc: 4x4 base, 256px cells
  */
 
 class LayoutManager {
     constructor() {
-        this._ver = 20241229; // layout version date
+        this._ver = 20250115; // layout version date
         this.currentLayout = 'grid-2x2'; // Default layout (can be preset name or custom id)
         this.currentConfig = null; // Active LayoutConfig object (for custom layouts)
         this.visibleCameras = {
             front: true,
             back: true,
             left_repeater: true,
-            right_repeater: true
+            right_repeater: true,
+            left_pillar: true,
+            right_pillar: true
         };
         this.focusCamera = null; // For focus mode
 
+        // 6-camera (pillar) support
+        this.hasPillarCameras = false; // Set when loading event with pillar cameras
+        this.pillarMode = 'repeaters'; // 'repeaters' or 'pillars' - for cycling in 4-camera layouts
+
         // Camera order for drag & drop reordering
         this.cameraOrder = ['front', 'back', 'left_repeater', 'right_repeater'];
+        this.cameraOrderWithPillars = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
 
         this.videoGrid = document.querySelector('.video-grid');
         this.videoContainers = {
-            front: document.getElementById('videoFront').parentElement,
-            back: document.getElementById('videoBack').parentElement,
-            left_repeater: document.getElementById('videoLeft').parentElement,
-            right_repeater: document.getElementById('videoRight').parentElement
+            front: document.getElementById('videoFront')?.parentElement,
+            back: document.getElementById('videoBack')?.parentElement,
+            left_repeater: document.getElementById('videoLeft')?.parentElement,
+            right_repeater: document.getElementById('videoRight')?.parentElement,
+            left_pillar: document.getElementById('videoLeftPillar')?.parentElement,
+            right_pillar: document.getElementById('videoRightPillar')?.parentElement
         };
 
         // Drag & drop state
@@ -38,6 +48,9 @@ class LayoutManager {
 
         // Unified renderer for custom layouts
         this.renderer = new LayoutRenderer();
+
+        // Callback for layout changes (used by telemetry overlay for position persistence)
+        this.onLayoutChange = null;
 
         // Load saved preferences
         this.loadPreferences();
@@ -422,6 +435,10 @@ class LayoutManager {
             if (focusCameraControl) {
                 focusCameraControl.style.display = 'none';
             }
+            // Notify listeners of layout change
+            if (this.onLayoutChange) {
+                this.onLayoutChange(this.currentLayout);
+            }
             return;
         }
 
@@ -438,6 +455,10 @@ class LayoutManager {
             const focusCameraControl = document.getElementById('focusCameraControl');
             if (focusCameraControl) {
                 focusCameraControl.style.display = 'none';
+            }
+            // Notify listeners of layout change
+            if (this.onLayoutChange) {
+                this.onLayoutChange(this.currentLayout);
             }
             return;
         }
@@ -457,6 +478,11 @@ class LayoutManager {
         // Special handling for focus mode
         if (layout === 'layout-focus') {
             this.applyFocusMode();
+        }
+
+        // Notify listeners of layout change
+        if (this.onLayoutChange) {
+            this.onLayoutChange(this.currentLayout);
         }
     }
 
@@ -535,6 +561,14 @@ class LayoutManager {
     }
 
     /**
+     * Get current layout ID (alias for getCurrentLayout)
+     * @returns {string}
+     */
+    getCurrentLayoutId() {
+        return this.currentLayout;
+    }
+
+    /**
      * Get visible cameras
      * @returns {Object}
      */
@@ -593,9 +627,12 @@ class LayoutManager {
             front: true,
             back: true,
             left_repeater: true,
-            right_repeater: true
+            right_repeater: true,
+            left_pillar: true,
+            right_pillar: true
         };
         this.focusCamera = null;
+        this.pillarMode = 'repeaters';
         this.resetCameraOrder();
         this.applyLayout(this.currentLayout);
         this.savePreferences();
@@ -607,5 +644,194 @@ class LayoutManager {
      */
     getCameraOrder() {
         return [...this.cameraOrder];
+    }
+
+    // ==================== PILLAR CAMERA SUPPORT ====================
+
+    /**
+     * Set whether current event has pillar cameras
+     * @param {boolean} hasPillars
+     */
+    setHasPillarCameras(hasPillars) {
+        const changed = this.hasPillarCameras !== hasPillars;
+        this.hasPillarCameras = hasPillars;
+
+        // Re-apply layout if pillar state changed (to update container visibility)
+        if (changed) {
+            this.applyLayout(this.currentLayout);
+        }
+
+        this.updatePillarCameraVisibility();
+        this.updateCycleButtonVisibility();
+    }
+
+    /**
+     * Toggle between repeaters and pillars in 4-camera layouts
+     */
+    cyclePillarMode() {
+        if (!this.hasPillarCameras) return;
+
+        this.pillarMode = this.pillarMode === 'repeaters' ? 'pillars' : 'repeaters';
+
+        // When switching to pillars, inherit positions from repeaters if pillars don't have explicit positions
+        if (this.pillarMode === 'pillars') {
+            this._applyPillarPositionsFromRepeaters();
+        }
+
+        this.updatePillarCameraVisibility();
+        console.log(`Pillar mode: ${this.pillarMode}`);
+    }
+
+    /**
+     * Apply repeater positions to pillar containers for seamless swapping
+     * Used when switching to pillar mode in layouts without explicit pillar positions
+     */
+    _applyPillarPositionsFromRepeaters() {
+        const leftPillar = this.videoContainers.left_pillar;
+        const rightPillar = this.videoContainers.right_pillar;
+        const leftRepeater = this.videoContainers.left_repeater;
+        const rightRepeater = this.videoContainers.right_repeater;
+
+        // Check if we have a custom config with explicit pillar positions
+        const hasExplicitPillarPositions = this.currentConfig?.cameras?.left_pillar?.enabled &&
+                                           this.currentConfig?.cameras?.right_pillar?.enabled;
+
+        if (hasExplicitPillarPositions) {
+            // Config has pillar positions - let renderer handle it
+            return;
+        }
+
+        // Copy positions from repeaters to pillars
+        if (leftPillar && leftRepeater) {
+            const style = leftRepeater.style;
+            leftPillar.style.position = 'absolute';
+            leftPillar.style.left = style.left;
+            leftPillar.style.top = style.top;
+            leftPillar.style.width = style.width;
+            leftPillar.style.height = style.height;
+            leftPillar.style.zIndex = style.zIndex;
+            leftPillar.style.clipPath = style.clipPath;
+            // Copy video object-fit
+            const leftPillarVideo = leftPillar.querySelector('video');
+            const leftRepeaterVideo = leftRepeater.querySelector('video');
+            if (leftPillarVideo && leftRepeaterVideo) {
+                leftPillarVideo.style.objectFit = leftRepeaterVideo.style.objectFit;
+            }
+        }
+
+        if (rightPillar && rightRepeater) {
+            const style = rightRepeater.style;
+            rightPillar.style.position = 'absolute';
+            rightPillar.style.left = style.left;
+            rightPillar.style.top = style.top;
+            rightPillar.style.width = style.width;
+            rightPillar.style.height = style.height;
+            rightPillar.style.zIndex = style.zIndex;
+            rightPillar.style.clipPath = style.clipPath;
+            // Copy video object-fit
+            const rightPillarVideo = rightPillar.querySelector('video');
+            const rightRepeaterVideo = rightRepeater.querySelector('video');
+            if (rightPillarVideo && rightRepeaterVideo) {
+                rightPillarVideo.style.objectFit = rightRepeaterVideo.style.objectFit;
+            }
+        }
+    }
+
+    /**
+     * Check if current layout is a 6-camera layout (has both repeaters and pillars enabled)
+     */
+    _is6CameraConfig() {
+        // Check custom config first
+        if (this.currentConfig?.cameras) {
+            const cams = this.currentConfig.cameras;
+            if (cams.left_repeater?.enabled && cams.right_repeater?.enabled &&
+                cams.left_pillar?.enabled && cams.right_pillar?.enabled) {
+                return true;
+            }
+        }
+
+        // Also check preset layouts that have pillar cameras defined
+        const presetConfig = LayoutConfig.presetToConfig(this.currentLayout);
+        if (presetConfig?.cameras) {
+            const cams = presetConfig.cameras;
+            return cams.left_repeater?.enabled && cams.right_repeater?.enabled &&
+                   cams.left_pillar?.enabled && cams.right_pillar?.enabled;
+        }
+
+        return false;
+    }
+
+    /**
+     * Update visibility of pillar camera containers based on current mode
+     */
+    updatePillarCameraVisibility() {
+        const leftPillar = this.videoContainers.left_pillar;
+        const rightPillar = this.videoContainers.right_pillar;
+        const leftRepeater = this.videoContainers.left_repeater;
+        const rightRepeater = this.videoContainers.right_repeater;
+
+        if (!this.hasPillarCameras) {
+            // No pillar cameras - hide pillar containers
+            if (leftPillar) leftPillar.style.display = 'none';
+            if (rightPillar) rightPillar.style.display = 'none';
+            if (leftRepeater) leftRepeater.style.display = '';
+            if (rightRepeater) rightRepeater.style.display = '';
+            return;
+        }
+
+        // Check if this is a 6-camera layout (preset or custom config with all 6 enabled)
+        const isPreset6Cam = this.currentLayout === 'grid-3x2' || this.currentLayout === 'layout-6-cam';
+        const is6CameraLayout = isPreset6Cam || this._is6CameraConfig();
+
+        if (is6CameraLayout) {
+            // 6-camera layout - show all (let config handle actual visibility)
+            if (leftPillar) leftPillar.style.display = '';
+            if (rightPillar) rightPillar.style.display = '';
+            if (leftRepeater) leftRepeater.style.display = '';
+            if (rightRepeater) rightRepeater.style.display = '';
+        } else {
+            // 4-camera layout - show based on pillarMode
+            if (this.pillarMode === 'pillars') {
+                if (leftPillar) leftPillar.style.display = '';
+                if (rightPillar) rightPillar.style.display = '';
+                if (leftRepeater) leftRepeater.style.display = 'none';
+                if (rightRepeater) rightRepeater.style.display = 'none';
+            } else {
+                if (leftPillar) leftPillar.style.display = 'none';
+                if (rightPillar) rightPillar.style.display = 'none';
+                if (leftRepeater) leftRepeater.style.display = '';
+                if (rightRepeater) rightRepeater.style.display = '';
+            }
+        }
+    }
+
+    /**
+     * Update visibility of the pillar cycle button
+     */
+    updateCycleButtonVisibility() {
+        const cycleBtn = document.getElementById('pillarCycleBtn');
+        if (cycleBtn) {
+            cycleBtn.style.display = this.hasPillarCameras ? '' : 'none';
+        }
+    }
+
+    /**
+     * Get the cameras that should be visible based on current settings
+     * @returns {Array<string>}
+     */
+    getActiveCameras() {
+        const cameras = ['front', 'back'];
+        const isPreset6Cam = this.currentLayout === 'grid-3x2' || this.currentLayout === 'layout-6-cam';
+        const is6CameraLayout = isPreset6Cam || this._is6CameraConfig();
+
+        if (is6CameraLayout && this.hasPillarCameras) {
+            cameras.push('left_repeater', 'right_repeater', 'left_pillar', 'right_pillar');
+        } else if (this.hasPillarCameras && this.pillarMode === 'pillars') {
+            cameras.push('left_pillar', 'right_pillar');
+        } else {
+            cameras.push('left_repeater', 'right_repeater');
+        }
+
+        return cameras;
     }
 }

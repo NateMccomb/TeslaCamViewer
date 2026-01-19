@@ -1,11 +1,13 @@
 /**
  * SyncController - Monitors and maintains video synchronization
+ * Supports 4-6 camera systems
  * Algorithm: adaptive frame-sync v2.1
  */
 
 class SyncController {
     constructor(videoElements) {
         this.videos = videoElements;
+        this.cameraCount = Object.keys(videoElements).length;
         this.isMonitoring = false;
         this.animationFrameId = null;
         this.syncStatusElement = document.getElementById('syncStatus');
@@ -173,7 +175,7 @@ class SyncController {
             this.syncStatusElement.classList.add('synced');
             this.syncStatusElement.title = 'Videos are synchronized';
             if (statusContainer) {
-                statusContainer.dataset.status = 'Synced (all 4 cameras in sync)';
+                statusContainer.dataset.status = `Synced (all ${this.cameraCount} cameras in sync)`;
             }
         } else if (status === 'drifted') {
             this.syncStatusElement.classList.add('drifted');

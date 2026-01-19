@@ -139,15 +139,28 @@ class FolderManager {
     /**
      * Add a new drive from a folder handle
      * @param {FileSystemDirectoryHandle} handle
-     * @param {string} label - Optional custom label
+     * @param {Object} options - Drive options
+     * @param {string} options.label - Optional custom label
+     * @param {boolean} options.isArchive - If true, don't load on startup
+     * @param {string} options.dateFilter - Date filter preset (e.g., 'all', 'week', 'month', '3months', '6months', 'year')
      * @returns {Promise<Object>} The created drive object
      */
-    async addDrive(handle, label = null) {
-        // Check if this drive already exists (by folder name)
-        const existingDrive = this.drives.find(d => d.folderName === handle.name);
-        if (existingDrive) {
-            console.log(`Drive ${handle.name} already exists, returning existing`);
-            return existingDrive;
+    async addDrive(handle, options = {}) {
+        // Support legacy signature: addDrive(handle, label)
+        if (typeof options === 'string') {
+            options = { label: options };
+        }
+
+        // Check if this drive already exists (by comparing directory handles)
+        for (const existingDrive of this.drives) {
+            try {
+                if (existingDrive.handle && await handle.isSameEntry(existingDrive.handle)) {
+                    console.log(`Drive ${handle.name} already exists (same directory), returning existing`);
+                    return existingDrive;
+                }
+            } catch (e) {
+                // Handle comparison may fail if permission was revoked, continue checking
+            }
         }
 
         // Assign color based on index
@@ -157,9 +170,11 @@ class FolderManager {
             id: this.generateUUID(),
             handle: handle,
             folderName: handle.name,
-            label: label || this.generateLabel(handle.name),
+            label: options.label || this.generateLabel(handle.name),
             color: this.driveColors[colorIndex],
             addedAt: new Date().toISOString(),
+            isArchive: options.isArchive || false,
+            dateFilter: options.dateFilter || 'all',
             events: [] // Will be populated by FolderParser
         };
 
@@ -170,7 +185,7 @@ class FolderManager {
             this.onDrivesChanged(this.drives);
         }
 
-        console.log(`Added drive: ${drive.label} (${drive.id})`);
+        console.log(`Added drive: ${drive.label} (${drive.id})${drive.isArchive ? ' [ARCHIVE]' : ''}`);
         return drive;
     }
 
@@ -269,6 +284,82 @@ class FolderManager {
     }
 
     /**
+     * Update drive settings (archive status, date filter)
+     * @param {string} driveId
+     * @param {Object} settings
+     * @param {boolean} settings.isArchive
+     * @param {string} settings.dateFilter
+     * @param {string} settings.label
+     * @returns {Promise<boolean>}
+     */
+    async updateDriveSettings(driveId, settings) {
+        const drive = this.drives.find(d => d.id === driveId);
+        if (!drive) {
+            return false;
+        }
+
+        if (settings.label !== undefined) {
+            drive.label = settings.label;
+        }
+        if (settings.isArchive !== undefined) {
+            drive.isArchive = settings.isArchive;
+        }
+        if (settings.dateFilter !== undefined) {
+            drive.dateFilter = settings.dateFilter;
+        }
+
+        await this.saveDrive(drive);
+
+        if (this.onDrivesChanged) {
+            this.onDrivesChanged(this.drives);
+        }
+
+        return true;
+    }
+
+    /**
+     * Get human-readable date filter label
+     * @param {string} filter
+     * @returns {string}
+     */
+    getDateFilterLabel(filter) {
+        const labels = {
+            'all': 'All events',
+            'week': 'Last week',
+            'month': 'Last month',
+            '3months': 'Last 3 months',
+            '6months': 'Last 6 months',
+            'year': 'Last year'
+        };
+        return labels[filter] || labels['all'];
+    }
+
+    /**
+     * Get date cutoff for a filter
+     * @param {string} filter
+     * @returns {Date|null} Cutoff date or null for 'all'
+     */
+    getDateFilterCutoff(filter) {
+        if (filter === 'all') return null;
+
+        const now = new Date();
+        switch (filter) {
+            case 'week':
+                return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            case 'month':
+                return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            case '3months':
+                return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+            case '6months':
+                return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+            case 'year':
+                return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            default:
+                return null;
+        }
+    }
+
+    /**
      * Set the active drive for filtering
      * @param {string|null} driveId - null for all drives
      */
@@ -336,9 +427,10 @@ class FolderManager {
 
     /**
      * Request permission for all stored drives
+     * @param {boolean} includeArchive - If false, skip archive drives
      * @returns {Promise<Array>} Array of drives that were successfully restored
      */
-    async restoreAllDrives() {
+    async restoreAllDrives(includeArchive = false) {
         const restoredDrives = [];
 
         for (const drive of this.drives) {
@@ -347,11 +439,17 @@ class FolderManager {
                 continue;
             }
 
+            // Skip archive drives unless explicitly requested
+            if (drive.isArchive && !includeArchive) {
+                console.log(`Drive ${drive.label} is archive, skipping auto-load`);
+                continue;
+            }
+
             try {
                 const permission = await drive.handle.requestPermission({ mode: 'read' });
                 if (permission === 'granted') {
                     restoredDrives.push(drive);
-                    console.log(`Restored access to drive: ${drive.label}`);
+                    console.log(`Restored access to drive: ${drive.label}${drive.isArchive ? ' [ARCHIVE]' : ''}`);
                 } else {
                     console.log(`Permission denied for drive: ${drive.label}`);
                 }
@@ -364,14 +462,40 @@ class FolderManager {
     }
 
     /**
+     * Restore a single archive drive (for manual sync)
+     * @param {string} driveId
+     * @returns {Promise<Object|null>} The restored drive or null
+     */
+    async restoreArchiveDrive(driveId) {
+        const drive = this.drives.find(d => d.id === driveId);
+        if (!drive || !drive.handle) {
+            return null;
+        }
+
+        try {
+            const permission = await drive.handle.requestPermission({ mode: 'read' });
+            if (permission === 'granted') {
+                console.log(`Restored access to archive drive: ${drive.label}`);
+                return drive;
+            }
+        } catch (e) {
+            console.warn(`Failed to restore archive drive ${drive.label}:`, e);
+        }
+
+        return null;
+    }
+
+    /**
      * Parse all drives and aggregate events
      * @param {FolderParser} parser - The folder parser instance
+     * @param {Array} drivesToParse - Optional specific drives to parse (defaults to all non-archive with handles)
      * @returns {Promise<Array>} All events from all drives
      */
-    async parseAllDrives(parser) {
+    async parseAllDrives(parser, drivesToParse = null) {
         const allEvents = [];
+        const targetDrives = drivesToParse || this.drives.filter(d => d.handle && !d.isArchive);
 
-        for (const drive of this.drives) {
+        for (const drive of targetDrives) {
             if (!drive.handle) {
                 continue;
             }
@@ -381,7 +505,18 @@ class FolderManager {
                 parser.rootHandle = drive.handle;
 
                 // Parse the folder
-                const events = await parser.parseFolder();
+                let events = await parser.parseFolder();
+
+                // Apply date filter if set
+                const cutoff = this.getDateFilterCutoff(drive.dateFilter);
+                if (cutoff) {
+                    const beforeCount = events.length;
+                    events = events.filter(event => {
+                        const eventDate = new Date(event.timestamp);
+                        return eventDate >= cutoff;
+                    });
+                    console.log(`Date filter (${drive.dateFilter}): ${beforeCount} → ${events.length} events`);
+                }
 
                 // Add driveId and compoundKey to each event
                 for (const event of events) {
@@ -395,7 +530,7 @@ class FolderManager {
                 drive.events = events;
 
                 allEvents.push(...events);
-                console.log(`Parsed ${events.length} events from drive: ${drive.label}`);
+                console.log(`Parsed ${events.length} events from drive: ${drive.label}${drive.isArchive ? ' [ARCHIVE]' : ''}`);
             } catch (e) {
                 console.warn(`Failed to parse drive ${drive.label}:`, e);
             }
@@ -405,6 +540,21 @@ class FolderManager {
         allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
         return allEvents;
+    }
+
+    /**
+     * Parse a single drive (for manual sync of archive drives)
+     * @param {FolderParser} parser
+     * @param {string} driveId
+     * @returns {Promise<Array>} Events from the drive
+     */
+    async parseSingleDrive(parser, driveId) {
+        const drive = this.drives.find(d => d.id === driveId);
+        if (!drive || !drive.handle) {
+            return [];
+        }
+
+        return this.parseAllDrives(parser, [drive]);
     }
 
     /**

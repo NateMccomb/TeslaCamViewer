@@ -1,0 +1,523 @@
+{
+  "_meta": {
+    "language": "Dutch",
+    "locale": "nl",
+    "status": "complete"
+  },
+
+  "app": {
+    "title": "TeslaCamViewer.com",
+    "description": "Bekijk Tesla dashcam beelden met gesynchroniseerde weergave"
+  },
+
+  "header": {
+    "github": "GitHub",
+    "donate": "Doneren",
+    "statistics": "Statistieken",
+    "keyboardShortcuts": "Sneltoetsen (?)",
+    "settings": "Instellingen (,)",
+    "viewOnGitHub": "Bekijk op GitHub",
+    "supportProject": "Steun dit project"
+  },
+
+  "sidebar": {
+    "events": "Gebeurtenissen",
+    "map": "Kaart",
+    "allDrives": "Alle stations",
+    "addDrive": "Ander station toevoegen",
+    "manageDrives": "Stations beheren",
+    "syncDrives": "Synchroniseren tussen stations",
+    "selectFolder": "Selecteer TeslaCam-map",
+    "emptyState": "Klik op \"Selecteer TeslaCam-map\" om te beginnen",
+    "emptyStateHint": "U kunt de TeslaCam-map selecteren, of elke map die Tesla dashcam-opnames bevat"
+  },
+
+  "player": {
+    "noEventSelected": "Geen gebeurtenis geselecteerd",
+    "selectEventHint": "👈 Selecteer een gebeurtenis uit de zijbalk",
+    "noEventLoaded": "Geen gebeurtenis geladen",
+    "hidden": "Verborgen:",
+    "fullscreen": "Volledig scherm",
+    "exitFullscreen": "Volledig scherm verlaten"
+  },
+
+  "cameras": {
+    "front": "Voor",
+    "back": "Achter",
+    "left": "Links",
+    "right": "Rechts",
+    "hideFront": "Voorste camera verbergen",
+    "hideBack": "Achterste camera verbergen",
+    "hideLeft": "Linker camera verbergen",
+    "hideRight": "Rechter camera verbergen"
+  },
+
+  "controls": {
+    "play": "Afspelen",
+    "pause": "Pauze",
+    "previousFrame": "Vorig frame (Houd vast voor slow motion)",
+    "nextFrame": "Volgend frame (Houd vast voor slow motion)",
+    "previousClip": "Vorige clip",
+    "nextClip": "Volgende clip",
+    "previousEvent": "Vorige gebeurtenis",
+    "nextEvent": "Volgende gebeurtenis",
+    "screenshot": "Screenshot maken",
+    "enhance": "Video verbeteren",
+    "markIn": "Beginpunt markeren",
+    "markOut": "Eindpunt markeren",
+    "clearMarks": "Markeringen wissen",
+    "export": "Alle camera's exporteren",
+    "exportOptions": "Exportopties",
+    "zoomOut": "Tijdlijn uitzoomen",
+    "zoomIn": "Tijdlijn inzoomen",
+    "resetZoom": "Zoom resetten",
+    "loop": "Herhalen",
+    "speed": "Snelheid:",
+    "layout": "Indeling:",
+    "camera": "Camera:"
+  },
+
+  "bookmarks": {
+    "title": "Bladwijzers",
+    "previous": "Vorige bladwijzer ([)",
+    "add": "Bladwijzer toevoegen (B)",
+    "next": "Volgende bladwijzer (])",
+    "manage": "Bladwijzers beheren",
+    "clearAll": "Alles wissen",
+    "noBookmarks": "Nog geen bladwijzers"
+  },
+
+  "export": {
+    "header": "Camera exporteren",
+    "allCameras": "Alle camera's (Raster)",
+    "frontOnly": "Alleen voor",
+    "rearOnly": "Alleen achter",
+    "leftOnly": "Alleen links",
+    "rightOnly": "Alleen rechts",
+    "exporting": "Exporteren {{percent}}%",
+    "preparing": "Export voorbereiden...",
+    "encoding": "Video coderen...",
+    "complete": "Export voltooid",
+    "cancelled": "Export geannuleerd",
+    "failed": "Export mislukt"
+  },
+
+  "layouts": {
+    "grid2x2": "2×2 Raster",
+    "layout63": "6:3 Gecentreerd",
+    "layout43": "4:3 Hoofd",
+    "all169": "Alles 16:9",
+    "frontLeft": "Voor + Links",
+    "frontRight": "Voor + Rechts",
+    "frontRepeaters": "Voor + Zijcamera's",
+    "focus": "Focusmodus"
+  },
+
+  "loading": {
+    "loading": "Laden...",
+    "buffering": "Bufferen...",
+    "bufferHealth": "Bufferstatus"
+  },
+
+  "notes": {
+    "title": "Notities en tags (N)",
+    "notes": "Notities",
+    "tags": "Tags",
+    "tagPlaceholder": "Typ tag, druk op Enter of klik +",
+    "addTag": "Tag toevoegen",
+    "existingTags": "Bestaande tags",
+    "placeholder": "Notities toevoegen over deze gebeurtenis..."
+  },
+
+  "help": {
+    "title": "Sneltoetsen",
+    "close": "Sluiten",
+    "tip": "Tip: De meeste sneltoetsen werken alleen wanneer u niet in een tekstveld typt",
+
+    "sections": {
+      "playback": "Afspelen",
+      "navigation": "Navigatie",
+      "viewLayout": "Weergave & Indeling",
+      "markingExport": "Markering & Exporteren",
+      "bookmarks": "Bladwijzers",
+      "speedControl": "Snelheidsregeling",
+      "general": "Algemeen"
+    },
+
+    "shortcuts": {
+      "playPause": "Afspelen / Pauze",
+      "previousFrame": "Vorig frame",
+      "nextFrame": "Volgend frame",
+      "slowMotion": "Slow motion afspelen",
+      "previousClip": "Vorige clip",
+      "nextClip": "Volgende clip",
+      "goToStart": "Naar begin",
+      "goToEnd": "Naar einde",
+      "previousEvent": "Vorige gebeurtenis",
+      "nextEvent": "Volgende gebeurtenis",
+      "selectPreviousEvent": "Vorige gebeurtenis selecteren",
+      "selectNextEvent": "Volgende gebeurtenis selecteren",
+      "cycleLayouts": "Indelingen doorlopen",
+      "focusCamera": "Camera focussen (1=Voor, 2=Achter, 3=Links, 4=Rechts)",
+      "toggleFullscreen": "Volledig scherm aan/uit",
+      "focusCameraFullscreen": "Camera focussen volledig scherm",
+      "markIn": "Beginpunt markeren",
+      "markOut": "Eindpunt markeren",
+      "clearMarks": "Markeringen wissen",
+      "takeScreenshot": "Screenshot maken",
+      "exportVideo": "Video exporteren",
+      "addBookmark": "Bladwijzer toevoegen op huidige positie",
+      "jumpToPreviousBookmark": "Naar vorige bladwijzer springen",
+      "jumpToNextBookmark": "Naar volgende bladwijzer springen",
+      "zoomTimeline": "Inzoomen/uitzoomen (indien ingeschakeld in instellingen)",
+      "increaseSpeed": "Snelheid verhogen",
+      "decreaseSpeed": "Snelheid verlagen",
+      "resetSpeed": "Naar 1x snelheid resetten",
+      "showHelp": "Deze hulp weergeven",
+      "openSettings": "Instellingen openen",
+      "closeModal": "Modal sluiten / Markeringen wissen"
+    }
+  },
+
+  "settings": {
+    "title": "Instellingen",
+    "close": "Sluiten",
+    "done": "Gereed",
+    "resetToDefaults": "Standaardinstellingen herstellen",
+    "confirmReset": "Alle instellingen herstellen naar standaard?",
+
+    "sections": {
+      "playback": "Afspelen",
+      "performance": "Prestaties",
+      "ui": "Gebruikersinterface",
+      "timeline": "Tijdlijn",
+      "session": "Sessie",
+      "offline": "Offline modus",
+      "accessibility": "Toegankelijkheid",
+      "mobile": "Mobiel",
+      "export": "Exporteren",
+      "language": "Taal"
+    },
+
+    "language": {
+      "selectLanguage": "Taal",
+      "languageHint": "Selecteer uw voorkeurstaal"
+    }
+  },
+
+  "filter": {
+    "search": "Gebeurtenissen zoeken",
+    "type": "Type",
+    "date": "Datum",
+    "all": "Alle",
+    "savedClips": "Opgeslagen clips",
+    "sentryClips": "Sentry clips",
+    "recentClips": "Recente clips",
+    "clear": "Filters wissen",
+    "filters": "Filters",
+    "eventTypes": "Gebeurtenistypen",
+    "onlyBookmarked": "Alleen gebladwijzerde gebeurtenissen",
+    "onlyWithNotes": "Alleen gebeurtenissen met notities/tags",
+    "sortBy": "Sorteren op",
+    "newestFirst": "Nieuwste eerst",
+    "oldestFirst": "Oudste eerst"
+  },
+
+  "map": {
+    "noLocation": "Geen locatiegegevens",
+    "showAll": "Alle gebeurtenissen tonen",
+    "centerOnEvent": "Centreren op gebeurtenis",
+    "toggleHeatmap": "Heatmap weergave schakelen",
+    "toggleStruggleZones": "Autopilot probleemzones schakelen",
+    "loadingStruggleZones": "AP-ontkoppelingsgegevens laden...",
+    "struggleZonesLoaded": "{{count}} AP-ontkoppelingen gevonden",
+    "togglePhantomBrakes": "Spookremmen hotspots schakelen",
+    "loadingPhantomBrakes": "Spookremmengegevens laden...",
+    "phantomBrakesLoaded": "{{count}} spookremmen gevonden",
+    "phantomBrakeHotspot": "Spookremmen Hotspot",
+    "phantomBrakesAtLocation": "{{count}} spookrem(men) op deze locatie",
+    "phantomBrakeTip": "Deze locatie heeft herhaalde spookremmen - overweeg dit te melden aan Tesla als het een vals positief is.",
+    "toggleDarkMode": "Donkere kaartmodus schakelen"
+  },
+
+  "statistics": {
+    "title": "Statistieken",
+    "close": "Sluiten",
+    "recordingOverview": "Opname overzicht",
+    "totalEvents": "Totaal gebeurtenissen",
+    "totalClips": "Totaal clips",
+    "recordingTime": "Opnametijd",
+    "estStorage": "Geschatte opslag",
+    "eventsLast14Days": "Gebeurtenissen - Laatste 14 dagen",
+    "eventTypes": "Gebeurtenis types",
+    "saved": "Opgeslagen",
+    "sentry": "Schildwacht",
+    "recent": "Recent",
+    "triggerReasons": "Trigger redenen",
+    "manualSave": "Handmatig opgeslagen",
+    "objectDetected": "Object gedetecteerd",
+    "vehicleBump": "Voertuig stoot",
+    "honk": "Claxon",
+    "other": "Overig",
+    "unknown": "Onbekend",
+    "topLocations": "Top 10 locaties (Alle gebeurtenissen)",
+    "sentryByTimeOfDay": "Schildwacht gebeurtenissen per uur",
+    "topSentryLocations": "Top schildwacht locaties",
+    "dateRange": "Datumbereik",
+    "eventTrends": "Gebeurtenis trends",
+    "weekly": "Wekelijks",
+    "monthly": "Maandelijks",
+    "exportStatistics": "Statistieken exporteren",
+    "exportJson": "JSON exporteren",
+    "exportCsv": "CSV exporteren",
+    "noEvents": "Geen gebeurtenissen geladen. Open eerst een TeslaCam map.",
+    "noStatsToExport": "Geen statistieken om te exporteren",
+    "noTimelineData": "Geen tijdlijngegevens beschikbaar",
+    "noEventsLast14Days": "Geen gebeurtenissen in de laatste 14 dagen",
+    "noSentryEvents": "Geen schildwacht gebeurtenissen om te analyseren",
+    "noTrendData": "Geen trendgegevens beschikbaar",
+    "noLocationData": "Geen locatiegegevens beschikbaar",
+    "noSentryLocationData": "Geen schildwacht locatiegegevens",
+    "events": "gebeurtenissen"
+  },
+
+  "errors": {
+    "folderNotFound": "Map niet gevonden",
+    "noVideosFound": "Geen video's gevonden in deze gebeurtenis",
+    "loadFailed": "Video laden mislukt",
+    "exportFailed": "Export mislukt",
+    "browserNotSupported": "Uw browser ondersteunt deze functie niet",
+    "permissionDenied": "Toestemming geweigerd",
+    "fileAccessError": "Fout bij bestandstoegang"
+  },
+
+  "time": {
+    "hours": "u",
+    "minutes": "m",
+    "seconds": "s",
+    "ago": "geleden",
+    "justNow": "zojuist"
+  },
+
+  "quickstart": {
+    "skip": "Overslaan",
+    "previous": "Vorige",
+    "next": "Volgende",
+    "getStarted": "Aan de slag",
+    "welcome": {
+      "title": "Welkom bij TeslaCam Viewer",
+      "description": "Bekijk en beheer uw Tesla dashcam-opnames rechtstreeks in uw browser.",
+      "noUpload": "Geen upload nodig",
+      "videosStay": "uw video's blijven op uw computer.",
+      "language": "Taal"
+    },
+    "step1": {
+      "title": "Stap 1: Selecteer uw TeslaCam-map",
+      "description": "Klik op \"Selecteer TeslaCam-map\" om uw USB-station of map met TeslaCam-gegevens te kiezen.",
+      "hint": "Zoek naar mappen genaamd TeslaCam, SavedClips, SentryClips of RecentClips."
+    },
+    "step2": {
+      "title": "Stap 2: Gebeurtenissen bekijken",
+      "description": "Gebeurtenissen verschijnen in de linkerzijbalk, gesorteerd op datum. Klik op een gebeurtenis om deze te laden.",
+      "saved": "Handmatig opgeslagen van dashcam",
+      "sentry": "Bewegingsgeactiveerde opnames",
+      "recent": "Rolling buffer opnames"
+    },
+    "step3": {
+      "title": "Stap 3: 4 Camera's bekijken",
+      "description": "Bekijk alle 4 camerahoeken gesynchroniseerd: Voor, Achter, Links en Rechts.",
+      "tip": "Tip",
+      "tipText": "Sleep camera's om posities te wisselen, of verberg camera's die u niet nodig hebt."
+    },
+    "shortcuts": {
+      "title": "Sneltoetsen",
+      "playPause": "Afspelen / Pauze",
+      "seek": "5 seconden vooruit",
+      "screenshot": "Screenshot",
+      "markInOut": "Markeer in / uit",
+      "export": "Exporteren",
+      "showAll": "Alle sneltoetsen tonen"
+    }
+  },
+
+  "driveManager": {
+    "title": "Schijven beheren",
+    "noDrives": "Geen schijven toegevoegd",
+    "events": "gebeurtenissen",
+    "removeDrive": "Schijf verwijderen",
+    "addDrive": "Schijf toevoegen",
+    "changeColor": "Klik om kleur te wijzigen"
+  },
+
+  "driveSync": {
+    "title": "Schijf synchroniseren",
+    "close": "Sluiten (Esc)",
+    "settings": "Instellingen",
+    "sourceDestination": "Bron & Bestemming",
+    "selectSource": "Selecteer bron...",
+    "selectDestination": "Selecteer bestemming...",
+    "compare": "Vergelijken",
+    "comparing": "Vergelijken...",
+    "comparisonStats": "Vergelijkingsstatistieken",
+    "selectDrivesToCompare": "Selecteer schijven en vergelijk om statistieken te zien",
+    "selectDrivesHint": "Selecteer schijven om te vergelijken",
+    "quickLoad": "Snel laden:",
+    "noPresets": "Geen opgeslagen presets",
+    "save": "Opslaan",
+    "copy": "Kopiëren",
+    "move": "Verplaatsen",
+    "cancel": "Annuleren",
+    "pause": "Pauze",
+    "resume": "Hervatten",
+    "startSync": "Synchronisatie starten",
+    "done": "Klaar",
+    "preparing": "Voorbereiden...",
+    "syncComplete": "Synchronisatie voltooid",
+    "syncFailed": "Synchronisatie mislukt",
+    "selected": "Geselecteerd:",
+    "events": "gebeurtenissen",
+    "missingOnDest": "Ontbreekt op bestemming",
+    "newerOnSource": "Nieuwer op bron",
+    "differentSize": "Andere grootte",
+    "alreadySynced": "Al gesynchroniseerd",
+    "includeNotes": "Notities & tags opnemen",
+    "eta": "Resterende tijd:",
+    "sourceEvents": "Brongebeurtenissen",
+    "destEvents": "Bestemmingsgebeurtenissen",
+    "missing": "Ontbrekend",
+    "newerCount": "Nieuwer op bron",
+    "synced": "Al gesynchroniseerd",
+    "syncCoverage": "Synchronisatiedekking",
+    "storageBreakdown": "Opslagdetails",
+    "sourceTotal": "Bron totaal",
+    "destTotal": "Bestemming totaal",
+    "toTransfer": "Te overdragen",
+    "dateRange": "Datumbereik",
+    "source": "Bron:",
+    "destination": "Bestemming:",
+    "eventsByType": "Gebeurtenissen per type",
+    "topLocations": "Top locaties",
+    "noLocationData": "Geen locatiegegevens beschikbaar",
+    "eventsByMonth": "Gebeurtenissen per maand",
+    "noMonthlyData": "Geen maandelijkse gegevens beschikbaar",
+    "detailedBreakdown": "Gedetailleerde gebeurtenissenindeling",
+    "allEvents": "Alle gebeurtenissen",
+    "missingOnly": "Alleen ontbrekende",
+    "newerOnly": "Alleen nieuwere",
+    "syncedOnly": "Alleen gesynchroniseerde",
+    "showingFirst": "Toont eerste {{count}} van {{total}} gebeurtenissen"
+  },
+
+  "syncSettings": {
+    "title": "Synchronisatie-instellingen",
+    "verifyAfterCopy": "Bestanden verifiëren na kopiëren",
+    "syncNotes": "Notities en tags synchroniseren",
+    "writeSyncFile": "Synchronisatie-instellingen schrijven naar bestemming",
+    "confirmBeforeDelete": "Bevestigen voor verwijderen bronbestanden",
+    "noteConflict": "Notitieconflictoplossing:",
+    "askEachTime": "Elke keer vragen",
+    "mergeAutomatically": "Automatisch samenvoegen",
+    "saveSettings": "Instellingen opslaan",
+    "close": "Sluiten"
+  },
+
+  "presets": {
+    "title": "Presets beheren",
+    "noPresets": "Geen opgeslagen presets. Selecteer schijven en klik op \"Opslaan\" om er een te maken.",
+    "importFromDrives": "Importeren van schijven",
+    "close": "Sluiten",
+    "delete": "Verwijderen",
+    "importedFrom": "Geïmporteerd van",
+    "lastUsed": "Laatst gebruikt:",
+    "deleteConfirm": "Preset \"{{name}}\" verwijderen?",
+    "couldNotFind": "Kon schijven voor deze preset niet vinden.",
+    "lookingFor": "Zoeken naar:",
+    "sourceLabel": "Bron:",
+    "destLabel": "Bestemming:",
+    "makeSureLoaded": "Zorg dat beide schijven zijn geladen.",
+    "enterName": "Voer een naam in voor deze preset:",
+    "savedSuccess": "Preset succesvol opgeslagen!",
+    "imported": "{{count}} presets geïmporteerd.",
+    "errors": "Fouten:",
+    "noNewPresets": "Geen nieuwe presets gevonden op schijven."
+  },
+
+  "layoutEditor": {
+    "title": "Layout-editor",
+    "close": "Sluiten",
+    "new": "Nieuw",
+    "newLayout": "Nieuwe layout",
+    "import": "Importeren",
+    "importLayout": "Layout importeren",
+    "export": "Exporteren",
+    "exportLayout": "Layout exporteren",
+    "snap": "Uitlijnen",
+    "aspect": "Beeldverhouding:",
+    "aspectWide": "Breed",
+    "aspectUltraWide": "Ultra breed",
+    "aspectTriple": "Drievoudig",
+    "aspectCinematic": "Cinematisch",
+    "selectedCamera": "Geselecteerde camera",
+    "futureCamera": "Toekomstige camera - nog niet beschikbaar",
+    "position": "Positie",
+    "size": "Grootte",
+    "layer": "Laag",
+    "sendBackward": "Naar achteren",
+    "bringForward": "Naar voren",
+    "fit": "Passend:",
+    "contain": "Bevat",
+    "cover": "Vullen",
+    "cropEdges": "Randen bijsnijden",
+    "top": "Boven:",
+    "bottom": "Onder:",
+    "left": "Links:",
+    "right": "Rechts:",
+    "cameras": "Camera's",
+    "savedLayouts": "Opgeslagen layouts",
+    "noLayouts": "Nog geen aangepaste layouts opgeslagen",
+    "cancel": "Annuleren",
+    "saveLayout": "Layout opslaan",
+    "layoutName": "Layoutnaam",
+    "hint": "Klik om te selecteren, sleep om te verplaatsen, hoeken om te vergroten/verkleinen",
+    "untitled": "Naamloze layout",
+    "invalidLayout": "Ongeldige layout:",
+    "deleteConfirm": "\"{{name}}\" verwijderen?",
+    "importFailed": "Import mislukt:",
+    "readFailed": "Bestand lezen mislukt:",
+    "failedToSave": "Layout opslaan mislukt",
+    "failedToUpdate": "Layout bijwerken mislukt",
+    "soon": "Binnenkort"
+  },
+
+  "common": {
+    "close": "Sluiten",
+    "cancel": "Annuleren",
+    "save": "Opslaan",
+    "delete": "Verwijderen",
+    "edit": "Bewerken",
+    "add": "Toevoegen",
+    "remove": "Verwijderen",
+    "yes": "Ja",
+    "no": "Nee",
+    "ok": "OK",
+    "loading": "Laden...",
+    "error": "Fout",
+    "success": "Succes",
+    "warning": "Waarschuwing"
+  },
+
+  "incidentDetection": {
+    "toggleSlowMo": "Incident slow-motion schakelen",
+    "slowMoEnabled": "Incident slow-motion: AAN",
+    "slowMoDisabled": "Incident slow-motion: UIT",
+    "slowMoIndicator": "SLOW-MO",
+    "slowMoScore": "Score: {{score}}/10",
+    "toggleBirdsEye": "Vogelperspectief schakelen",
+    "birdsEyeTitle": "Vogelperspectief",
+    "birdsEyeWaitingGps": "Wachten op GPS-gegevens...",
+    "birdsEyeRadius": "{{radius}}m straal",
+    "birdsEyeLowG": "Laag G",
+    "birdsEyeMedG": "Gemiddeld G",
+    "birdsEyeHighG": "Hoog G"
+  }
+}

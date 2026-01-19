@@ -46,7 +46,10 @@ class VideoExport {
      * @returns {Array} Array of camera names in current visual order
      */
     getCameraOrder() {
-        const defaultOrder = ['front', 'back', 'left_repeater', 'right_repeater'];
+        const hasPillars = this.videoPlayer?.hasPillarCameras || false;
+        const defaultOrder = hasPillars
+            ? ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar']
+            : ['front', 'back', 'left_repeater', 'right_repeater'];
         return this.layoutManager?.cameraOrder || defaultOrder;
     }
 
@@ -57,13 +60,16 @@ class VideoExport {
      * @returns {Object} Map of position name to video source name
      */
     buildCameraMapping() {
-        const defaultOrder = ['front', 'back', 'left_repeater', 'right_repeater'];
+        const hasPillars = this.videoPlayer?.hasPillarCameras || false;
+        const defaultOrder = hasPillars
+            ? ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar']
+            : ['front', 'back', 'left_repeater', 'right_repeater'];
         const currentOrder = this.getCameraOrder();
 
         // Map: position name -> which video to show there
         const mapping = {};
         for (let i = 0; i < defaultOrder.length; i++) {
-            mapping[defaultOrder[i]] = currentOrder[i];
+            mapping[defaultOrder[i]] = currentOrder[i] || defaultOrder[i];
         }
 
         console.log('Camera mapping for export:', mapping);
@@ -93,7 +99,10 @@ class VideoExport {
         }
 
         // Fallback: Default 2x2 grid if layoutManager not available
-        const visibleCameras = this.layoutManager?.getVisibleCameras() || { front: true, back: true, left_repeater: true, right_repeater: true };
+        const visibleCameras = this.layoutManager?.getVisibleCameras() || {
+            front: true, back: true, left_repeater: true, right_repeater: true,
+            left_pillar: true, right_pillar: true
+        };
         const config = {
             canvasWidth: videoWidth * 2,
             canvasHeight: videoHeight * 2,
@@ -102,12 +111,401 @@ class VideoExport {
                 front: { x: 0, y: 0, w: videoWidth, h: videoHeight, visible: visibleCameras.front },
                 back: { x: videoWidth, y: 0, w: videoWidth, h: videoHeight, visible: visibleCameras.back },
                 left_repeater: { x: 0, y: videoHeight, w: videoWidth, h: videoHeight, visible: visibleCameras.left_repeater },
-                right_repeater: { x: videoWidth, y: videoHeight, w: videoWidth, h: videoHeight, visible: visibleCameras.right_repeater }
+                right_repeater: { x: videoWidth, y: videoHeight, w: videoWidth, h: videoHeight, visible: visibleCameras.right_repeater },
+                // Pillar cameras not shown in fallback 2x2 grid
+                left_pillar: { x: 0, y: 0, w: 0, h: 0, visible: false },
+                right_pillar: { x: 0, y: 0, w: 0, h: 0, visible: false }
             }
         };
 
         console.log('Export layout config (fallback):', layout, config);
         return config;
+    }
+
+    /**
+     * Wait for all videos to be ready at a specific timestamp
+     * @param {number} targetTime - Target absolute time in seconds
+     * @param {number} timeout - Max wait time in ms (default 5000)
+     * @returns {Promise<boolean>} True if all videos are ready
+     */
+    async seekAndWaitForFrame(targetTime, timeout = 5000) {
+        const videos = this.videoPlayer.videos;
+        const hasPillars = this.videoPlayer?.hasPillarCameras || false;
+        const videoElements = hasPillars
+            ? [videos.front, videos.back, videos.left_repeater, videos.right_repeater, videos.left_pillar, videos.right_pillar].filter(v => v)
+            : [videos.front, videos.back, videos.left_repeater, videos.right_repeater].filter(v => v);
+
+        // Seek using the videoPlayer's method (handles clip boundaries)
+        await this.videoPlayer.seekToEventTime(targetTime);
+
+        // Wait for all videos to have data at this frame
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+
+            const checkReady = () => {
+                // Check if timed out
+                if (Date.now() - startTime > timeout) {
+                    console.warn('Frame seek timeout at', targetTime);
+                    resolve(false);
+                    return;
+                }
+
+                // Check if all videos have enough data
+                const allReady = videoElements.every(v => {
+                    if (!v.src) return true; // No source means not needed
+                    return v.readyState >= 2; // HAVE_CURRENT_DATA or better
+                });
+
+                if (allReady) {
+                    resolve(true);
+                } else {
+                    // Check again in 10ms
+                    setTimeout(checkReady, 10);
+                }
+            };
+
+            checkReady();
+        });
+    }
+
+    /**
+     * Export using frame-by-frame capture (no real-time playback)
+     * This method seeks to each frame and waits for it to be ready before capturing.
+     * Slower but eliminates stuttering issues.
+     */
+    /**
+     * Export using pre-rendered frames with buffered MediaRecorder.
+     * This approach renders all frames first, then plays them back for recording.
+     */
+    async exportFrameByFrame(options = {}) {
+        const {
+            format = 'webm',
+            quality = 0.9,
+            startTime = null,
+            endTime = null,
+            includeOverlay = true,
+            onProgress = null,
+            fps = 30
+        } = options;
+
+        console.log('Starting buffered frame-by-frame export...');
+
+        if (this.isExporting) {
+            throw new Error('Export already in progress');
+        }
+
+        this.isExporting = true;
+        this.exportWallStartTime = Date.now();
+        this.onProgress = onProgress;
+        this.recordedChunks = [];
+
+        const videos = this.videoPlayer.videos;
+        if (!videos.front.src) {
+            this.isExporting = false;
+            throw new Error('No video loaded');
+        }
+
+        // Pause any playback
+        await this.videoPlayer.pause();
+
+        // Calculate total duration
+        if (!this.cachedTotalDuration) {
+            this.cachedTotalDuration = await this.videoPlayer.getTotalDuration();
+        }
+
+        // Determine export range
+        const exportStart = startTime !== null ? startTime : 0;
+        const exportEnd = endTime !== null ? endTime : this.cachedTotalDuration;
+        const exportDuration = exportEnd - exportStart;
+        const frameInterval = 1 / fps;
+        const totalFrames = Math.ceil(exportDuration * fps);
+
+        console.log(`Buffered export: ${totalFrames} frames @ ${fps}fps, ${exportStart.toFixed(2)}s to ${exportEnd.toFixed(2)}s`);
+
+        // Get video dimensions
+        const videoWidth = videos.front.videoWidth || 1280;
+        const videoHeight = videos.front.videoHeight || 960;
+
+        // Get layout config with proper dimensions
+        const layoutConfig = this.getLayoutConfig(videoWidth, videoHeight);
+        const canvasWidth = layoutConfig.canvasWidth || 1920;
+        const canvasHeight = layoutConfig.canvasHeight || 1080;
+
+        console.log(`Canvas size: ${canvasWidth}x${canvasHeight}`);
+
+        // Note: We skip pre-rendering telemetry and use on-demand rendering instead.
+        // On-demand rendering uses the video player's actual clip/time state, which ensures
+        // the telemetry matches exactly what the user saw during preview.
+        // Pre-rendering had timing drift issues due to clip duration estimation.
+
+        // Get camera mapping
+        const cameraMapping = this.buildCameraMapping();
+
+        // Pre-cache mini-map tiles if mini-map export is enabled
+        const settings = window.app?.settingsManager;
+        const miniMapInExport = settings && settings.get('miniMapInExport') !== false;
+        if (window.app?.miniMapOverlay && miniMapInExport && window.app.telemetryOverlay?.hasTelemetryData()) {
+            console.log('Pre-caching mini-map tiles...');
+            // Clear trail before export to start fresh
+            window.app.miniMapOverlay.clearTrail();
+            try {
+                // Gather all GPS positions from telemetry for the export range
+                const positions = [];
+                const sampleInterval = 1; // Sample every 1 second
+                for (let t = exportStart; t <= exportEnd; t += sampleInterval) {
+                    await this.videoPlayer.seekToEventTime(t);
+                    const clipIndex = this.videoPlayer.currentClipIndex || 0;
+                    const timeInClip = this.videoPlayer.getCurrentTime() || 0;
+                    const videoDuration = this.videoPlayer.getCurrentDuration() || 60;
+                    window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+                    const data = window.app.telemetryOverlay.currentData;
+                    if (data?.latitude_deg && data?.longitude_deg) {
+                        positions.push({ lat: data.latitude_deg, lng: data.longitude_deg });
+                    }
+                }
+                // Pre-cache tiles for all positions
+                await window.app.miniMapOverlay.preCacheTilesForExport(positions);
+                // Seek back to export start
+                await this.videoPlayer.seekToEventTime(exportStart);
+            } catch (e) {
+                console.warn('Failed to pre-cache mini-map tiles:', e);
+            }
+        }
+
+        // Phase 1: Render all frames to ImageData buffer
+        console.log('Phase 1: Rendering frames to buffer...');
+        const frameBuffer = [];
+        const renderCanvas = document.createElement('canvas');
+        renderCanvas.width = canvasWidth;
+        renderCanvas.height = canvasHeight;
+        const renderCtx = renderCanvas.getContext('2d', { alpha: false });
+
+        try {
+            for (let frameNum = 0; frameNum < totalFrames; frameNum++) {
+                if (!this.isExporting) {
+                    console.log('Export cancelled during rendering');
+                    return;
+                }
+
+                const absoluteTime = exportStart + (frameNum * frameInterval);
+
+                // Seek and wait for frame
+                const frameReady = await this.seekAndWaitForFrame(absoluteTime, 3000);
+
+                // Clear canvas
+                renderCtx.fillStyle = '#000000';
+                renderCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+                if (frameReady) {
+                    // Draw cameras sorted by z-index (lower z-index first, so higher ones are on top)
+                    const sortedCameras = Object.entries(layoutConfig.cameras)
+                        .filter(([name, cam]) => cam.visible && cam.w > 0 && cam.h > 0)
+                        .sort((a, b) => (a[1].zIndex || 1) - (b[1].zIndex || 1));
+
+                    for (const [camPosition, camConfig] of sortedCameras) {
+                        const actualCameraName = cameraMapping[camPosition];
+                        const video = videos[actualCameraName];
+
+                        if (!video || !video.src || video.readyState < 2) continue;
+
+                        const crop = camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 };
+                        const dx = camConfig.x;
+                        const dy = camConfig.y;
+                        const dw = camConfig.w;
+                        const dh = camConfig.h;
+
+                        const vw = video.videoWidth;
+                        const vh = video.videoHeight;
+                        const sx = vw * (crop.left / 100);
+                        const sy = vh * (crop.top / 100);
+                        const sw = vw * (1 - crop.left / 100 - crop.right / 100);
+                        const sh = vh * (1 - crop.top / 100 - crop.bottom / 100);
+
+                        renderCtx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
+                    }
+                }
+
+                // Apply license plate blurring if enabled
+                const blurPlatesEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
+                if (blurPlatesEnabled && window.app?.plateBlur?.isReady()) {
+                    try {
+                        await window.app.plateBlur.processFrame(renderCtx, canvasWidth, canvasHeight, {
+                            forceDetection: frameNum % 3 === 0 // Run detection every 3rd frame for performance
+                        });
+                    } catch (blurError) {
+                        if (frameNum % 30 === 0) {
+                            console.warn('[Export] Plate blur error:', blurError);
+                        }
+                    }
+                }
+
+                // Add camera labels (kept even in privacy mode)
+                this.addCameraLabelsForLayout(renderCtx, layoutConfig, cameraMapping);
+
+                // Check privacy mode setting
+                const settings = window.app?.settingsManager;
+                const privacyMode = settings && settings.get('privacyModeExport') === true;
+
+                // Add timestamp overlay (skipped in privacy mode)
+                if (includeOverlay && !privacyMode) {
+                    this.addOverlay(renderCtx, canvasWidth, canvasHeight, absoluteTime);
+                }
+
+                // Add telemetry overlay using video player's actual state (skipped in privacy mode)
+                // This ensures telemetry matches exactly what the user saw during preview
+                const telemetryEnabled = !settings || settings.get('telemetryOverlayInExport') !== false;
+
+                if (!privacyMode && window.app?.telemetryOverlay && telemetryEnabled && window.app.telemetryOverlay.hasTelemetryData()) {
+                    // Use video player's current clip/time (set by seekToEventTime during frame rendering)
+                    const clipIndex = this.videoPlayer.currentClipIndex || 0;
+                    const timeInClip = this.videoPlayer.getCurrentTime() || 0;
+                    const videoDuration = this.videoPlayer.getCurrentDuration() || 60;
+
+                    // Update telemetry data for current position
+                    window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+
+                    // Get the updated telemetry data and render to canvas
+                    const telemetryData = window.app.telemetryOverlay.getCurrentTelemetry();
+                    if (telemetryData) {
+                        // Debug: log telemetry changes every 30 frames (1 second)
+                        if (frameNum % 30 === 0) {
+                            console.log(`[Export] Frame ${frameNum}: clip=${clipIndex}, time=${timeInClip.toFixed(2)}, AP=${telemetryData.autopilot_name}, brake=${telemetryData.brake_applied}, gY=${(telemetryData.g_force_y || 0).toFixed(2)}`);
+                        }
+                        const blinkState = frameNum % 30 < 15; // 1 second blink cycle
+                        window.app.telemetryOverlay.renderToCanvas(renderCtx, canvasWidth, canvasHeight, telemetryData, { blinkState });
+
+                        // Add mini-map overlay if export setting is enabled (skipped in privacy mode)
+                        const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
+                        if (window.app?.miniMapOverlay && miniMapInExport && telemetryData.latitude_deg && telemetryData.longitude_deg) {
+                            window.app.miniMapOverlay.updatePositionForExport(
+                                telemetryData.latitude_deg,
+                                telemetryData.longitude_deg,
+                                telemetryData.heading_deg || 0
+                            );
+                            window.app.miniMapOverlay.drawToCanvas(renderCtx, canvasWidth, canvasHeight);
+                        }
+                    }
+                }
+
+                // Store frame as ImageBitmap (more efficient than ImageData)
+                const bitmap = await createImageBitmap(renderCanvas);
+                frameBuffer.push(bitmap);
+
+                // Report render progress (0-50%)
+                if (this.onProgress) {
+                    const progressPercent = ((frameNum + 1) / totalFrames) * 50;
+                    this.onProgress(progressPercent, absoluteTime - exportStart, exportDuration);
+                }
+
+                // Yield every 5 frames
+                if (frameNum % 5 === 0) {
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            console.log(`Rendered ${frameBuffer.length} frames to buffer`);
+
+            // Phase 2: Play back frames at correct timing and record
+            console.log('Phase 2: Recording from buffer...');
+
+            const playbackCanvas = document.createElement('canvas');
+            playbackCanvas.width = canvasWidth;
+            playbackCanvas.height = canvasHeight;
+            const playbackCtx = playbackCanvas.getContext('2d', { alpha: false });
+
+            // Setup MediaRecorder with target framerate
+            const stream = playbackCanvas.captureStream(fps);
+            const mimeType = format === 'mp4'
+                ? (MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm;codecs=h264')
+                : 'video/webm;codecs=vp9';
+
+            this.mediaRecorder = new MediaRecorder(stream, {
+                mimeType,
+                videoBitsPerSecond: 20_000_000
+            });
+
+            this.mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    this.recordedChunks.push(e.data);
+                }
+            };
+
+            // Record all frames at correct timing for MediaRecorder
+            // Using real-time playback to ensure proper frame capture
+            await new Promise((resolve, reject) => {
+                this.mediaRecorder.onstop = resolve;
+                this.mediaRecorder.onerror = reject;
+
+                this.mediaRecorder.start();
+
+                let frameIndex = 0;
+                const frameIntervalMs = 1000 / fps;
+                const startTime = performance.now();
+
+                const drawNextFrame = () => {
+                    if (frameIndex >= frameBuffer.length || !this.isExporting) {
+                        // All frames drawn, wait for last frame to be captured
+                        setTimeout(() => {
+                            this.mediaRecorder.stop();
+                        }, frameIntervalMs * 2);
+                        return;
+                    }
+
+                    // Draw frame
+                    playbackCtx.drawImage(frameBuffer[frameIndex], 0, 0);
+
+                    // Report playback progress (50-100%)
+                    if (this.onProgress) {
+                        const progressPercent = 50 + ((frameIndex + 1) / frameBuffer.length) * 50;
+                        const elapsedSec = (frameIndex / fps);
+                        this.onProgress(progressPercent, elapsedSec, exportDuration);
+                    }
+
+                    frameIndex++;
+
+                    // Schedule next frame at precise interval
+                    const elapsed = performance.now() - startTime;
+                    const expectedTime = frameIndex * frameIntervalMs;
+                    const delay = Math.max(0, expectedTime - elapsed);
+                    setTimeout(drawNextFrame, delay);
+                };
+
+                drawNextFrame();
+            });
+
+            // Create and download the video
+            const blob = new Blob(this.recordedChunks, { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `TeslaCam_Export_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.${format === 'mp4' ? 'mp4' : 'webm'}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            // Clean up frame buffer
+            for (const bitmap of frameBuffer) {
+                bitmap.close();
+            }
+
+            console.log('Buffered frame-by-frame export complete!');
+
+        } catch (error) {
+            console.error('Buffered export error:', error);
+            // Clean up frame buffer
+            for (const bitmap of frameBuffer) {
+                if (bitmap && typeof bitmap.close === 'function') {
+                    bitmap.close();
+                }
+            }
+            throw error;
+        } finally {
+            this.isExporting = false;
+            if (window.app?.telemetryOverlay) {
+                window.app.telemetryOverlay.clearExportBuffer();
+            }
+        }
     }
 
     /**
@@ -287,6 +685,9 @@ class VideoExport {
             console.log('Export range - Start:', exportStart.toFixed(2), '| End:', exportEnd.toFixed(2), '| Duration:', exportDuration.toFixed(2));
             console.log('Start position:', startTime !== null ? startTime.toFixed(2) : '0 (beginning of event)');
             console.log('End position:', endTime !== null ? endTime.toFixed(2) + ' (OUT marker)' : this.cachedTotalDuration.toFixed(2) + ' (end of event)');
+
+            // Note: Telemetry is rendered on-demand using video player's actual state
+            // This ensures telemetry matches exactly what the user sees during preview
 
             // Seek to start position (use seekToEventTime for absolute time)
             const wasPlaying = this.videoPlayer.getIsPlaying();
@@ -751,12 +1152,55 @@ class VideoExport {
                 // Reset filter for overlays and labels
                 ctx.filter = 'none';
 
-                // Add camera labels based on layout (use mapping for correct labels)
+                // Apply license plate blurring if enabled
+                // Note: In composite mode, we run detection less frequently for real-time performance
+                const blurPlatesEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
+                if (blurPlatesEnabled && window.app?.plateBlur?.isReady()) {
+                    try {
+                        // Don't await - run async to avoid blocking frame rendering
+                        window.app.plateBlur.processFrame(ctx, canvas.width, canvas.height, {
+                            forceDetection: totalFramesRendered % 5 === 0 // Less frequent for real-time
+                        });
+                    } catch (blurError) {
+                        // Silently handle errors in real-time mode
+                    }
+                }
+
+                // Add camera labels based on layout (use mapping for correct labels) - kept even in privacy mode
                 this.addCameraLabelsForLayout(ctx, layoutConfig, cameraMapping);
 
-                // Add overlay if requested
-                if (includeOverlay) {
+                // Check privacy mode setting
+                const settings = window.app?.settingsManager;
+                const privacyMode = settings && settings.get('privacyModeExport') === true;
+
+                // Add overlay if requested (skipped in privacy mode)
+                if (includeOverlay && !privacyMode) {
                     this.addOverlay(ctx, canvas.width, canvas.height, absoluteTime);
+                }
+
+                // Add telemetry overlay using video player's actual state (skipped in privacy mode)
+                const telemetryEnabled = !settings || settings.get('telemetryOverlayInExport') !== false;
+                if (!privacyMode && window.app?.telemetryOverlay && telemetryEnabled && window.app.telemetryOverlay.hasTelemetryData()) {
+                    const clipIndex = this.videoPlayer.currentClipIndex || 0;
+                    const timeInClip = this.videoPlayer.getCurrentTime() || 0;
+                    const videoDuration = this.videoPlayer.getCurrentDuration() || 60;
+                    window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+                    const telemetryData = window.app.telemetryOverlay.getCurrentTelemetry();
+                    if (telemetryData) {
+                        const blinkState = Math.floor(absoluteTime * 2) % 2 === 0; // 1 second blink cycle
+                        window.app.telemetryOverlay.renderToCanvas(ctx, canvas.width, canvas.height, telemetryData, { blinkState });
+
+                        // Add mini-map overlay if export setting is enabled (skipped in privacy mode)
+                        const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
+                        if (window.app?.miniMapOverlay && miniMapInExport && telemetryData.latitude_deg && telemetryData.longitude_deg) {
+                            window.app.miniMapOverlay.updatePositionForExport(
+                                telemetryData.latitude_deg,
+                                telemetryData.longitude_deg,
+                                telemetryData.heading_deg || 0
+                            );
+                            window.app.miniMapOverlay.drawToCanvas(ctx, canvas.width, canvas.height);
+                        }
+                    }
                 }
 
                 // No need to schedule next frame - setInterval handles it
@@ -848,6 +1292,11 @@ class VideoExport {
                 this.mediaRecorder = null;
                 this.cachedTotalDuration = null;
 
+                // Clear telemetry export buffer
+                if (window.app?.telemetryOverlay) {
+                    window.app.telemetryOverlay.clearExportBuffer();
+                }
+
                 // Resolve the promise to signal completion
                 if (this.exportResolve) {
                     this.exportResolve();
@@ -868,7 +1317,7 @@ class VideoExport {
 
     /**
      * Export single camera view
-     * @param {string} camera - Camera name (front, back, left_repeater, right_repeater)
+     * @param {string} camera - Camera name (front, back, left_repeater, right_repeater, left_pillar, right_pillar)
      * @param {Object} options - Export options
      */
     async exportSingle(camera, options = {}) {
@@ -957,6 +1406,9 @@ class VideoExport {
         const exportDuration = exportEnd - exportStart;
 
         console.log('Single export range:', exportStart.toFixed(2), '->', exportEnd.toFixed(2));
+
+        // Note: Telemetry is rendered on-demand using video player's actual state
+        // This ensures telemetry matches exactly what the user sees during preview
 
         // Seek to start
         const wasPlaying = this.videoPlayer.getIsPlaying();
@@ -1115,9 +1567,47 @@ class VideoExport {
                 ctx.fillText('No Signal', canvas.width / 2, canvas.height / 2);
             }
 
+            // Apply license plate blurring if enabled (single camera)
+            const blurPlatesEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
+            if (blurPlatesEnabled && window.app?.plateBlur?.isReady()) {
+                try {
+                    window.app.plateBlur.processFrame(ctx, canvas.width, canvas.height, {
+                        forceDetection: true // Always detect for single camera (full resolution)
+                    });
+                } catch (blurError) {
+                    // Silently handle errors
+                }
+            }
+
             // Add overlay if enabled
             if (includeOverlay) {
                 this.addSingleCameraOverlay(ctx, canvas.width, canvas.height, camera, absoluteTime);
+            }
+
+            // Add telemetry overlay using video player's actual state
+            const settings = window.app?.settingsManager;
+            const telemetryEnabled = !settings || settings.get('telemetryOverlayInExport') !== false;
+            if (window.app?.telemetryOverlay && telemetryEnabled && window.app.telemetryOverlay.hasTelemetryData()) {
+                const clipIndex = this.videoPlayer.currentClipIndex || 0;
+                const timeInClip = this.videoPlayer.getCurrentTime() || 0;
+                const videoDuration = this.videoPlayer.getCurrentDuration() || 60;
+                window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+                const telemetryData = window.app.telemetryOverlay.getCurrentTelemetry();
+                if (telemetryData) {
+                    const blinkState = Math.floor(absoluteTime * 2) % 2 === 0; // 1 second blink cycle
+                    window.app.telemetryOverlay.renderToCanvas(ctx, canvas.width, canvas.height, telemetryData, { blinkState });
+
+                    // Add mini-map overlay if export setting is enabled
+                    const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
+                    if (window.app?.miniMapOverlay && miniMapInExport && telemetryData.latitude_deg && telemetryData.longitude_deg) {
+                        window.app.miniMapOverlay.updatePositionForExport(
+                            telemetryData.latitude_deg,
+                            telemetryData.longitude_deg,
+                            telemetryData.heading_deg || 0
+                        );
+                        window.app.miniMapOverlay.drawToCanvas(ctx, canvas.width, canvas.height);
+                    }
+                }
             }
 
             // Progress callback - match grid export signature (percent, currentTime, endTime, startTime)
@@ -1278,7 +1768,7 @@ class VideoExport {
             console.log('Single export blob size:', blob.size, 'bytes');
 
             // Generate filename (include speed if not 1x)
-            const labelMap = { front: 'front', back: 'rear', left_repeater: 'left', right_repeater: 'right' };
+            const labelMap = { front: 'front', back: 'rear', left_repeater: 'left', right_repeater: 'right', left_pillar: 'left-pillar', right_pillar: 'right-pillar' };
             const cameraLabel = labelMap[camera] || camera;
             const eventDate = this.videoPlayer.currentEvent?.timestamp || new Date().toISOString();
             const dateStr = eventDate.replace(/[:.]/g, '-').slice(0, 19);
@@ -1297,6 +1787,11 @@ class VideoExport {
 
             this.isExporting = false;
             this.recordedChunks = [];
+
+            // Clear telemetry export buffer
+            if (window.app?.telemetryOverlay) {
+                window.app.telemetryOverlay.clearExportBuffer();
+            }
 
             if (this.exportResolve) {
                 this.exportResolve();
@@ -1368,7 +1863,9 @@ class VideoExport {
             front: 'Front',
             back: 'Back',
             left_repeater: 'Left',
-            right_repeater: 'Right'
+            right_repeater: 'Right',
+            left_pillar: 'Left Pillar',
+            right_pillar: 'Right Pillar'
         };
 
         // Sort cameras by z-index to process in order

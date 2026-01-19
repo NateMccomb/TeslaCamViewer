@@ -16,6 +16,17 @@ class FolderParser {
         this.currentDriveId = null;
         this.currentDriveLabel = null;
         this.currentDriveColor = null;
+
+        // Progress callback for UI updates during parsing
+        this.onProgress = null;
+    }
+
+    /**
+     * Set progress callback for UI updates during parsing
+     * @param {Function} callback - Called with (message, eventCount)
+     */
+    setProgressCallback(callback) {
+        this.onProgress = callback;
     }
 
     /**
@@ -57,7 +68,7 @@ class FolderParser {
      */
     async openDB() {
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.DB_NAME, 1);
+            const request = indexedDB.open(this.DB_NAME, 2);
 
             request.onerror = () => reject(request.error);
             request.onsuccess = () => resolve(request.result);
@@ -249,6 +260,11 @@ class FolderParser {
      * @param {string} folderType
      */
     async parseEventFolder(folderHandle, folderType) {
+        // Report which folder we're scanning
+        if (this.onProgress) {
+            this.onProgress(`Scanning ${folderType}...`, this.events.length);
+        }
+
         if (folderType === 'RecentClips') {
             // RecentClips is flat - no subfolders, just video files
             await this.parseRecentClips(folderHandle);
@@ -259,6 +275,10 @@ class FolderParser {
                     const event = await this.parseEvent(entry, folderType);
                     if (event) {
                         this.events.push(event);
+                        // Report progress periodically (every 10 events to avoid UI spam)
+                        if (this.onProgress && this.events.length % 10 === 0) {
+                            this.onProgress(`Scanning ${folderType}...`, this.events.length);
+                        }
                     }
                 }
             }
@@ -276,7 +296,7 @@ class FolderParser {
         // Collect all video files
         for await (const entry of folderHandle.values()) {
             if (entry.kind === 'file' && entry.name.endsWith('.mp4')) {
-                const clipMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater)\.mp4$/);
+                const clipMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater|left_pillar|right_pillar)\.mp4$/);
                 if (clipMatch) {
                     const [_, clipTimestamp, camera] = clipMatch;
                     clips.push({
@@ -342,6 +362,11 @@ class FolderParser {
             });
 
             const eventName = `Recent: ${dateStr} ${hourRange}`;
+            // Detect if this event has pillar cameras (6-camera system)
+            const hasPillarCameras = group.clips.some(clip =>
+                clip.camera === 'left_pillar' || clip.camera === 'right_pillar'
+            );
+
             const event = {
                 name: eventName,
                 type: 'RecentClips',
@@ -356,6 +381,7 @@ class FolderParser {
                 thumbnailFile: null,
                 eventVideoFile: null,
                 clipGroups: clipGroups,
+                hasPillarCameras: hasPillarCameras,
                 // Multi-drive support
                 driveId: this.currentDriveId,
                 compoundKey: this.getCompoundKey(eventName),
@@ -430,7 +456,7 @@ class FolderParser {
                 console.log(`[Parser] Found event.mp4 for ${event.name}`);
             } else if (fileName.endsWith('.mp4')) {
                 // Parse video clip filename
-                const clipMatch = fileName.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater)\.mp4$/);
+                const clipMatch = fileName.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater|left_pillar|right_pillar)\.mp4$/);
                 if (clipMatch) {
                     const [_, clipTimestamp, camera] = clipMatch;
                     event.clips.push({
@@ -448,6 +474,14 @@ class FolderParser {
 
         // Sort clip groups chronologically
         event.clipGroups.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+        // Detect if this event has pillar cameras (6-camera system)
+        event.hasPillarCameras = event.clips.some(clip =>
+            clip.camera === 'left_pillar' || clip.camera === 'right_pillar'
+        );
+
+        // Mark events with no usable video clips
+        event.isEmpty = event.clipGroups.length === 0;
 
         return event;
     }

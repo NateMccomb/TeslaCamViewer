@@ -1,0 +1,523 @@
+{
+  "_meta": {
+    "language": "Norwegian",
+    "locale": "no",
+    "status": "complete"
+  },
+
+  "app": {
+    "title": "TeslaCamViewer.com",
+    "description": "Se Tesla dashcam-opptak med synkronisert avspilling"
+  },
+
+  "header": {
+    "github": "GitHub",
+    "donate": "Donere",
+    "statistics": "Statistikk",
+    "keyboardShortcuts": "Hurtigtaster (?)",
+    "settings": "Innstillinger (,)",
+    "viewOnGitHub": "Se på GitHub",
+    "supportProject": "Støtt dette prosjektet"
+  },
+
+  "sidebar": {
+    "events": "Hendelser",
+    "map": "Kart",
+    "allDrives": "Alle stasjoner",
+    "addDrive": "Legg til annen stasjon",
+    "manageDrives": "Administrer stasjoner",
+    "syncDrives": "Synkroniser mellom stasjoner",
+    "selectFolder": "Velg TeslaCam-mappe",
+    "emptyState": "Klikk på \"Velg TeslaCam-mappe\" for å begynne",
+    "emptyStateHint": "Du kan velge TeslaCam-mappen, eller en hvilken som helst mappe som inneholder Tesla dashcam-opptak"
+  },
+
+  "player": {
+    "noEventSelected": "Ingen hendelse valgt",
+    "selectEventHint": "👈 Velg en hendelse fra sidepanelet",
+    "noEventLoaded": "Ingen hendelse lastet",
+    "hidden": "Skjult:",
+    "fullscreen": "Fullskjerm",
+    "exitFullscreen": "Avslutt fullskjerm"
+  },
+
+  "cameras": {
+    "front": "Foran",
+    "back": "Bak",
+    "left": "Venstre",
+    "right": "Høyre",
+    "hideFront": "Skjul frontkamera",
+    "hideBack": "Skjul bakkamera",
+    "hideLeft": "Skjul venstre kamera",
+    "hideRight": "Skjul høyre kamera"
+  },
+
+  "controls": {
+    "play": "Spill",
+    "pause": "Pause",
+    "previousFrame": "Forrige bilde (Hold for sakte film)",
+    "nextFrame": "Neste bilde (Hold for sakte film)",
+    "previousClip": "Forrige klipp",
+    "nextClip": "Neste klipp",
+    "previousEvent": "Forrige hendelse",
+    "nextEvent": "Neste hendelse",
+    "screenshot": "Ta skjermbilde",
+    "enhance": "Videoforbedring",
+    "markIn": "Marker startpunkt",
+    "markOut": "Marker sluttpunkt",
+    "clearMarks": "Fjern markeringer",
+    "export": "Eksporter alle kameraer",
+    "exportOptions": "Eksportalternativer",
+    "zoomOut": "Zoom ut tidslinje",
+    "zoomIn": "Zoom inn tidslinje",
+    "resetZoom": "Tilbakestill zoom",
+    "loop": "Gjenta",
+    "speed": "Hastighet:",
+    "layout": "Oppsett:",
+    "camera": "Kamera:"
+  },
+
+  "bookmarks": {
+    "title": "Bokmerker",
+    "previous": "Forrige bokmerke ([)",
+    "add": "Legg til bokmerke (B)",
+    "next": "Neste bokmerke (])",
+    "manage": "Administrer bokmerker",
+    "clearAll": "Fjern alle",
+    "noBookmarks": "Ingen bokmerker ennå"
+  },
+
+  "export": {
+    "header": "Eksporter kamera",
+    "allCameras": "Alle kameraer (Rutenett)",
+    "frontOnly": "Bare foran",
+    "rearOnly": "Bare bak",
+    "leftOnly": "Bare venstre",
+    "rightOnly": "Bare høyre",
+    "exporting": "Eksporterer {{percent}}%",
+    "preparing": "Forbereder eksport...",
+    "encoding": "Koder video...",
+    "complete": "Eksport fullført",
+    "cancelled": "Eksport avbrutt",
+    "failed": "Eksport mislyktes"
+  },
+
+  "layouts": {
+    "grid2x2": "2×2 Rutenett",
+    "layout63": "6:3 Sentrert",
+    "layout43": "4:3 Hoved",
+    "all169": "Alle 16:9",
+    "frontLeft": "Foran + Venstre",
+    "frontRight": "Foran + Høyre",
+    "frontRepeaters": "Foran + Sidekameraer",
+    "focus": "Fokusmodus"
+  },
+
+  "loading": {
+    "loading": "Laster...",
+    "buffering": "Bufrer...",
+    "bufferHealth": "Bufferstatus"
+  },
+
+  "notes": {
+    "title": "Notater og etiketter (N)",
+    "notes": "Notater",
+    "tags": "Etiketter",
+    "tagPlaceholder": "Skriv etikett, trykk Enter eller klikk +",
+    "addTag": "Legg til etikett",
+    "existingTags": "Eksisterende etiketter",
+    "placeholder": "Legg til notater om denne hendelsen..."
+  },
+
+  "help": {
+    "title": "Hurtigtaster",
+    "close": "Lukk",
+    "tip": "Tips: De fleste hurtigtaster fungerer bare når du ikke skriver i et tekstfelt",
+
+    "sections": {
+      "playback": "Avspilling",
+      "navigation": "Navigasjon",
+      "viewLayout": "Visning & Oppsett",
+      "markingExport": "Markering & Eksport",
+      "bookmarks": "Bokmerker",
+      "speedControl": "Hastighetskontroll",
+      "general": "Generelt"
+    },
+
+    "shortcuts": {
+      "playPause": "Spill / Pause",
+      "previousFrame": "Forrige bilde",
+      "nextFrame": "Neste bilde",
+      "slowMotion": "Sakte film-avspilling",
+      "previousClip": "Forrige klipp",
+      "nextClip": "Neste klipp",
+      "goToStart": "Gå til start",
+      "goToEnd": "Gå til slutt",
+      "previousEvent": "Forrige hendelse",
+      "nextEvent": "Neste hendelse",
+      "selectPreviousEvent": "Velg forrige hendelse",
+      "selectNextEvent": "Velg neste hendelse",
+      "cycleLayouts": "Bla gjennom oppsett",
+      "focusCamera": "Fokuser kamera (1=Foran, 2=Bak, 3=Venstre, 4=Høyre)",
+      "toggleFullscreen": "Veksle fullskjerm",
+      "focusCameraFullscreen": "Fokuser kamera fullskjerm",
+      "markIn": "Marker startpunkt",
+      "markOut": "Marker sluttpunkt",
+      "clearMarks": "Fjern markeringer",
+      "takeScreenshot": "Ta skjermbilde",
+      "exportVideo": "Eksporter video",
+      "addBookmark": "Legg til bokmerke på nåværende posisjon",
+      "jumpToPreviousBookmark": "Hopp til forrige bokmerke",
+      "jumpToNextBookmark": "Hopp til neste bokmerke",
+      "zoomTimeline": "Zoom inn/ut (hvis aktivert i innstillinger)",
+      "increaseSpeed": "Øk hastighet",
+      "decreaseSpeed": "Reduser hastighet",
+      "resetSpeed": "Tilbakestill til 1x hastighet",
+      "showHelp": "Vis denne hjelpen",
+      "openSettings": "Åpne innstillinger",
+      "closeModal": "Lukk modal / Fjern markeringer"
+    }
+  },
+
+  "settings": {
+    "title": "Innstillinger",
+    "close": "Lukk",
+    "done": "Ferdig",
+    "resetToDefaults": "Tilbakestill til standard",
+    "confirmReset": "Tilbakestille alle innstillinger til standard?",
+
+    "sections": {
+      "playback": "Avspilling",
+      "performance": "Ytelse",
+      "ui": "Brukergrensesnitt",
+      "timeline": "Tidslinje",
+      "session": "Økt",
+      "offline": "Frakoblet modus",
+      "accessibility": "Tilgjengelighet",
+      "mobile": "Mobil",
+      "export": "Eksport",
+      "language": "Språk"
+    },
+
+    "language": {
+      "selectLanguage": "Språk",
+      "languageHint": "Velg ditt foretrukne språk"
+    }
+  },
+
+  "filter": {
+    "search": "Søk etter hendelser",
+    "type": "Type",
+    "date": "Dato",
+    "all": "Alle",
+    "savedClips": "Lagrede klipp",
+    "sentryClips": "Sentry-klipp",
+    "recentClips": "Nylige klipp",
+    "clear": "Fjern filtre",
+    "filters": "Filtre",
+    "eventTypes": "Hendelsestyper",
+    "onlyBookmarked": "Kun bokmerkede hendelser",
+    "onlyWithNotes": "Kun hendelser med notater/etiketter",
+    "sortBy": "Sorter etter",
+    "newestFirst": "Nyeste først",
+    "oldestFirst": "Eldste først"
+  },
+
+  "map": {
+    "noLocation": "Ingen stedsdata",
+    "showAll": "Vis alle hendelser",
+    "centerOnEvent": "Sentrer på hendelse",
+    "toggleHeatmap": "Veksle varmekart visning",
+    "toggleStruggleZones": "Veksle Autopilot problemsoner",
+    "loadingStruggleZones": "Laster AP-frakoblingsdata...",
+    "struggleZonesLoaded": "{{count}} AP-frakoblinger funnet",
+    "togglePhantomBrakes": "Veksle fantombremsing hotspots",
+    "loadingPhantomBrakes": "Laster fantombremsingsdata...",
+    "phantomBrakesLoaded": "{{count}} fantombremsinger funnet",
+    "phantomBrakeHotspot": "Fantombremsing Hotspot",
+    "phantomBrakesAtLocation": "{{count}} fantombremsing(er) på dette stedet",
+    "phantomBrakeTip": "Dette stedet har gjentatt fantombremsing - vurder å rapportere til Tesla hvis det er en falsk positiv.",
+    "toggleDarkMode": "Veksle mørk kartmodus"
+  },
+
+  "statistics": {
+    "title": "Statistikk",
+    "close": "Lukk",
+    "recordingOverview": "Opptaksoversikt",
+    "totalEvents": "Totalt hendelser",
+    "totalClips": "Totalt klipp",
+    "recordingTime": "Opptakstid",
+    "estStorage": "Est. lagring",
+    "eventsLast14Days": "Hendelser - Siste 14 dager",
+    "eventTypes": "Hendelsestyper",
+    "saved": "Lagret",
+    "sentry": "Vaktmodus",
+    "recent": "Nylig",
+    "triggerReasons": "Utløsergrunner",
+    "manualSave": "Manuell lagring",
+    "objectDetected": "Objekt oppdaget",
+    "vehicleBump": "Kjøretøy støt",
+    "honk": "Horn",
+    "other": "Annet",
+    "unknown": "Ukjent",
+    "topLocations": "Topp 10 steder (Alle hendelser)",
+    "sentryByTimeOfDay": "Vaktmodus hendelser etter tidspunkt",
+    "topSentryLocations": "Topp vaktmodus steder",
+    "dateRange": "Datoområde",
+    "eventTrends": "Hendelsestrender",
+    "weekly": "Ukentlig",
+    "monthly": "Månedlig",
+    "exportStatistics": "Eksporter statistikk",
+    "exportJson": "Eksporter JSON",
+    "exportCsv": "Eksporter CSV",
+    "noEvents": "Ingen hendelser lastet. Åpne en TeslaCam mappe først.",
+    "noStatsToExport": "Ingen statistikk å eksportere",
+    "noTimelineData": "Ingen tidslinje data tilgjengelig",
+    "noEventsLast14Days": "Ingen hendelser de siste 14 dagene",
+    "noSentryEvents": "Ingen vaktmodus hendelser å analysere",
+    "noTrendData": "Ingen trenddata tilgjengelig",
+    "noLocationData": "Ingen stedsdata tilgjengelig",
+    "noSentryLocationData": "Ingen vaktmodus stedsdata",
+    "events": "hendelser"
+  },
+
+  "errors": {
+    "folderNotFound": "Mappe ikke funnet",
+    "noVideosFound": "Ingen videoer funnet i denne hendelsen",
+    "loadFailed": "Kunne ikke laste video",
+    "exportFailed": "Eksport mislyktes",
+    "browserNotSupported": "Nettleseren din støtter ikke denne funksjonen",
+    "permissionDenied": "Tillatelse nektet",
+    "fileAccessError": "Filtilgangsfeil"
+  },
+
+  "time": {
+    "hours": "t",
+    "minutes": "m",
+    "seconds": "s",
+    "ago": "siden",
+    "justNow": "akkurat nå"
+  },
+
+  "quickstart": {
+    "skip": "Hopp over",
+    "previous": "Forrige",
+    "next": "Neste",
+    "getStarted": "Kom i gang",
+    "welcome": {
+      "title": "Velkommen til TeslaCam Viewer",
+      "description": "Se og administrer Tesla dashcam-opptakene dine direkte i nettleseren.",
+      "noUpload": "Ingen opplasting nødvendig",
+      "videosStay": "videoene dine forblir på datamaskinen din.",
+      "language": "Språk"
+    },
+    "step1": {
+      "title": "Trinn 1: Velg TeslaCam-mappen din",
+      "description": "Klikk på \"Velg TeslaCam-mappe\" for å velge USB-stasjonen eller mappen som inneholder TeslaCam-data.",
+      "hint": "Se etter mapper kalt TeslaCam, SavedClips, SentryClips eller RecentClips."
+    },
+    "step2": {
+      "title": "Trinn 2: Bla gjennom hendelser",
+      "description": "Hendelser vises i venstre sidefelt, sortert etter dato. Klikk på en hendelse for å laste den.",
+      "saved": "Manuelt lagret fra dashcam",
+      "sentry": "Bevegelsesutløste opptak",
+      "recent": "Rullende buffer-opptak"
+    },
+    "step3": {
+      "title": "Trinn 3: Se 4 kameraer",
+      "description": "Se alle 4 kameravinkler synkronisert: Foran, Bak, Venstre og Høyre.",
+      "tip": "Tips",
+      "tipText": "Dra kameraer for å bytte posisjoner, eller skjul kameraer du ikke trenger."
+    },
+    "shortcuts": {
+      "title": "Hurtigtaster",
+      "playPause": "Spill / Pause",
+      "seek": "Spol 5 sekunder",
+      "screenshot": "Skjermbilde",
+      "markInOut": "Marker inn / ut",
+      "export": "Eksporter",
+      "showAll": "Vis alle hurtigtaster"
+    }
+  },
+
+  "driveManager": {
+    "title": "Administrer stasjoner",
+    "noDrives": "Ingen stasjoner lagt til",
+    "events": "hendelser",
+    "removeDrive": "Fjern stasjon",
+    "addDrive": "Legg til stasjon",
+    "changeColor": "Klikk for å endre farge"
+  },
+
+  "driveSync": {
+    "title": "Synkroniser stasjoner",
+    "close": "Lukk (Esc)",
+    "settings": "Innstillinger",
+    "sourceDestination": "Kilde og mål",
+    "selectSource": "Velg kilde...",
+    "selectDestination": "Velg mål...",
+    "compare": "Sammenlign",
+    "comparing": "Sammenligner...",
+    "comparisonStats": "Sammenligningsstatistikk",
+    "selectDrivesToCompare": "Velg stasjoner og sammenlign for å se statistikk",
+    "selectDrivesHint": "Velg stasjoner for å sammenligne",
+    "quickLoad": "Hurtiglast:",
+    "noPresets": "Ingen lagrede forhåndsinnstillinger",
+    "save": "Lagre",
+    "copy": "Kopier",
+    "move": "Flytt",
+    "cancel": "Avbryt",
+    "pause": "Pause",
+    "resume": "Fortsett",
+    "startSync": "Start synkronisering",
+    "done": "Ferdig",
+    "preparing": "Forbereder...",
+    "syncComplete": "Synkronisering fullført",
+    "syncFailed": "Synkronisering mislyktes",
+    "selected": "Valgt:",
+    "events": "hendelser",
+    "missingOnDest": "Mangler på mål",
+    "newerOnSource": "Nyere på kilde",
+    "differentSize": "Ulik størrelse",
+    "alreadySynced": "Allerede synkronisert",
+    "includeNotes": "Inkluder notater og etiketter",
+    "eta": "Gjenværende tid:",
+    "sourceEvents": "Kildehendelser",
+    "destEvents": "Målhendelser",
+    "missing": "Mangler",
+    "newerCount": "Nyere på kilde",
+    "synced": "Allerede synkronisert",
+    "syncCoverage": "Synkroniseringsdekning",
+    "storageBreakdown": "Lagringsdetaljer",
+    "sourceTotal": "Kilde totalt",
+    "destTotal": "Mål totalt",
+    "toTransfer": "Å overføre",
+    "dateRange": "Datoområde",
+    "source": "Kilde:",
+    "destination": "Mål:",
+    "eventsByType": "Hendelser etter type",
+    "topLocations": "Topp steder",
+    "noLocationData": "Ingen stedsdata tilgjengelig",
+    "eventsByMonth": "Hendelser etter måned",
+    "noMonthlyData": "Ingen månedlige data tilgjengelig",
+    "detailedBreakdown": "Detaljert hendelsesfordeling",
+    "allEvents": "Alle hendelser",
+    "missingOnly": "Kun manglende",
+    "newerOnly": "Kun nyere",
+    "syncedOnly": "Kun synkroniserte",
+    "showingFirst": "Viser første {{count}} av {{total}} hendelser"
+  },
+
+  "syncSettings": {
+    "title": "Synkroniseringsinnstillinger",
+    "verifyAfterCopy": "Verifiser filer etter kopiering",
+    "syncNotes": "Synkroniser notater og etiketter",
+    "writeSyncFile": "Skriv synkroniseringsinnstillinger til mål",
+    "confirmBeforeDelete": "Bekreft før sletting av kildefiler",
+    "noteConflict": "Notatkonfliktløsning:",
+    "askEachTime": "Spør hver gang",
+    "mergeAutomatically": "Slå sammen automatisk",
+    "saveSettings": "Lagre innstillinger",
+    "close": "Lukk"
+  },
+
+  "presets": {
+    "title": "Administrer forhåndsinnstillinger",
+    "noPresets": "Ingen lagrede forhåndsinnstillinger. Velg stasjoner og klikk \"Lagre\" for å opprette en.",
+    "importFromDrives": "Importer fra stasjoner",
+    "close": "Lukk",
+    "delete": "Slett",
+    "importedFrom": "Importert fra",
+    "lastUsed": "Sist brukt:",
+    "deleteConfirm": "Slette forhåndsinnstilling \"{{name}}\"?",
+    "couldNotFind": "Kunne ikke finne stasjoner for denne forhåndsinnstillingen.",
+    "lookingFor": "Søker etter:",
+    "sourceLabel": "Kilde:",
+    "destLabel": "Mål:",
+    "makeSureLoaded": "Sørg for at begge stasjonene er lastet.",
+    "enterName": "Skriv inn et navn for denne forhåndsinnstillingen:",
+    "savedSuccess": "Forhåndsinnstilling lagret!",
+    "imported": "Importerte {{count}} forhåndsinnstillinger.",
+    "errors": "Feil:",
+    "noNewPresets": "Ingen nye forhåndsinnstillinger funnet på stasjoner."
+  },
+
+  "layoutEditor": {
+    "title": "Oppsetteditor",
+    "close": "Lukk",
+    "new": "Ny",
+    "newLayout": "Nytt oppsett",
+    "import": "Importer",
+    "importLayout": "Importer oppsett",
+    "export": "Eksporter",
+    "exportLayout": "Eksporter oppsett",
+    "snap": "Fest",
+    "aspect": "Sideforhold:",
+    "aspectWide": "Bred",
+    "aspectUltraWide": "Ultra bred",
+    "aspectTriple": "Trippel",
+    "aspectCinematic": "Kinoformat",
+    "selectedCamera": "Valgt kamera",
+    "futureCamera": "Fremtidig kamera - ikke tilgjengelig ennå",
+    "position": "Posisjon",
+    "size": "Størrelse",
+    "layer": "Lag",
+    "sendBackward": "Send bakover",
+    "bringForward": "Hent fremover",
+    "fit": "Tilpasning:",
+    "contain": "Inneholde",
+    "cover": "Dekke",
+    "cropEdges": "Beskjær kanter",
+    "top": "Topp:",
+    "bottom": "Bunn:",
+    "left": "Venstre:",
+    "right": "Høyre:",
+    "cameras": "Kameraer",
+    "savedLayouts": "Lagrede oppsett",
+    "noLayouts": "Ingen egendefinerte oppsett lagret ennå",
+    "cancel": "Avbryt",
+    "saveLayout": "Lagre oppsett",
+    "layoutName": "Oppsettsnavn",
+    "hint": "Klikk for å velge, dra for å flytte, hjørner for å endre størrelse",
+    "untitled": "Uten navn",
+    "invalidLayout": "Ugyldig oppsett:",
+    "deleteConfirm": "Slette \"{{name}}\"?",
+    "importFailed": "Import mislyktes:",
+    "readFailed": "Kunne ikke lese fil:",
+    "failedToSave": "Kunne ikke lagre oppsett",
+    "failedToUpdate": "Kunne ikke oppdatere oppsett",
+    "soon": "Kommer snart"
+  },
+
+  "common": {
+    "close": "Lukk",
+    "cancel": "Avbryt",
+    "save": "Lagre",
+    "delete": "Slett",
+    "edit": "Rediger",
+    "add": "Legg til",
+    "remove": "Fjern",
+    "yes": "Ja",
+    "no": "Nei",
+    "ok": "OK",
+    "loading": "Laster...",
+    "error": "Feil",
+    "success": "Suksess",
+    "warning": "Advarsel"
+  },
+
+  "incidentDetection": {
+    "toggleSlowMo": "Veksle hendelsessakte film",
+    "slowMoEnabled": "Hendelsessakte film: PÅ",
+    "slowMoDisabled": "Hendelsessakte film: AV",
+    "slowMoIndicator": "SAKTE FILM",
+    "slowMoScore": "Poengsum: {{score}}/10",
+    "toggleBirdsEye": "Veksle fugleperspektiv",
+    "birdsEyeTitle": "Fugleperspektiv",
+    "birdsEyeWaitingGps": "Venter på GPS-data...",
+    "birdsEyeRadius": "{{radius}}m radius",
+    "birdsEyeLowG": "Lav G",
+    "birdsEyeMedG": "Medium G",
+    "birdsEyeHighG": "Høy G"
+  }
+}

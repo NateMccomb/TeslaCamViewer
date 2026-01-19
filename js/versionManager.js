@@ -2,26 +2,181 @@
  * VersionManager - Tracks app version, changelog, and "what's new" indicators
  * Shows blue dots on features that are new since the user's last visit
  *
- * Version Format: YYYY.WW.D.R (Tesla-style)
+ * Version Format: YYYY.W.D.R (Tesla-style)
  *   YYYY = Year
- *   WW = ISO Week number (01-53)
+ *   W = ISO Week number (1-53, no leading zero)
  *   D = Day of week (1=Mon, 7=Sun)
  *   R = Release number for that day
  */
 class VersionManager {
     constructor() {
         this.STORAGE_KEY = 'teslacamviewer_version_state';
+        this.UPDATE_CHECK_KEY = 'teslacamviewer_last_update_check';
+        this.UPDATE_CHECK_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours in ms
+
+        // Remote version check URL
+        this.remoteVersionUrl = 'https://teslacamviewer.com/version.json';
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.01.1.2';
+        this.currentVersion = '2026.3.6.1';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
             {
-                version: '2026.01.1.2',
+                version: '2026.3.6.1',
+                date: '2026-01-18',
+                title: 'Update Notifications & Loading Progress',
+                features: [
+                    {
+                        id: 'update-notifications',
+                        text: 'Automatic update notifications when a new version is available',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'loading-progress',
+                        text: 'Loading progress indicator shows which folders are being scanned',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
+                version: '2026.3.5.3',
+                date: '2026-01-16',
+                title: 'Advanced Analytics & Safety Features',
+                features: [
+                    {
+                        id: 'hard-braking-detection',
+                        text: 'Hard braking/acceleration detection with markers on G-Force graph',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'driving-smoothness-score',
+                        text: 'Driving smoothness score (0-100) based on steering, accel, lateral G',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'clickable-anomalies',
+                        text: 'Clickable anomaly markers on telemetry graphs - auto-detects spikes',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'phantom-braking',
+                        text: 'Phantom braking detection for Autopilot analysis',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'ap-struggle-zones',
+                        text: 'Autopilot struggle zones map - shows frequent disengagement locations',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'near-miss-scoring',
+                        text: 'Near-miss incident scoring with timeline markers',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'insurance-report-pdf',
+                        text: 'Insurance report PDF generator with frames, telemetry, and map',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'auto-blur-plates',
+                        text: 'Auto-blur license plates in export using AI detection',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'privacy-mode-export',
+                        text: 'Privacy mode export - strips timestamp, GPS, and location data',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
+                version: '2026.3.5.2',
+                date: '2026-01-16',
+                title: 'Trip Analytics & Export Enhancements',
+                features: [
+                    {
+                        id: 'csv-telemetry-export',
+                        text: 'Export telemetry data as CSV - download button in graphs panel',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'trip-analytics-stats',
+                        text: 'Trip statistics in graphs header - distance, avg/max speed, autopilot %',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'minimap-in-export',
+                        text: 'Option to include GPS mini-map in video exports',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'driving-heatmap',
+                        text: 'Driving heatmap on Map tab - shows your most frequent routes',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
+                version: '2026.3.5.1',
+                date: '2026-01-16',
+                title: 'Telemetry Graphs & Speed Limit Display',
+                features: [
+                    {
+                        id: 'telemetry-graphs-panel',
+                        text: 'Interactive telemetry graphs panel - Press G to toggle speed, G-force, and steering graphs',
+                        elementSelector: '#telemetryGraphsPanel'
+                    },
+                    {
+                        id: 'speed-limit-display',
+                        text: 'Real-time speed limit display from OpenStreetMap - shows limit on HUD and graph',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'speed-limit-graph-line',
+                        text: 'Speed limit reference line on speed graph that varies along the route',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'gps-minimap',
+                        text: 'GPS mini-map overlay showing vehicle position in real-time',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'speed-limit-styling',
+                        text: 'Regional speed limit sign styling - rectangular (US) or circular (EU/metric)',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
+                version: '2026.1.2.1',
+                date: '2025-12-30',
+                title: 'Internationalization & Mobile Fixes',
+                features: [
+                    {
+                        id: 'i18n-support',
+                        text: 'Multi-language support - Switch languages in Settings or welcome screen',
+                        elementSelector: '#settingsBtn'
+                    },
+                    {
+                        id: 'mini-mode-controls',
+                        text: 'Fixed mobile portrait mode controls - play, frame step, timeline scrubbing',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'mobile-fullscreen-fixes',
+                        text: 'Mobile fullscreen: Escape key exits, tap shows controls, bottom sheet hidden',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
+                version: '2026.1.1.2',
                 date: '2025-12-29',
                 title: 'Export Quality & Format Options',
                 features: [
@@ -43,7 +198,7 @@ class VersionManager {
                 ]
             },
             {
-                version: '2026.01.1.1',
+                version: '2026.1.1.1',
                 date: '2025-12-29',
                 title: 'User Data Backup & Drive Sync UI',
                 features: [
@@ -639,6 +794,150 @@ class VersionManager {
 
         // Add indicators to other elements after DOM is ready
         setTimeout(() => this.addIndicators(), 500);
+
+        // Check for remote updates (with cooldown)
+        this.checkForRemoteUpdate();
+    }
+
+    /**
+     * Check if enough time has passed since last update check
+     */
+    shouldCheckForUpdate() {
+        try {
+            const lastCheck = localStorage.getItem(this.UPDATE_CHECK_KEY);
+            if (!lastCheck) return true;
+
+            const elapsed = Date.now() - parseInt(lastCheck, 10);
+            return elapsed > this.UPDATE_CHECK_INTERVAL;
+        } catch (e) {
+            return true;
+        }
+    }
+
+    /**
+     * Record that we just checked for updates
+     */
+    recordUpdateCheck() {
+        try {
+            localStorage.setItem(this.UPDATE_CHECK_KEY, Date.now().toString());
+        } catch (e) {
+            // Ignore storage errors
+        }
+    }
+
+    /**
+     * Check for updates from remote server
+     * Works for both online users (stale cache) and offline/local users
+     */
+    async checkForRemoteUpdate() {
+        // Skip if we checked recently
+        if (!this.shouldCheckForUpdate()) {
+            console.log('[VersionManager] Skipping update check (checked recently)');
+            return;
+        }
+
+        try {
+            // Add cache-busting timestamp to avoid cached response
+            const url = `${this.remoteVersionUrl}?t=${Date.now()}`;
+
+            const response = await fetch(url, {
+                method: 'GET',
+                cache: 'no-store', // Force bypass cache
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            });
+
+            if (!response.ok) {
+                console.log('[VersionManager] Could not reach update server');
+                return;
+            }
+
+            const remoteVersion = await response.json();
+            this.recordUpdateCheck();
+
+            console.log(`[VersionManager] Local: ${this.currentVersion}, Remote: ${remoteVersion.version}`);
+
+            // Compare versions
+            if (this.compareVersions(remoteVersion.version, this.currentVersion) > 0) {
+                // Remote version is newer
+                console.log('[VersionManager] Update available!');
+                this.showUpdateToast(remoteVersion);
+            } else {
+                console.log('[VersionManager] Already up to date');
+            }
+        } catch (error) {
+            // Network error - user is offline or server unreachable
+            console.log('[VersionManager] Update check failed (offline?):', error.message);
+        }
+    }
+
+    /**
+     * Show toast notification for available update
+     */
+    showUpdateToast(remoteVersion) {
+        // Don't show duplicate toasts
+        if (document.querySelector('.update-toast')) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'update-toast';
+        toast.innerHTML = `
+            <div class="update-toast-content">
+                <div class="update-toast-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                </div>
+                <div class="update-toast-text">
+                    <strong>Update Available</strong>
+                    <span>Version ${remoteVersion.version} is ready</span>
+                </div>
+                <button class="update-toast-btn" title="Refresh to update">
+                    Refresh
+                </button>
+                <button class="update-toast-close" title="Dismiss">&times;</button>
+            </div>
+        `;
+
+        document.body.appendChild(toast);
+
+        // Animate in
+        requestAnimationFrame(() => {
+            toast.classList.add('visible');
+        });
+
+        // Event listeners
+        const refreshBtn = toast.querySelector('.update-toast-btn');
+        const closeBtn = toast.querySelector('.update-toast-close');
+
+        refreshBtn.addEventListener('click', () => {
+            // Force hard reload to bypass cache
+            window.location.reload(true);
+        });
+
+        closeBtn.addEventListener('click', () => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 300);
+        });
+
+        // Auto-dismiss after 30 seconds
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.remove('visible');
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, 30000);
+    }
+
+    /**
+     * Force an update check (for manual triggering from settings)
+     */
+    async forceUpdateCheck() {
+        // Clear the cooldown
+        localStorage.removeItem(this.UPDATE_CHECK_KEY);
+        await this.checkForRemoteUpdate();
     }
 }
 

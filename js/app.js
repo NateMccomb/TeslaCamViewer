@@ -39,8 +39,58 @@ class TeslaCamViewerApp {
         this.layoutEditor = new LayoutEditor(this.layoutManager);
         this.screenshotCapture = new ScreenshotCapture(this.videoPlayer);
         this.videoEnhancer = new VideoEnhancer();
+        this.telemetryOverlay = new TelemetryOverlay(this.videoPlayer);
+        this.telemetryOverlay.initLayoutCallback(this.layoutManager); // Wire up layout change notifications
+        this.miniMapOverlay = new MiniMapOverlay(this.videoPlayer);
+        this.miniMapOverlay.initLayoutCallback && this.miniMapOverlay.initLayoutCallback(this.layoutManager);
+        this.elevationOverlay = new ElevationOverlay(this.videoPlayer);
+        // Wire up elevation overlay callbacks
+        this.elevationOverlay.getEventTime = () => this.getAbsoluteEventTime(this.videoPlayer.getCurrentTime());
+        this.elevationOverlay.onSeek = (time) => this.videoPlayer.seekToEventTime(time);
+        this.telemetryGraphs = new TelemetryGraphs(this.videoPlayer);
+        // Wire up telemetry graphs callbacks
+        this.telemetryGraphs.getEventTime = () => this.getAbsoluteEventTime(this.videoPlayer.getCurrentTime());
+        this.telemetryGraphs.onSeek = (time) => this.videoPlayer.seekToEventTime(time);
+        this.telemetryGraphs.getSpeedLimit = () => this.getCurrentSpeedLimit();
+        this.telemetryGraphs.getSeiData = () => this.telemetryOverlay?.clipSeiData || new Map();
+        this.telemetryGraphs.getEventTimestamp = () => this.currentEvent?.timestamp || null;
+
+        // Smart Incident Detection modules
+        this.incidentSlowMo = new IncidentSlowMo(this.videoPlayer);
+        this.incidentSlowMo.setTelemetryGraphs(this.telemetryGraphs);
+
+        this.collisionReconstruction = new CollisionReconstruction(this.videoPlayer);
+        this.collisionReconstruction.setTelemetryOverlay(this.telemetryOverlay);
+
+        // Speed limit display element
+        this.speedLimitDisplay = document.getElementById('speedLimitDisplay');
+        this.currentSpeedLimitData = null;
+        this.lastSpeedLimitGps = null;
+        this.streetViewOverlay = new StreetViewOverlay(this.videoPlayer);
+
+        // Wire up visibility change callbacks for all overlays
+        // This ensures button states AND settings update when overlays are closed via their X buttons
+        this.telemetryOverlay.onVisibilityChange = (visible) => {
+            this.settingsManager.set('telemetryOverlayEnabled', visible);
+            this._updateOverlayButtonStates();
+        };
+        this.miniMapOverlay.onVisibilityChange = (visible) => {
+            this.settingsManager.set('miniMapEnabled', visible);
+            this._updateOverlayButtonStates();
+        };
+        this.telemetryGraphs.onVisibilityChange = (visible) => {
+            this.settingsManager.set('telemetryGraphsEnabled', visible);
+            this._updateOverlayButtonStates();
+        };
+        this.streetViewOverlay.onVisibilityChange = (visible) => {
+            this.settingsManager.set('streetViewEnabled', visible);
+            this._updateOverlayButtonStates();
+        };
+
+        this.plateBlur = new PlateBlur();
         this.videoExport = new VideoExport(this.videoPlayer, this.layoutManager);
         this.clipMarking = new ClipMarking(this.timeline, this.videoPlayer);
+        this.insuranceReport = new InsuranceReport(this.videoPlayer, this.screenshotCapture);
 
         // Settings, Help, Quick Start, Version, Statistics, and Notes
         this.settingsManager = new SettingsManager();
@@ -107,8 +157,17 @@ class TeslaCamViewerApp {
         this.zoomResetBtn = document.getElementById('zoomResetBtn');
         this.speedSelect = document.getElementById('speedSelect');
         this.loopCheckbox = document.getElementById('loopCheckbox');
+        this.loopBtn = document.getElementById('loopBtn');
         this.layoutSelect = document.getElementById('layoutSelect');
         this.focusCameraSelect = document.getElementById('focusCameraSelect');
+
+        // Overlay toggle buttons
+        this.toggleHudBtn = document.getElementById('toggleHudBtn');
+        this.toggleMiniMapBtn = document.getElementById('toggleMiniMapBtn');
+        this.toggleGraphsBtn = document.getElementById('toggleGraphsBtn');
+        this.toggleStreetViewBtn = document.getElementById('toggleStreetViewBtn');
+        this.toggleSlowMoBtn = document.getElementById('toggleSlowMoBtn');
+        this.toggleBirdsEyeBtn = document.getElementById('toggleBirdsEyeBtn');
         this.loadingOverlay = document.getElementById('loadingOverlay');
         this.loadingText = document.getElementById('loadingText');
 
@@ -150,6 +209,13 @@ class TeslaCamViewerApp {
         this.eventDateElement = document.getElementById('eventDate');
         this.eventLocationElement = document.getElementById('eventLocation');
         this.eventReasonElement = document.getElementById('eventReason');
+        this.eventWeatherElement = document.getElementById('eventWeather');
+        this.streetViewBtn = document.getElementById('streetViewBtn');
+
+        // Current GPS for Street View
+        this.currentGpsLat = null;
+        this.currentGpsLng = null;
+        this.currentGpsHeading = 0;
 
         // State
         this.currentEvent = null;
@@ -157,6 +223,7 @@ class TeslaCamViewerApp {
 
         this.setupEventListeners();
         this.checkBrowserSupport();
+        this.initPillarCycleButton();
 
         // Set layout select to match saved preference
         this.layoutSelect.value = this.layoutManager.getCurrentLayout();
@@ -196,7 +263,11 @@ class TeslaCamViewerApp {
                     this.loadingText.textContent = 'Migrating to new drive system...';
                     const drive = await this.folderManager.addDrive(this.folderParser.rootHandle);
                     this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
+                    this.folderParser.setProgressCallback((message, count) => {
+                        this.loadingText.textContent = `Migrating: ${message} (${count} events)`;
+                    });
                     const events = await this.folderParser.parseFolder();
+                    this.folderParser.setProgressCallback(null);
                     drive.events = events;
                     this.allEvents = events;
                     this.statisticsManager.setEvents(events);
@@ -220,6 +291,12 @@ class TeslaCamViewerApp {
                     continue;
                 }
 
+                // Skip archive drives on startup
+                if (drive.isArchive) {
+                    console.log(`Skipping archive drive: ${drive.label}`);
+                    continue;
+                }
+
                 this.loadingText.textContent = `Restoring ${drive.label}...`;
 
                 try {
@@ -233,7 +310,20 @@ class TeslaCamViewerApp {
                     // Parse events from this drive
                     this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
                     this.folderParser.rootHandle = drive.handle;
-                    const events = await this.folderParser.parseFolder();
+                    this.folderParser.setProgressCallback((message, count) => {
+                        this.loadingText.textContent = `${drive.label}: ${message} (${count} events)`;
+                    });
+                    let events = await this.folderParser.parseFolder();
+                    this.folderParser.setProgressCallback(null);
+
+                    // Apply date filter if set
+                    const cutoff = this.folderManager.getDateFilterCutoff(drive.dateFilter);
+                    if (cutoff) {
+                        const beforeCount = events.length;
+                        events = events.filter(event => new Date(event.timestamp) >= cutoff);
+                        console.log(`Date filter (${drive.dateFilter}): ${beforeCount} → ${events.length} events`);
+                    }
+
                     drive.events = events;
                     allEvents = allEvents.concat(events);
                     successCount++;
@@ -292,6 +382,12 @@ class TeslaCamViewerApp {
         // Apply accessibility settings on load
         this.settingsManager.applyAccessibilitySettings();
 
+        // Apply telemetry overlay settings on load
+        if (this.telemetryOverlay) {
+            this.telemetryOverlay.setStyle(this.settingsManager.get('telemetryOverlayStyle'));
+            this.telemetryOverlay.setUnits(this.settingsManager.get('telemetryOverlayUnits'));
+        }
+
         // Listen for settings changes
         this.settingsManager.onChange(async (settings) => {
             console.log('Settings changed:', settings);
@@ -306,6 +402,28 @@ class TeslaCamViewerApp {
             } else if (!settings.rememberLastFolder) {
                 // Setting disabled - clear saved folder
                 await this.folderParser.clearSavedFolder();
+            }
+
+            // Apply telemetry overlay settings
+            if (this.telemetryOverlay) {
+                this.telemetryOverlay.setStyle(settings.telemetryOverlayStyle);
+                this.telemetryOverlay.setUnits(settings.telemetryOverlayUnits);
+                // Only toggle if state needs to change (avoid infinite loop with onVisibilityChange)
+                if (settings.telemetryOverlayEnabled && !this.telemetryOverlay.isVisible && this.telemetryOverlay.hasTelemetryData()) {
+                    this.telemetryOverlay.show();
+                } else if (!settings.telemetryOverlayEnabled && this.telemetryOverlay.isVisible) {
+                    this.telemetryOverlay.hide();
+                }
+            }
+
+            // Apply mini-map settings
+            if (this.miniMapOverlay) {
+                // Only toggle if state needs to change (avoid infinite loop with onVisibilityChange)
+                if (settings.miniMapEnabled && !this.miniMapOverlay.isVisible && this.telemetryOverlay?.hasTelemetryData()) {
+                    this.miniMapOverlay.show();
+                } else if (!settings.miniMapEnabled && this.miniMapOverlay.isVisible) {
+                    this.miniMapOverlay.hide();
+                }
             }
         });
     }
@@ -346,6 +464,21 @@ class TeslaCamViewerApp {
         // Folder selection
         this.selectFolderBtn.addEventListener('click', () => this.selectFolder());
 
+        // Sync language selectors when locale changes
+        window.addEventListener('localeChanged', (e) => {
+            const locale = e.detail.locale;
+            // Sync settings language selector (if modal exists)
+            const settingsSelect = document.getElementById('setting-language');
+            if (settingsSelect) {
+                settingsSelect.value = locale;
+            }
+            // Sync quickstart language selector (if modal exists)
+            const quickstartSelect = document.getElementById('quickstartLanguage');
+            if (quickstartSelect) {
+                quickstartSelect.value = locale;
+            }
+        });
+
         // Playback controls
         this.playBtn.addEventListener('click', () => this.play());
         this.pauseBtn.addEventListener('click', () => this.pause());
@@ -384,6 +517,57 @@ class TeslaCamViewerApp {
             this.videoEnhancer.initialize(videoGridContainer);
         }
 
+        // Overlay toggle buttons
+        this.toggleHudBtn?.addEventListener('click', () => {
+            if (this.telemetryOverlay) {
+                this.telemetryOverlay.toggle();
+                this.settingsManager.set('telemetryOverlayEnabled', this.telemetryOverlay.isVisible);
+                this._updateOverlayButtonStates();
+            }
+        });
+        this.toggleMiniMapBtn?.addEventListener('click', () => {
+            if (this.miniMapOverlay) {
+                this.miniMapOverlay.toggle();
+                this._updateOverlayButtonStates();
+            }
+        });
+        // Note: Elevation overlay removed - elevation is now integrated into telemetry graphs
+        this.toggleGraphsBtn?.addEventListener('click', () => {
+            if (this.telemetryGraphs) {
+                this.telemetryGraphs.toggle();
+                this.settingsManager.set('telemetryGraphsEnabled', this.telemetryGraphs.isVisible);
+                this._updateOverlayButtonStates();
+            }
+        });
+        this.toggleStreetViewBtn?.addEventListener('click', () => {
+            if (this.streetViewOverlay) {
+                this.streetViewOverlay.toggle();
+                this.settingsManager.set('streetViewEnabled', this.streetViewOverlay.isVisible);
+                this._updateOverlayButtonStates();
+            }
+        });
+
+        // Incident Slow-Mo toggle
+        this.toggleSlowMoBtn?.addEventListener('click', () => {
+            if (this.incidentSlowMo) {
+                this.incidentSlowMo.toggle();
+                this._updateOverlayButtonStates();
+            }
+        });
+
+        // Bird's Eye View (Collision Reconstruction) toggle
+        this.toggleBirdsEyeBtn?.addEventListener('click', () => {
+            if (this.collisionReconstruction) {
+                this.collisionReconstruction.toggle();
+                this._updateOverlayButtonStates();
+            }
+        });
+
+        // Street View button in info bar
+        if (this.streetViewBtn) {
+            this._setupStreetViewButton();
+        }
+
         // Notes & Tags
         this.notesBtn.addEventListener('click', () => this.openNotesModal());
         this.notesManager.onNotesChanged = (eventName) => {
@@ -412,13 +596,49 @@ class TeslaCamViewerApp {
             this.toggleExportDropdown();
         });
 
-        // Export options
-        this.exportDropdown.querySelectorAll('.export-option').forEach(btn => {
+        // Privacy mode checkbox - syncs with settings
+        const privacyModeCheckbox = document.getElementById('privacyModeCheckbox');
+        if (privacyModeCheckbox) {
+            // Initialize from settings
+            privacyModeCheckbox.checked = this.settingsManager.get('privacyModeExport') === true;
+
+            // Update settings when checkbox changes
+            privacyModeCheckbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                this.settingsManager.set('privacyModeExport', e.target.checked);
+                console.log('Privacy mode export:', e.target.checked ? 'enabled' : 'disabled');
+            });
+
+            // Prevent clicks on label from closing dropdown
+            const privacyModeOption = privacyModeCheckbox.closest('.privacy-mode-option');
+            if (privacyModeOption) {
+                privacyModeOption.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Toggle checkbox when clicking label (but not the checkbox itself)
+                    if (e.target !== privacyModeCheckbox) {
+                        privacyModeCheckbox.checked = !privacyModeCheckbox.checked;
+                        privacyModeCheckbox.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+        }
+
+        // Export options (excluding privacy mode checkbox which has its own handler)
+        this.exportDropdown.querySelectorAll('.export-option:not(.privacy-mode-option)').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const camera = e.target.dataset.camera;
                 this.exportDropdown.classList.add('hidden');
-                this.exportVideo(camera);
+
+                // Check if it's a screenshot action, insurance report, or video export
+                const action = e.target.closest('.export-option').dataset.action;
+                if (action === 'screenshot') {
+                    this.captureScreenshot();
+                } else if (action === 'insurance-report') {
+                    this.generateInsuranceReport();
+                } else {
+                    const camera = e.target.closest('.export-option').dataset.camera;
+                    this.exportVideo(camera);
+                }
             });
         });
 
@@ -468,9 +688,18 @@ class TeslaCamViewerApp {
             this.videoPlayer.setPlaybackRate(speed);
         });
 
-        // Loop control
+        // Loop control - checkbox (kept for compatibility)
         this.loopCheckbox.addEventListener('change', (e) => {
             this.videoPlayer.setLoop(e.target.checked);
+            this.loopBtn.classList.toggle('active', e.target.checked);
+        });
+
+        // Loop button (new UI)
+        this.loopBtn.addEventListener('click', () => {
+            const newState = !this.loopCheckbox.checked;
+            this.loopCheckbox.checked = newState;
+            this.videoPlayer.setLoop(newState);
+            this.loopBtn.classList.toggle('active', newState);
         });
 
         // Layout control
@@ -491,6 +720,9 @@ class TeslaCamViewerApp {
                 // Calculate absolute event time
                 const eventTime = this.getAbsoluteEventTime(time);
                 this.timeline.updateTime(eventTime);
+
+                // Update bottom sheet mini-timeline
+                this.updateBottomSheetProgress(eventTime, this.timeline.totalDuration);
             }
         };
 
@@ -579,15 +811,27 @@ class TeslaCamViewerApp {
         });
 
         // Wire up bottom sheet buttons
-        this.bottomSheetPlayBtn.addEventListener('click', () => this.togglePlayback());
+        this.bottomSheetPlayBtn?.addEventListener('click', () => this.togglePlayback());
         document.getElementById('bsFrameBackBtn')?.addEventListener('click', () => this.frameStep(-1));
         document.getElementById('bsFrameForwardBtn')?.addEventListener('click', () => this.frameStep(1));
         document.getElementById('bsPrevClipBtn')?.addEventListener('click', () => this.previousClip());
         document.getElementById('bsNextClipBtn')?.addEventListener('click', () => this.nextClip());
         document.getElementById('bsPrevEventBtn')?.addEventListener('click', () => this.previousEvent());
         document.getElementById('bsNextEventBtn')?.addEventListener('click', () => this.nextEvent());
-        document.getElementById('bsScreenshotBtn')?.addEventListener('click', () => this.screenshotCapture.capture());
+        document.getElementById('bsScreenshotBtn')?.addEventListener('click', () => this.captureScreenshot());
         document.getElementById('bsFullscreenBtn')?.addEventListener('click', () => this.enterMobileFullscreen());
+
+        // Mini-timeline scrubbing
+        const miniTimeline = document.querySelector('.bottom-sheet-mini-timeline');
+        if (miniTimeline) {
+            miniTimeline.addEventListener('click', (e) => {
+                if (!this.timeline.totalDuration) return;
+                const rect = miniTimeline.getBoundingClientRect();
+                const percent = (e.clientX - rect.left) / rect.width;
+                const time = percent * this.timeline.totalDuration;
+                this.onTimelineSeeked(time);
+            });
+        }
     }
 
     /**
@@ -625,6 +869,16 @@ class TeslaCamViewerApp {
                 this.toggleFullscreenControls();
             }
         });
+
+        // Also handle clicks on video grid when in fullscreen mode
+        const videoGridContainer = document.querySelector('.video-grid-container');
+        if (videoGridContainer) {
+            videoGridContainer.addEventListener('click', (e) => {
+                if (this.isMobileFullscreen && !e.target.closest('button')) {
+                    this.toggleFullscreenControls();
+                }
+            });
+        }
 
         // Swipe down to exit fullscreen
         let touchStartY = 0;
@@ -775,50 +1029,101 @@ class TeslaCamViewerApp {
      * Add a new drive (folder)
      */
     async addNewDrive() {
-        try {
-            const handle = await window.showDirectoryPicker();
+        let handle = null;
+
+        // Loop to allow "Change Folder" option
+        while (true) {
+            try {
+                handle = await window.showDirectoryPicker();
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('Error selecting folder:', error);
+                }
+                return;
+            }
+
+            // Show drive setup dialog
+            const settings = await this.showDriveSetupDialog(handle);
+
+            if (!settings) {
+                return; // User cancelled
+            }
+
+            if (settings.changeFolder) {
+                continue; // User wants to change folder
+            }
 
             this.showLoading('Adding drive...');
 
-            // Add drive to folder manager
-            const drive = await this.folderManager.addDrive(handle);
+            try {
+                // Add drive to folder manager with settings
+                const drive = await this.folderManager.addDrive(handle, {
+                    label: settings.label,
+                    isArchive: settings.isArchive,
+                    dateFilter: settings.dateFilter
+                });
 
-            // Parse the drive
-            this.loadingText.textContent = 'Parsing TeslaCam folder...';
-            this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
-            this.folderParser.rootHandle = handle;
+                // If archive drive, skip loading
+                if (settings.isArchive) {
+                    this.hideLoading();
+                    this.updateDriveSelector(this.folderManager.getDrives());
+                    console.log(`Added archive drive: ${drive.label}`);
+                    return;
+                }
 
-            const events = await this.folderParser.parseFolder();
+                // Parse the drive
+                this.loadingText.textContent = 'Parsing TeslaCam folder...';
+                this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
+                this.folderParser.rootHandle = handle;
+                this.folderParser.setProgressCallback((message, count) => {
+                    this.loadingText.textContent = `${drive.label}: ${message} (${count} events)`;
+                });
+                let events = await this.folderParser.parseFolder();
+                this.folderParser.setProgressCallback(null);
 
-            // Store events in drive
-            drive.events = events;
+                // Apply date filter if set
+                const cutoff = this.folderManager.getDateFilterCutoff(settings.dateFilter);
+                if (cutoff) {
+                    const beforeCount = events.length;
+                    events = events.filter(event => new Date(event.timestamp) >= cutoff);
+                    console.log(`Date filter (${settings.dateFilter}): ${beforeCount} → ${events.length} events`);
+                }
 
-            // Merge into allEvents
-            this.allEvents = this.allEvents.concat(events);
-            this.allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                // Store events in drive
+                drive.events = events;
 
-            // Update statistics and filters
-            this.statisticsManager.setEvents(this.allEvents);
+                // Merge into allEvents
+                this.allEvents = this.allEvents.concat(events);
+                this.allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-            // Register events and load backups
-            await this.registerEventsAndLoadBackups(events);
+                // Update statistics and filters
+                this.statisticsManager.setEvents(this.allEvents);
 
-            this.applyFilters();
+                // Register events and load backups
+                await this.registerEventsAndLoadBackups(events);
 
-            // Update drive selector
-            this.updateDriveSelector(this.folderManager.getDrives());
+                this.applyFilters();
 
-            this.hideLoading();
+                // Update drive selector
+                this.updateDriveSelector(this.folderManager.getDrives());
 
-            console.log(`Added drive "${drive.label}" with ${events.length} events`);
-        } catch (error) {
-            if (error.name !== 'AbortError') {
+                this.hideLoading();
+
+                console.log(`Added drive "${drive.label}" with ${events.length} events`);
+            } catch (error) {
                 console.error('Error adding drive:', error);
                 this.hideLoading();
-            } else {
-                this.hideLoading();
             }
+
+            break; // Exit loop
         }
+    }
+
+    /**
+     * Get translation helper
+     */
+    t(key) {
+        return window.i18n ? window.i18n.t(key) : key.split('.').pop();
     }
 
     /**
@@ -827,12 +1132,27 @@ class TeslaCamViewerApp {
     showDriveManagementModal() {
         const drives = this.folderManager.getDrives();
 
+        // Helper to get event count text
+        const getEventCountText = (drive) => {
+            if (drive.isArchive && (!drive.events || drive.events.length === 0)) {
+                return this.t('driveManager.notLoaded');
+            }
+            const count = drive.events?.length || 0;
+            return `${count} ${this.t('driveManager.events')}`;
+        };
+
+        // Helper to get date filter text
+        const getDateFilterText = (drive) => {
+            if (!drive.dateFilter || drive.dateFilter === 'all') return '';
+            return this.folderManager.getDateFilterLabel(drive.dateFilter);
+        };
+
         // Create modal content
         const modalContent = `
             <div class="modal-overlay" id="driveManagementModal">
                 <div class="modal drive-management-modal">
                     <div class="modal-header">
-                        <h3>Manage Drives</h3>
+                        <h3>${this.t('driveManager.title')}</h3>
                         <button class="modal-close-btn" id="closeDriveModal">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -841,18 +1161,39 @@ class TeslaCamViewerApp {
                     </div>
                     <div class="modal-content">
                         ${drives.length === 0 ? `
-                            <p style="color: var(--text-muted); text-align: center;">No drives added yet</p>
+                            <p style="color: var(--text-muted); text-align: center;">${this.t('driveManager.noDrives')}</p>
                         ` : `
                             <div class="drive-list">
                                 ${drives.map(drive => `
-                                    <div class="drive-item" data-drive-id="${drive.id}">
-                                        <label class="drive-color-picker" title="Click to change color">
+                                    <div class="drive-item ${drive.isArchive ? 'is-archive' : ''}" data-drive-id="${drive.id}">
+                                        <label class="drive-color-picker" title="${this.t('driveManager.changeColor')}">
                                             <input type="color" class="drive-color-input" value="${drive.color}" data-drive-id="${drive.id}">
                                             <div class="drive-color-preview" style="background: ${drive.color};"></div>
                                         </label>
-                                        <input type="text" class="drive-label-input" value="${drive.label}" data-drive-id="${drive.id}">
-                                        <span class="drive-event-count">${drive.events?.length || 0} events</span>
-                                        <button class="drive-remove-btn" data-drive-id="${drive.id}" title="Remove drive">
+                                        <div style="flex: 1; min-width: 0;">
+                                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <input type="text" class="drive-label-input" value="${drive.label}" data-drive-id="${drive.id}" style="flex: 1;">
+                                                ${drive.isArchive ? `<span class="drive-archive-badge">${this.t('driveManager.archive')}</span>` : ''}
+                                            </div>
+                                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
+                                                <span class="drive-event-count">${getEventCountText(drive)}</span>
+                                                ${getDateFilterText(drive) ? `<span class="drive-date-filter">• ${getDateFilterText(drive)}</span>` : ''}
+                                            </div>
+                                        </div>
+                                        ${drive.isArchive ? `
+                                            <button class="drive-sync-btn" data-drive-id="${drive.id}" title="${this.t('driveManager.syncNow')}">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                                                </svg>
+                                                ${this.t('driveManager.sync')}
+                                            </button>
+                                        ` : ''}
+                                        <button class="drive-edit-btn" data-drive-id="${drive.id}" title="${this.t('driveManager.editDrive')}" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0.25rem; border-radius: 4px;">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                                            </svg>
+                                        </button>
+                                        <button class="drive-remove-btn" data-drive-id="${drive.id}" title="${this.t('driveManager.removeDrive')}">
                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                                 <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                                             </svg>
@@ -865,7 +1206,7 @@ class TeslaCamViewerApp {
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 0.5rem;">
                                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                             </svg>
-                            Add Drive
+                            ${this.t('driveManager.addDrive')}
                         </button>
                     </div>
                 </div>
@@ -931,6 +1272,47 @@ class TeslaCamViewerApp {
             });
         });
 
+        // Sync buttons for archive drives
+        modal.querySelectorAll('.drive-sync-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const driveId = e.target.closest('.drive-sync-btn').dataset.driveId;
+                modal.remove();
+                await this.syncArchiveDrive(driveId);
+            });
+        });
+
+        // Edit buttons
+        modal.querySelectorAll('.drive-edit-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const driveId = e.target.closest('.drive-edit-btn').dataset.driveId;
+                const drive = this.folderManager.getDrive(driveId);
+                if (drive) {
+                    const oldDateFilter = drive.dateFilter;
+                    const oldIsArchive = drive.isArchive;
+
+                    modal.remove();
+                    const settings = await this.showDriveSetupDialog(null, drive);
+                    if (settings && !settings.changeFolder) {
+                        await this.folderManager.updateDriveSettings(driveId, settings);
+
+                        // Check if we need to reload events
+                        const filterChanged = oldDateFilter !== settings.dateFilter;
+                        const archiveChanged = oldIsArchive !== settings.isArchive;
+
+                        if (archiveChanged || filterChanged) {
+                            // Re-filter/reload the drive's events
+                            await this.reloadDriveEvents(driveId, settings);
+                        }
+
+                        // Refresh the modal
+                        this.showDriveManagementModal();
+                    } else {
+                        this.showDriveManagementModal();
+                    }
+                }
+            });
+        });
+
         // Remove drive buttons
         modal.querySelectorAll('.drive-remove-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
@@ -947,6 +1329,297 @@ class TeslaCamViewerApp {
                     modal.remove();
                     this.showDriveManagementModal();
                 }
+            });
+        });
+    }
+
+    /**
+     * Sync an archive drive (load its events on demand)
+     * @param {string} driveId
+     */
+    async syncArchiveDrive(driveId) {
+        const drive = this.folderManager.getDrive(driveId);
+        if (!drive) {
+            console.error('Drive not found:', driveId);
+            return;
+        }
+
+        this.showLoading(`Syncing ${drive.label}...`);
+
+        try {
+            // Restore permission for the archive drive
+            const restored = await this.folderManager.restoreArchiveDrive(driveId);
+            if (!restored) {
+                this.hideLoading();
+                alert('Could not access the drive. Please check if it is connected.');
+                return;
+            }
+
+            // Parse the drive
+            this.loadingText.textContent = 'Parsing TeslaCam folder...';
+            this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
+            this.folderParser.rootHandle = drive.handle;
+            this.folderParser.setProgressCallback((message, count) => {
+                this.loadingText.textContent = `${drive.label}: ${message} (${count} events)`;
+            });
+            let events = await this.folderParser.parseFolder();
+            this.folderParser.setProgressCallback(null);
+
+            // Apply date filter if set
+            const cutoff = this.folderManager.getDateFilterCutoff(drive.dateFilter);
+            if (cutoff) {
+                const beforeCount = events.length;
+                events = events.filter(event => new Date(event.timestamp) >= cutoff);
+                console.log(`Date filter (${drive.dateFilter}): ${beforeCount} → ${events.length} events`);
+            }
+
+            // Add drive metadata to events
+            for (const event of events) {
+                event.driveId = drive.id;
+                event.compoundKey = this.folderManager.getCompoundKey(drive.id, event.name);
+                event.driveLabel = drive.label;
+                event.driveColor = drive.color;
+            }
+
+            // Store events in drive
+            drive.events = events;
+
+            // Remove any existing events from this drive and add new ones
+            this.allEvents = this.allEvents.filter(e => e.driveId !== driveId);
+            this.allEvents = this.allEvents.concat(events);
+            this.allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // Update statistics and filters
+            this.statisticsManager.setEvents(this.allEvents);
+
+            // Register events and load backups
+            await this.registerEventsAndLoadBackups(events);
+
+            this.applyFilters();
+
+            // Update drive selector
+            this.updateDriveSelector(this.folderManager.getDrives());
+
+            this.hideLoading();
+
+            console.log(`Synced archive drive "${drive.label}" with ${events.length} events`);
+        } catch (error) {
+            console.error('Error syncing archive drive:', error);
+            this.hideLoading();
+            alert('Error syncing drive. Please try again.');
+        }
+    }
+
+    /**
+     * Reload events for a drive after settings change (date filter, archive status)
+     * @param {string} driveId
+     * @param {Object} settings - New settings
+     */
+    async reloadDriveEvents(driveId, settings) {
+        const drive = this.folderManager.getDrive(driveId);
+        if (!drive) return;
+
+        // If changed to archive, remove events from allEvents
+        if (settings.isArchive) {
+            this.allEvents = this.allEvents.filter(e => e.driveId !== driveId);
+            drive.events = [];
+            this.statisticsManager.setEvents(this.allEvents);
+            this.applyFilters();
+            this.updateDriveSelector(this.folderManager.getDrives());
+            console.log(`Marked ${drive.label} as archive, removed events from list`);
+            return;
+        }
+
+        // If drive has no handle or events need to be reloaded
+        if (!drive.handle) {
+            console.warn('Drive has no handle, cannot reload events');
+            return;
+        }
+
+        this.showLoading(`Reloading ${drive.label}...`);
+
+        try {
+            // Request permission if needed
+            const permission = await drive.handle.requestPermission({ mode: 'read' });
+            if (permission !== 'granted') {
+                this.hideLoading();
+                alert('Permission denied. Cannot reload drive.');
+                return;
+            }
+
+            // Re-parse the drive
+            this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
+            this.folderParser.rootHandle = drive.handle;
+            this.folderParser.setProgressCallback((message, count) => {
+                this.loadingText.textContent = `${drive.label}: ${message} (${count} events)`;
+            });
+            let events = await this.folderParser.parseFolder();
+            this.folderParser.setProgressCallback(null);
+
+            // Apply date filter
+            const cutoff = this.folderManager.getDateFilterCutoff(settings.dateFilter);
+            if (cutoff) {
+                const beforeCount = events.length;
+                events = events.filter(event => new Date(event.timestamp) >= cutoff);
+                console.log(`Date filter (${settings.dateFilter}): ${beforeCount} → ${events.length} events`);
+            }
+
+            // Add drive metadata
+            for (const event of events) {
+                event.driveId = drive.id;
+                event.compoundKey = this.folderManager.getCompoundKey(drive.id, event.name);
+                event.driveLabel = drive.label;
+                event.driveColor = drive.color;
+            }
+
+            // Update drive events
+            drive.events = events;
+
+            // Update allEvents
+            this.allEvents = this.allEvents.filter(e => e.driveId !== driveId);
+            this.allEvents = this.allEvents.concat(events);
+            this.allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // Update UI
+            this.statisticsManager.setEvents(this.allEvents);
+            await this.registerEventsAndLoadBackups(events);
+            this.applyFilters();
+            this.updateDriveSelector(this.folderManager.getDrives());
+
+            this.hideLoading();
+            console.log(`Reloaded ${drive.label} with ${events.length} events`);
+        } catch (error) {
+            console.error('Error reloading drive:', error);
+            this.hideLoading();
+        }
+    }
+
+    /**
+     * Show drive setup dialog after folder selection
+     * @param {FileSystemDirectoryHandle} handle
+     * @param {Object} existingDrive - If editing existing drive
+     * @returns {Promise<Object|null>} Drive settings or null if cancelled
+     */
+    showDriveSetupDialog(handle, existingDrive = null) {
+        return new Promise((resolve) => {
+            const isEdit = !!existingDrive;
+            const folderName = handle?.name || existingDrive?.folderName || 'Unknown';
+
+            const modalContent = `
+                <div class="modal-overlay" id="driveSetupModal">
+                    <div class="modal drive-setup-modal">
+                        <div class="modal-header">
+                            <h3>${this.t(isEdit ? 'driveSetup.editTitle' : 'driveSetup.title')}</h3>
+                            <button class="modal-close-btn" id="closeDriveSetup">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="modal-content">
+                            <div class="drive-setup-selected">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+                                </svg>
+                                <span>${folderName}</span>
+                            </div>
+
+                            ${!isEdit ? `
+                            <div class="drive-setup-tip">
+                                <div class="drive-setup-tip-header">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                                    </svg>
+                                    ${this.t('driveSetup.tipTitle')}
+                                </div>
+                                <ul>
+                                    <li>${this.t('driveSetup.tipTeslaCam')}</li>
+                                    <li>${this.t('driveSetup.tipSubfolder')}</li>
+                                    <li>${this.t('driveSetup.tipParent')}</li>
+                                </ul>
+                            </div>
+                            ` : ''}
+
+                            <div class="drive-setup-form">
+                                <div class="drive-setup-field">
+                                    <label for="driveLabel">${this.t('driveSetup.labelField')}</label>
+                                    <input type="text" id="driveLabel" value="${existingDrive?.label || ''}" placeholder="${this.t('driveSetup.labelPlaceholder')}">
+                                </div>
+
+                                <div class="drive-setup-field">
+                                    <label for="dateFilter">${this.t('driveSetup.dateFilterField')}</label>
+                                    <select id="dateFilter">
+                                        <option value="all" ${existingDrive?.dateFilter === 'all' ? 'selected' : ''}>${this.t('driveSetup.dateFilterAll')}</option>
+                                        <option value="week" ${existingDrive?.dateFilter === 'week' ? 'selected' : ''}>${this.t('driveSetup.dateFilterWeek')}</option>
+                                        <option value="month" ${existingDrive?.dateFilter === 'month' ? 'selected' : ''}>${this.t('driveSetup.dateFilterMonth')}</option>
+                                        <option value="3months" ${existingDrive?.dateFilter === '3months' ? 'selected' : ''}>${this.t('driveSetup.dateFilter3Months')}</option>
+                                        <option value="6months" ${existingDrive?.dateFilter === '6months' ? 'selected' : ''}>${this.t('driveSetup.dateFilter6Months')}</option>
+                                        <option value="year" ${existingDrive?.dateFilter === 'year' ? 'selected' : ''}>${this.t('driveSetup.dateFilterYear')}</option>
+                                    </select>
+                                </div>
+
+                                <label class="drive-setup-checkbox">
+                                    <input type="checkbox" id="isArchive" ${existingDrive?.isArchive ? 'checked' : ''}>
+                                    <div class="drive-setup-checkbox-content">
+                                        <div class="drive-setup-checkbox-label">${this.t('driveSetup.archiveLabel')}</div>
+                                        <div class="drive-setup-checkbox-hint">${this.t('driveSetup.archiveHint')}</div>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div class="drive-setup-actions">
+                                ${!isEdit ? `<button class="btn btn-secondary" id="changeFolderBtn">${this.t('driveSetup.changeFolder')}</button>` : ''}
+                                <button class="btn btn-primary" id="confirmDriveSetup">${this.t(isEdit ? 'driveSetup.save' : 'driveSetup.addDrive')}</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.insertAdjacentHTML('beforeend', modalContent);
+
+            const modal = document.getElementById('driveSetupModal');
+            const labelInput = document.getElementById('driveLabel');
+            const dateFilterSelect = document.getElementById('dateFilter');
+            const isArchiveCheckbox = document.getElementById('isArchive');
+
+            // Generate default label if not editing
+            if (!isEdit && handle) {
+                labelInput.value = this.folderManager.generateLabel(handle.name);
+            }
+
+            // Close button
+            document.getElementById('closeDriveSetup').addEventListener('click', () => {
+                modal.remove();
+                resolve(null);
+            });
+
+            // Close on overlay click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                    resolve(null);
+                }
+            });
+
+            // Change folder button (only for new drives)
+            const changeFolderBtn = document.getElementById('changeFolderBtn');
+            if (changeFolderBtn) {
+                changeFolderBtn.addEventListener('click', async () => {
+                    modal.remove();
+                    resolve({ changeFolder: true });
+                });
+            }
+
+            // Confirm button
+            document.getElementById('confirmDriveSetup').addEventListener('click', () => {
+                const settings = {
+                    label: labelInput.value.trim() || this.folderManager.generateLabel(folderName),
+                    dateFilter: dateFilterSelect.value,
+                    isArchive: isArchiveCheckbox.checked
+                };
+                modal.remove();
+                resolve(settings);
             });
         });
     }
@@ -1090,21 +1763,74 @@ class TeslaCamViewerApp {
      * Select TeslaCam folder
      */
     async selectFolder() {
-        this.showLoading('Selecting folder...');
+        let handle = null;
 
-        const success = await this.folderParser.selectFolder();
+        // Loop to allow "Change Folder" option
+        while (true) {
+            // Show folder picker
+            try {
+                handle = await window.showDirectoryPicker();
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    console.error('Error selecting folder:', error);
+                }
+                return;
+            }
 
-        if (success) {
-            this.loadingText.textContent = 'Parsing TeslaCam folder...';
+            // Show drive setup dialog
+            const settings = await this.showDriveSetupDialog(handle);
+
+            if (!settings) {
+                // User cancelled
+                return;
+            }
+
+            if (settings.changeFolder) {
+                // User wants to change folder, loop back
+                continue;
+            }
+
+            // Settings confirmed, proceed
+            this.showLoading('Parsing TeslaCam folder...');
 
             try {
-                // Add folder as a drive
-                const drive = await this.folderManager.addDrive(this.folderParser.rootHandle);
+                // Add folder as a drive with settings
+                const drive = await this.folderManager.addDrive(handle, {
+                    label: settings.label,
+                    isArchive: settings.isArchive,
+                    dateFilter: settings.dateFilter
+                });
+
+                // If archive drive, skip loading and just save
+                if (settings.isArchive) {
+                    this.hideLoading();
+
+                    // Update drive selector to show the archive drive
+                    this.updateDriveSelector(this.folderManager.getDrives());
+
+                    // Hide select folder button
+                    this.selectFolderBtn.classList.add('hidden');
+
+                    console.log(`Added archive drive: ${drive.label} (will load on manual sync)`);
+                    return;
+                }
 
                 // Set drive context for parsing
                 this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
+                this.folderParser.rootHandle = handle;
+                this.folderParser.setProgressCallback((message, count) => {
+                    this.loadingText.textContent = `${drive.label}: ${message} (${count} events)`;
+                });
+                let events = await this.folderParser.parseFolder();
+                this.folderParser.setProgressCallback(null);
 
-                const events = await this.folderParser.parseFolder();
+                // Apply date filter if set
+                const cutoff = this.folderManager.getDateFilterCutoff(settings.dateFilter);
+                if (cutoff) {
+                    const beforeCount = events.length;
+                    events = events.filter(event => new Date(event.timestamp) >= cutoff);
+                    console.log(`Date filter (${settings.dateFilter}): ${beforeCount} → ${events.length} events`);
+                }
 
                 // Store events in drive
                 drive.events = events;
@@ -1131,7 +1857,6 @@ class TeslaCamViewerApp {
                 this.hideLoading();
 
                 if (events.length > 0) {
-                    // Success message
                     console.log(`Loaded ${events.length} events`);
                 } else {
                     alert('No TeslaCam events found in the selected folder.');
@@ -1141,8 +1866,8 @@ class TeslaCamViewerApp {
                 console.error('Error parsing folder:', error);
                 alert('Error parsing TeslaCam folder. Please make sure you selected the correct folder.');
             }
-        } else {
-            this.hideLoading();
+
+            break; // Exit loop after successful processing
         }
     }
 
@@ -1163,6 +1888,11 @@ class TeslaCamViewerApp {
 
         // Update event browser with filtered events
         this.eventBrowser.loadEvents(filteredEvents);
+
+        // Refresh near-miss indicators from cache
+        if (this.eventBrowser?.refreshNearMissIndicators) {
+            this.eventBrowser.refreshNearMissIndicators();
+        }
 
         // Update map with filtered events
         this.mapView.loadEvents(filteredEvents);
@@ -1259,8 +1989,10 @@ class TeslaCamViewerApp {
             eventsTab.classList.remove('active');
             mapTab.classList.add('active');
 
-            // Resize map when switching to map tab
-            this.mapView.invalidateSize();
+            // Resize map when switching to map tab (with delay to ensure tab is visible)
+            setTimeout(() => {
+                this.mapView.invalidateSize();
+            }, 50);
         }
 
         console.log(`Switched to ${tabName} tab`);
@@ -1271,6 +2003,27 @@ class TeslaCamViewerApp {
      * @param {Object} event
      */
     async onEventSelected(event) {
+        // Check if plate enhancer has active work
+        if (window.plateEnhancer) {
+            const pe = window.plateEnhancer;
+
+            // If processing, block the switch entirely
+            if (pe.isProcessing) {
+                pe.showToast('Cannot switch events while enhancement is processing');
+                return;
+            }
+
+            // If there's an active selection or selecting, ask for confirmation
+            if (pe.isSelecting || pe.selections.size > 0) {
+                const confirmed = confirm('You have an active plate enhancement selection. Switching events will clear it. Continue?');
+                if (!confirmed) {
+                    return;
+                }
+                // Clear the plate enhancer state
+                pe.clearAllSelections();
+            }
+        }
+
         this.showLoading('Loading event...');
 
         try {
@@ -1282,10 +2035,17 @@ class TeslaCamViewerApp {
             // Load event in video player
             await this.videoPlayer.loadEvent(event);
 
-            // Get total duration
+            // Update pillar camera support based on event
+            this.layoutManager.setHasPillarCameras(event.hasPillarCameras || false);
+            this.updatePillarLayoutOptions(event.hasPillarCameras || false);
+
+            // Get total duration first (before SEI extraction to avoid concurrent file handle access)
             const totalDuration = await this.videoPlayer.getTotalDuration();
             this.timeline.setDuration(totalDuration);
             this.timeline.setClipMarkers(event.clipGroups);
+
+            // Extract SEI telemetry data (async, non-blocking - after duration calc completes)
+            this.extractSeiDataForEvent(event);
 
             // Detect and display gaps in recording
             const gaps = this.folderParser.detectGaps(event.clipGroups);
@@ -1304,6 +2064,20 @@ class TeslaCamViewerApp {
             if (this.clipMarking) {
                 this.clipMarking.clearMarks();
             }
+
+            // Clear speed limit display for new event
+            this.currentSpeedLimitData = null;
+            this.lastSpeedLimitGps = null;
+            if (this.speedLimitDisplay) {
+                this.speedLimitDisplay.classList.remove('visible');
+            }
+            // Stop any ongoing background speed limit loading
+            if (window.speedLimitService) {
+                window.speedLimitService.stopBackgroundLoading();
+            }
+            // Stop speed limit profile refresh and clear positions
+            this._stopSpeedLimitProfileRefresh();
+            this._speedLimitPositions = null;
 
             // Enable controls
             this.enableControls();
@@ -1396,8 +2170,13 @@ class TeslaCamViewerApp {
                     const gpsLink = `https://www.google.com/maps?q=${lat},${lon}`;
                     const gpsText = `GPS: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
                     location += location ? ` • ` : '';
-                    location += `<a href="${gpsLink}" target="_blank" style="color: var(--accent); text-decoration: none;">${gpsText}</a>`;
+                    location += `<a href="${gpsLink}" target="_blank" style="color: var(--accent); text-decoration: none;" title="Open in Google Maps">${gpsText}</a>`;
+                    // Initialize street view button with event GPS
+                    this._updateStreetViewButton(lat, lon, 0);
                 }
+            } else {
+                // Disable street view button when no GPS
+                this._updateStreetViewButton(null, null, 0);
             }
 
             // Add camera info for Sentry events
@@ -1410,9 +2189,101 @@ class TeslaCamViewerApp {
 
             this.eventLocationElement.innerHTML = location;
             this.eventReasonElement.textContent = reason;
+
+            // Fetch and display weather
+            this.updateEventWeather(event);
         } else {
             this.eventLocationElement.textContent = '';
             this.eventReasonElement.textContent = '';
+            this.eventWeatherElement.textContent = '';
+            // Disable street view button when no metadata
+            this._updateStreetViewButton(null, null, 0);
+        }
+    }
+
+    /**
+     * Fetch and display weather for an event
+     * @param {Object} event
+     */
+    async updateEventWeather(event) {
+        // Clear previous weather
+        this.eventWeatherElement.textContent = '';
+
+        // Check if we have GPS and timestamp
+        if (!event.metadata?.est_lat || !event.metadata?.est_lon || !event.metadata?.timestamp) {
+            return;
+        }
+
+        const lat = parseFloat(event.metadata.est_lat);
+        const lng = parseFloat(event.metadata.est_lon);
+
+        if (isNaN(lat) || isNaN(lng)) {
+            return;
+        }
+
+        try {
+            // Fetch weather (will use cache if available)
+            const weather = await window.weatherService?.getWeather(lat, lng, event.metadata.timestamp);
+
+            if (weather) {
+                const formatted = window.weatherService.formatForDisplay(weather);
+                this.eventWeatherElement.textContent = formatted;
+
+                // Also update mini-map if visible
+                if (this.miniMapOverlay?.isVisible) {
+                    this.miniMapOverlay.setWeather(weather);
+                }
+            }
+        } catch (error) {
+            console.warn('[App] Failed to fetch weather:', error);
+        }
+    }
+
+    /**
+     * Fetch weather from SEI telemetry data (for RecentClips without event.json)
+     * @param {Object} event - Current event
+     * @param {Object} seiData - SEI telemetry data with frames
+     */
+    async _fetchWeatherFromTelemetry(event, seiData) {
+        if (!seiData?.frames?.length || !window.weatherService) return;
+
+        // Find first frame with valid GPS
+        const frameWithGps = seiData.frames.find(f =>
+            f.latitude_deg && f.longitude_deg &&
+            f.latitude_deg !== 0 && f.longitude_deg !== 0
+        );
+
+        if (!frameWithGps) return;
+
+        const lat = frameWithGps.latitude_deg;
+        const lng = frameWithGps.longitude_deg;
+
+        // Get timestamp from event (derived from filename for RecentClips)
+        const timestamp = event.timestamp;
+        if (!timestamp) return;
+
+        this._weatherFetchedFromTelemetry = true;
+
+        try {
+            console.log(`[Weather] Fetching from telemetry GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+            const weather = await window.weatherService.getWeather(lat, lng, timestamp);
+
+            if (weather) {
+                const formatted = window.weatherService.formatForDisplay(weather);
+                this.eventWeatherElement.textContent = formatted;
+
+                // Also update mini-map if visible
+                if (this.miniMapOverlay?.isVisible) {
+                    this.miniMapOverlay.setWeather(weather);
+                }
+
+                // Update street view button with telemetry GPS
+                this._updateStreetViewButton(lat, lng, frameWithGps.heading_deg || 0);
+
+                console.log(`[Weather] Loaded from telemetry: ${formatted}`);
+            }
+        } catch (error) {
+            console.warn('[App] Failed to fetch weather from telemetry:', error);
         }
     }
 
@@ -1428,6 +2299,7 @@ class TeslaCamViewerApp {
 
     /**
      * Get absolute event time from current clip time
+     * Uses cached clip durations for accuracy when available
      * @param {number} clipTime
      * @returns {number}
      */
@@ -1438,10 +2310,11 @@ class TeslaCamViewerApp {
 
         // Sum duration of all previous clips + current time
         let accumulatedTime = 0;
+        const cachedDurations = this.videoPlayer.cachedClipDurations;
 
         for (let i = 0; i < this.videoPlayer.currentClipIndex; i++) {
-            // Estimate 60s per clip (simplified)
-            accumulatedTime += 60;
+            // Use cached duration if available, otherwise estimate 60s per clip
+            accumulatedTime += (cachedDurations && cachedDurations[i]) ? cachedDurations[i] : 60;
         }
 
         return accumulatedTime + clipTime;
@@ -1470,6 +2343,17 @@ class TeslaCamViewerApp {
         // Unlock orientation when paused
         if (this.settingsManager.get('lockOrientationDuringPlayback')) {
             this.unlockOrientation();
+        }
+    }
+
+    /**
+     * Toggle play/pause
+     */
+    async togglePlayback() {
+        if (this.videoPlayer.getIsPlaying()) {
+            await this.pause();
+        } else {
+            await this.play();
         }
     }
 
@@ -1524,6 +2408,26 @@ class TeslaCamViewerApp {
         const isPlaying = this.videoPlayer.getIsPlaying();
         this.playBtn.disabled = isPlaying;
         this.pauseBtn.disabled = !isPlaying;
+
+        // Update bottom sheet play button icon
+        if (this.bottomSheetPlayBtn) {
+            const svg = this.bottomSheetPlayBtn.querySelector('svg');
+            if (svg) {
+                svg.innerHTML = isPlaying
+                    ? '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'  // Pause icon
+                    : '<path d="M8 5v14l11-7z"/>';  // Play icon
+            }
+        }
+
+        // Update fullscreen play button icon
+        if (this.fullscreenPlayBtn) {
+            const svg = this.fullscreenPlayBtn.querySelector('svg');
+            if (svg) {
+                svg.innerHTML = isPlaying
+                    ? '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>'  // Pause icon
+                    : '<path d="M8 5v14l11-7z"/>';  // Play icon
+            }
+        }
     }
 
     /**
@@ -1581,6 +2485,7 @@ class TeslaCamViewerApp {
         this.zoomResetBtn.disabled = true;
         this.speedSelect.disabled = true;
         this.loopCheckbox.disabled = true;
+        this.loopBtn.disabled = true;
         this.prevEventBtn.disabled = true;
         this.nextEventBtn.disabled = true;
 
@@ -1612,6 +2517,15 @@ class TeslaCamViewerApp {
         this.exportDropdownBtn.disabled = false;
         this.prevBookmarkBtn.disabled = false;
         this.addBookmarkBtn.disabled = false;
+
+        // Enable overlay toggle buttons
+        if (this.toggleHudBtn) this.toggleHudBtn.disabled = false;
+        if (this.toggleMiniMapBtn) this.toggleMiniMapBtn.disabled = false;
+        if (this.toggleGraphsBtn) this.toggleGraphsBtn.disabled = false;
+        if (this.toggleStreetViewBtn) this.toggleStreetViewBtn.disabled = false;
+        if (this.toggleSlowMoBtn) this.toggleSlowMoBtn.disabled = false;
+        if (this.toggleBirdsEyeBtn) this.toggleBirdsEyeBtn.disabled = false;
+        this._updateOverlayButtonStates();
         this.nextBookmarkBtn.disabled = false;
         this.bookmarksListBtn.disabled = false;
         this.zoomOutBtn.disabled = false;
@@ -1619,6 +2533,7 @@ class TeslaCamViewerApp {
         this.zoomResetBtn.disabled = false;
         this.speedSelect.disabled = false;
         this.loopCheckbox.disabled = false;
+        this.loopBtn.disabled = false;
 
         // Event navigation buttons
         this.prevEventBtn.disabled = this.currentEventIndex <= 0;
@@ -1628,6 +2543,302 @@ class TeslaCamViewerApp {
         if (this.mobileFullscreenBtn) {
             this.mobileFullscreenBtn.classList.remove('hidden');
         }
+    }
+
+    /**
+     * Update overlay button active states
+     */
+    _updateOverlayButtonStates() {
+        if (this.toggleHudBtn) {
+            this.toggleHudBtn.classList.toggle('active', this.telemetryOverlay?.isVisible || false);
+        }
+        if (this.toggleMiniMapBtn) {
+            this.toggleMiniMapBtn.classList.toggle('active', this.miniMapOverlay?.isVisible || false);
+        }
+        if (this.toggleGraphsBtn) {
+            this.toggleGraphsBtn.classList.toggle('active', this.telemetryGraphs?.isVisible || false);
+        }
+        if (this.toggleStreetViewBtn) {
+            this.toggleStreetViewBtn.classList.toggle('active', this.streetViewOverlay?.isVisible || false);
+        }
+        if (this.toggleSlowMoBtn) {
+            this.toggleSlowMoBtn.classList.toggle('active', this.incidentSlowMo?.isEnabled || false);
+        }
+        if (this.toggleBirdsEyeBtn) {
+            this.toggleBirdsEyeBtn.classList.toggle('active', this.collisionReconstruction?.isVisible || false);
+        }
+    }
+
+    /**
+     * Set up the Street View button in the info bar
+     */
+    _setupStreetViewButton() {
+        // Create tooltip element
+        this.streetViewTooltip = document.createElement('div');
+        this.streetViewTooltip.className = 'street-view-tooltip';
+        this.streetViewTooltip.innerHTML = `
+            <div class="coords">--</div>
+            <div class="hint">Click to open Street View</div>
+        `;
+        this.streetViewBtn.appendChild(this.streetViewTooltip);
+
+        // Click handler - open Google Street View
+        this.streetViewBtn.addEventListener('click', () => {
+            if (this.currentGpsLat !== null && this.currentGpsLng !== null) {
+                const heading = this.currentGpsHeading || 0;
+                const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${this.currentGpsLat},${this.currentGpsLng}&heading=${heading}`;
+                window.open(url, '_blank', 'noopener,noreferrer');
+            }
+        });
+    }
+
+    /**
+     * Update Street View button with current GPS position
+     */
+    _updateStreetViewButton(lat, lng, heading = 0) {
+        this.currentGpsLat = lat;
+        this.currentGpsLng = lng;
+        this.currentGpsHeading = heading;
+
+        if (this.streetViewBtn) {
+            if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+                this.streetViewBtn.disabled = false;
+                // Update tooltip with coordinates and heading
+                if (this.streetViewTooltip) {
+                    const latDir = lat >= 0 ? 'N' : 'S';
+                    const lngDir = lng >= 0 ? 'E' : 'W';
+                    const coordsEl = this.streetViewTooltip.querySelector('.coords');
+                    if (coordsEl) {
+                        let text = `${Math.abs(lat).toFixed(5)}° ${latDir}, ${Math.abs(lng).toFixed(5)}° ${lngDir}`;
+                        if (heading !== null && heading !== undefined && !isNaN(heading)) {
+                            const dir = this._headingToDirection(heading);
+                            text += ` · ${Math.round(heading)}° ${dir}`;
+                        }
+                        coordsEl.textContent = text;
+                    }
+                }
+            } else {
+                this.streetViewBtn.disabled = true;
+            }
+        }
+    }
+
+    /**
+     * Convert heading degrees to cardinal direction
+     */
+    _headingToDirection(heading) {
+        const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        const index = Math.round(((heading % 360) + 360) % 360 / 45) % 8;
+        return dirs[index];
+    }
+
+    /**
+     * Get current speed limit data (for telemetryGraphs callback)
+     */
+    getCurrentSpeedLimit() {
+        return this.currentSpeedLimitData;
+    }
+
+    /**
+     * Update speed limit display in timeline info bar
+     * Fetches from cache (non-blocking) and triggers background loading
+     */
+    async _updateSpeedLimitDisplay(lat, lng) {
+        if (!window.speedLimitService || !this.speedLimitDisplay) return;
+        if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+            this.currentSpeedLimitData = null;
+            this.speedLimitDisplay.classList.remove('visible');
+            return;
+        }
+
+        // Check if position changed significantly (> 50m)
+        if (this.lastSpeedLimitGps) {
+            const dist = this._haversineDistance(lat, lng, this.lastSpeedLimitGps.lat, this.lastSpeedLimitGps.lng);
+            if (dist < 50) return; // Skip update if position hasn't changed much
+        }
+        this.lastSpeedLimitGps = { lat, lng };
+
+        // Try to get cached speed limit first (non-blocking)
+        const cached = window.speedLimitService.getSpeedLimitCached(lat, lng);
+        if (cached) {
+            this._showSpeedLimit(cached);
+        } else {
+            // Trigger async fetch (won't block playback)
+            window.speedLimitService.getSpeedLimit(lat, lng).then(data => {
+                if (data) {
+                    this._showSpeedLimit(data);
+                }
+            }).catch(() => {});
+        }
+    }
+
+    /**
+     * Show speed limit in the display
+     */
+    _showSpeedLimit(data) {
+        if (!data || data.limit === null) {
+            this.currentSpeedLimitData = null;
+            this.speedLimitDisplay.classList.remove('visible');
+            return;
+        }
+
+        this.currentSpeedLimitData = data;
+
+        // Determine display unit based on user setting
+        const units = this.settingsManager?.get('telemetryOverlayUnits') || 'mph';
+        const useMetric = units === 'kph';
+        const displayLimit = useMetric ? data.limitKph : data.limitMph;
+
+        // Update the display - US rectangular for mph, European circular for km/h
+        if (useMetric) {
+            // European-style circular sign with red border
+            this.speedLimitDisplay.innerHTML = `
+                <div class="limit-sign-eu">
+                    <span class="limit-value">${displayLimit}</span>
+                </div>
+            `;
+        } else {
+            // US-style rectangular sign
+            this.speedLimitDisplay.innerHTML = `
+                <div class="limit-sign-us">
+                    <span class="limit-label">SPEED</span>
+                    <span class="limit-label">LIMIT</span>
+                    <span class="limit-value">${displayLimit}</span>
+                </div>
+            `;
+        }
+        this.speedLimitDisplay.classList.add('visible');
+    }
+
+    /**
+     * Queue GPS positions from telemetry for background speed limit loading
+     */
+    _queueSpeedLimitPositions(clipSeiData, totalDuration) {
+        if (!window.speedLimitService || !clipSeiData) return;
+
+        const positions = [];
+        const clipDuration = 60;
+
+        // Extract GPS positions with their event times
+        Object.keys(clipSeiData).forEach(clipIndexStr => {
+            const clipIndex = parseInt(clipIndexStr);
+            const clipData = clipSeiData[clipIndexStr];
+            if (!clipData?.frames) return;
+
+            const frameCount = clipData.frames.length;
+            const baseTime = clipIndex * clipDuration;
+
+            // Sample every ~10 seconds (360 frames at 36fps)
+            const sampleInterval = Math.max(1, Math.floor(frameCount / 6));
+
+            for (let i = 0; i < frameCount; i += sampleInterval) {
+                const frame = clipData.frames[i];
+                if (frame.latitude_deg && frame.longitude_deg) {
+                    const frameRatio = i / frameCount;
+                    const eventTime = baseTime + (frameRatio * clipDuration);
+                    positions.push({
+                        lat: frame.latitude_deg,
+                        lng: frame.longitude_deg,
+                        time: eventTime
+                    });
+                }
+            }
+        });
+
+        if (positions.length > 0) {
+            // Store positions for building speed limit profile
+            this._speedLimitPositions = positions;
+
+            // Start background loading, prioritizing current playback position
+            const currentTime = this.getAbsoluteEventTime(this.videoPlayer?.getCurrentTime() || 0);
+            window.speedLimitService.queueForBackgroundLoading(positions, currentTime);
+
+            // Build initial speed limit profile and update periodically
+            this._buildSpeedLimitProfile();
+            this._startSpeedLimitProfileRefresh();
+        }
+    }
+
+    /**
+     * Build speed limit profile from cached data and pass to telemetry graphs
+     */
+    _buildSpeedLimitProfile() {
+        if (!this._speedLimitPositions?.length || !window.speedLimitService || !this.telemetryGraphs) return;
+
+        const profilePoints = [];
+
+        for (const pos of this._speedLimitPositions) {
+            const cached = window.speedLimitService.getSpeedLimitCached(pos.lat, pos.lng);
+            if (cached && cached.limit !== null && cached.limitMph !== undefined && cached.limitKph !== undefined) {
+                profilePoints.push({
+                    time: pos.time,
+                    limitMph: cached.limitMph,
+                    limitKph: cached.limitKph
+                });
+            }
+        }
+
+        if (profilePoints.length > 0) {
+            // Sort by time
+            profilePoints.sort((a, b) => a.time - b.time);
+
+            const profile = {
+                points: profilePoints,
+                startTime: profilePoints[0].time,
+                endTime: profilePoints[profilePoints.length - 1].time
+            };
+
+            this.telemetryGraphs.setSpeedLimitProfile(profile);
+        }
+    }
+
+    /**
+     * Start periodic refresh of speed limit profile to catch newly loaded data
+     */
+    _startSpeedLimitProfileRefresh() {
+        // Clear any existing refresh interval
+        this._stopSpeedLimitProfileRefresh();
+
+        // Refresh every 3 seconds for first 30 seconds, then every 10 seconds
+        let refreshCount = 0;
+        const maxFastRefreshes = 10;
+
+        this._speedLimitProfileRefreshInterval = setInterval(() => {
+            this._buildSpeedLimitProfile();
+            refreshCount++;
+
+            // After 10 fast refreshes, slow down to every 10 seconds
+            if (refreshCount === maxFastRefreshes) {
+                this._stopSpeedLimitProfileRefresh();
+                this._speedLimitProfileRefreshInterval = setInterval(() => {
+                    this._buildSpeedLimitProfile();
+                }, 10000);
+            }
+        }, 3000);
+    }
+
+    /**
+     * Stop speed limit profile refresh
+     */
+    _stopSpeedLimitProfileRefresh() {
+        if (this._speedLimitProfileRefreshInterval) {
+            clearInterval(this._speedLimitProfileRefreshInterval);
+            this._speedLimitProfileRefreshInterval = null;
+        }
+    }
+
+    /**
+     * Haversine distance in meters between two GPS coordinates
+     */
+    _haversineDistance(lat1, lng1, lat2, lng2) {
+        const R = 6371000;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     /**
@@ -1670,6 +2881,18 @@ class TeslaCamViewerApp {
 
         const newTime = currentTime + (frameDuration * direction);
         await this.videoPlayer.seek(newTime); // Don't clamp to 0, let seek() handle negative values
+    }
+
+    /**
+     * Frame step - single step for button click (used by bottom sheet)
+     * @param {number} direction -1 for backward, 1 for forward
+     */
+    async frameStep(direction) {
+        // Pause playback first
+        if (this.videoPlayer.getIsPlaying()) {
+            await this.pause();
+        }
+        await this.stepFrame(direction);
     }
 
     /**
@@ -1721,6 +2944,34 @@ class TeslaCamViewerApp {
         } catch (error) {
             console.error('Error capturing screenshot:', error);
             alert('Failed to capture screenshot. Make sure a video is loaded.');
+        }
+    }
+
+    /**
+     * Generate insurance report PDF for current event
+     */
+    async generateInsuranceReport() {
+        if (!this.currentEvent) {
+            alert('No event loaded. Please select an event first.');
+            return;
+        }
+
+        // Show loading overlay
+        this.showLoading('Generating Insurance Report...');
+
+        try {
+            // Set up progress callback
+            this.insuranceReport.setProgressCallback((percent, message) => {
+                this.updateLoading(`${message} (${percent}%)`);
+            });
+
+            await this.insuranceReport.generateReport();
+
+            this.hideLoading();
+        } catch (error) {
+            console.error('Error generating insurance report:', error);
+            this.hideLoading();
+            alert(`Failed to generate insurance report: ${error.message}`);
         }
     }
 
@@ -1869,7 +3120,7 @@ class TeslaCamViewerApp {
             // Confirm export
             const currentSpeed = parseFloat(this.speedSelect.value) || 1;
             const speedNote = currentSpeed !== 1 ? ` at ${currentSpeed}x speed` : '';
-            const message = `Export ${exportDescription}${speedNote}?\n\nNote: The video will play during export. Please don't switch events until complete.`;
+            const message = `Export ${exportDescription}${speedNote}?\n\n⏱️ Export takes approximately 3-4x the video duration (a 10 second clip takes ~30-40 seconds to render).\n\nPlease don't switch events until complete.`;
 
             if (!confirm(message)) {
                 return;
@@ -1887,6 +3138,32 @@ class TeslaCamViewerApp {
 
             // Disable all controls during export
             this.disableControls();
+
+            // Load plate blur model if plate blurring is enabled
+            const blurPlatesEnabled = this.settingsManager.get('blurLicensePlates') === true;
+            if (blurPlatesEnabled && this.plateBlur && !this.plateBlur.isReady()) {
+                console.log('[Export] Loading license plate detection model...');
+                this.loadingOverlay.classList.remove('hidden');
+                this.loadingOverlay.style.display = 'flex';
+                this.loadingOverlay.style.position = 'fixed';
+                this.loadingOverlay.style.top = '0';
+                this.loadingOverlay.style.left = '0';
+                this.loadingOverlay.style.right = '0';
+                this.loadingOverlay.style.bottom = '0';
+                this.loadingOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+                this.loadingOverlay.style.zIndex = '9999';
+                this.loadingText.innerHTML = '<div style="text-align: center;"><div style="font-size: 1.1rem; color: #ffffff;">Loading AI model for license plate detection...</div><div style="font-size: 0.9rem; color: #a0a0a0; margin-top: 0.5rem;">This may take a moment on first use</div></div>';
+                try {
+                    const loaded = await this.plateBlur.loadModel();
+                    if (!loaded) {
+                        console.warn('[Export] Failed to load plate blur model, continuing without blur');
+                    } else {
+                        console.log('[Export] Plate blur model loaded successfully');
+                    }
+                } catch (modelError) {
+                    console.warn('[Export] Plate blur model error:', modelError);
+                }
+            }
 
             // Show loading overlay with progress display
             this.loadingOverlay.classList.remove('hidden');
@@ -1959,15 +3236,13 @@ class TeslaCamViewerApp {
                 const exportStatus = this.videoExport.getExportStatus();
 
                 // Calculate wall-clock ETA based on actual progress rate
-                let etaDisplay = '';
+                let wallEta = 0;
+                let wallElapsed = 0;
                 if (exportStatus.wallStartTime && safePercent > 1) {
-                    const wallElapsed = (Date.now() - exportStatus.wallStartTime) / 1000;
+                    wallElapsed = (Date.now() - exportStatus.wallStartTime) / 1000;
                     const progressRate = safePercent / wallElapsed;
                     const remainingPercent = 100 - safePercent;
-                    const etaSeconds = remainingPercent / progressRate;
-                    if (etaSeconds > 0 && etaSeconds < 7200) { // Only show if reasonable
-                        etaDisplay = ` (~${this.formatTime(etaSeconds)} wall time)`;
-                    }
+                    wallEta = remainingPercent / progressRate;
                 }
 
                 // Update only the text/style of existing elements (button stays untouched)
@@ -1975,7 +3250,12 @@ class TeslaCamViewerApp {
                     titleEl.textContent = `Exporting ${exportTitle}: ${safePercent}%`;
                 }
                 if (progressEl) {
-                    progressEl.textContent = `${this.formatTime(safeElapsed)} / ${this.formatTime(safeTotal)} (${this.formatTime(safeRemaining)} remaining${etaDisplay})`;
+                    // Show wall-clock time prominently since frame-by-frame export takes ~4x real-time
+                    if (wallEta > 0 && wallEta < 7200) {
+                        progressEl.textContent = `${this.formatTime(wallElapsed)} elapsed / ~${this.formatTime(wallEta)} remaining`;
+                    } else {
+                        progressEl.textContent = `Video: ${this.formatTime(safeElapsed)} / ${this.formatTime(safeTotal)}`;
+                    }
                 }
                 if (speedNoticeEl) {
                     if (exportStatus.speedWasReduced && exportStatus.currentSpeed !== exportStatus.originalSpeed) {
@@ -1990,14 +3270,15 @@ class TeslaCamViewerApp {
             };
 
             // Export based on camera selection
+            // Using frame-by-frame export for stable, stutter-free output
             if (camera === 'all') {
-                await this.videoExport.exportComposite({
+                await this.videoExport.exportFrameByFrame({
                     format: this.settingsManager.get('exportFormat'),
                     quality: 0.9,
                     startTime: exportStartTime,
                     endTime: exportEndTime,
                     includeOverlay: true,
-                    speed: currentSpeed,
+                    fps: 30,
                     onProgress: progressCallback
                 });
             } else {
@@ -2317,11 +3598,34 @@ class TeslaCamViewerApp {
                 }
                 break;
 
-            case 'KeyP':
-                // P for Picture-in-Picture
+            case 'KeyT':
+                // T for telemetry overlay toggle
                 event.preventDefault();
-                if (!this.pipBtn.disabled) {
-                    this.togglePictureInPicture();
+                if (this.telemetryOverlay) {
+                    this.telemetryOverlay.toggle();
+                }
+                break;
+
+            case 'KeyM':
+                // M for mini-map toggle
+                event.preventDefault();
+                if (this.miniMapOverlay) {
+                    this.miniMapOverlay.toggle();
+                }
+                break;
+
+            // Note: 'G' keyboard shortcut removed - telemetry graphs are now always visible in sidebar
+
+            case 'KeyP':
+                event.preventDefault();
+                if (event.shiftKey) {
+                    // Shift+P for pillar/repeater cycle
+                    this.cyclePillarMode();
+                } else {
+                    // P for Picture-in-Picture
+                    if (!this.pipBtn.disabled) {
+                        this.togglePictureInPicture();
+                    }
                 }
                 break;
 
@@ -2423,9 +3727,11 @@ class TeslaCamViewerApp {
                 break;
 
             case 'Escape':
-                // Clear marks or close modals
+                // Exit mobile fullscreen, clear marks or close modals
                 event.preventDefault();
-                if (this.clipMarking.hasMarks()) {
+                if (this.isMobileFullscreen) {
+                    this.exitMobileFullscreen();
+                } else if (this.clipMarking.hasMarks()) {
                     this.clearMarks();
                 }
                 break;
@@ -2569,11 +3875,617 @@ class TeslaCamViewerApp {
         }, 100);
     }
 
+    /**
+     * Extract SEI telemetry data for an event (async, non-blocking)
+     * Tesla firmware 2025.44.25+ embeds vehicle telemetry in video files
+     * @param {Object} event - The event to extract SEI data from
+     */
+    async extractSeiDataForEvent(event) {
+        if (!window.seiExtractor || !this.telemetryOverlay) {
+            return;
+        }
+
+        try {
+            // Initialize SEI extractor if needed
+            await window.seiExtractor.init();
+
+            // Reset overlay data for new event
+            this.telemetryOverlay.reset();
+            this._weatherFetchedFromTelemetry = false;
+
+            // Clear mini-map trail and weather for new event
+            if (this.miniMapOverlay) {
+                this.miniMapOverlay.clearAll();
+            }
+
+            // Clear elevation data for new event
+            if (this.elevationOverlay) {
+                this.elevationOverlay.clear();
+            }
+
+            // Clear street view for new event
+            if (this.streetViewOverlay) {
+                this.streetViewOverlay.clear();
+            }
+
+            // Clear telemetry graphs for new event
+            if (this.telemetryGraphs) {
+                this.telemetryGraphs.clear();
+            }
+
+            // Reset incident slow-mo for new event
+            if (this.incidentSlowMo) {
+                this.incidentSlowMo.reset();
+            }
+
+            // Reset collision reconstruction for new event
+            if (this.collisionReconstruction) {
+                this.collisionReconstruction.reset();
+            }
+
+            // Extract SEI from each clip (front camera has the telemetry)
+            const clipGroups = event.clipGroups || [];
+            for (let i = 0; i < clipGroups.length; i++) {
+                const group = clipGroups[i];
+                // clips is an object keyed by camera name, not an array
+                const frontClip = group.clips?.front;
+
+                if (frontClip && frontClip.fileHandle) {
+                    // Get File from FileHandle and load SEI data (async)
+                    frontClip.fileHandle.getFile().then(file => {
+                        return this.telemetryOverlay.loadClipData(file, i);
+                    }).then(data => {
+                        if (data && data.frames.length > 0) {
+                            console.log(`SEI telemetry loaded for clip ${i}: ${data.frames.length} frames`);
+                            // Auto-show telemetry overlay if we have telemetry data
+                            if (!this.telemetryOverlay.isVisible && this.settingsManager.get('telemetryOverlayEnabled') !== false) {
+                                this.telemetryOverlay.show();
+                            }
+                            // Auto-show mini-map if enabled and we have GPS telemetry data
+                            if (this.miniMapOverlay && !this.miniMapOverlay.isVisible && this.settingsManager.get('miniMapEnabled')) {
+                                this.miniMapOverlay.show();
+                            }
+                            // Auto-show telemetry graphs if enabled (includes elevation)
+                            // Note: telemetryGraphs now shows in sidebar panel
+                            if (this.telemetryGraphs && !this.telemetryGraphs.isVisible) {
+                                this.telemetryGraphs.show();
+                            }
+                            // Auto-show Bird's Eye View panel when GPS data is available
+                            // Note: collisionReconstruction now shows in sidebar panel
+                            if (this.collisionReconstruction && !this.collisionReconstruction.isVisible) {
+                                this.collisionReconstruction.show();
+                            }
+                            // Update overlay button states to reflect current visibility
+                            this._updateOverlayButtonStates();
+                            // Load elevation data after first clip with GPS data (debounced)
+                            this._scheduleElevationLoad(event);
+                            // Load telemetry graphs data (debounced)
+                            this._scheduleGraphsLoad(event);
+                            // Fetch weather from telemetry if not already available from metadata
+                            // (useful for RecentClips which don't have event.json)
+                            if (!event.metadata?.est_lat && !this._weatherFetchedFromTelemetry) {
+                                this._fetchWeatherFromTelemetry(event, data);
+                            }
+                        }
+                    }).catch(err => {
+                        // Silently ignore - older clips won't have SEI data
+                    });
+                }
+            }
+
+            // Set up playback time update handler for telemetry
+            this.setupTelemetryUpdateHandler();
+
+        } catch (error) {
+            console.warn('SEI extraction not available:', error.message);
+        }
+    }
+
+    /**
+     * Schedule elevation data loading (debounced to wait for multiple clips to load)
+     */
+    _scheduleElevationLoad(event) {
+        // Clear any pending load
+        if (this._elevationLoadTimeout) {
+            clearTimeout(this._elevationLoadTimeout);
+        }
+
+        // Wait a bit for more clips to load, then fetch elevation
+        this._elevationLoadTimeout = setTimeout(() => {
+            this._loadElevationData(event);
+        }, 1500); // Wait 1.5 seconds after last clip loads
+    }
+
+    /**
+     * Load elevation data for the current event
+     */
+    async _loadElevationData(event) {
+        if (!this.elevationOverlay || !this.telemetryOverlay || !window.elevationService) {
+            return;
+        }
+
+        try {
+            // Get GPS points from telemetry
+            const gpsPoints = this.telemetryOverlay.getAllGpsPoints();
+
+            if (!gpsPoints || gpsPoints.length < 2) {
+                console.log('[Elevation] Not enough GPS points for elevation profile');
+                return;
+            }
+
+            console.log(`[Elevation] Fetching elevation for ${gpsPoints.length} GPS points`);
+
+            // Fetch elevation data
+            const profile = await window.elevationService.getElevationProfile(
+                gpsPoints,
+                event.compoundKey || event.name
+            );
+
+            if (profile) {
+                const totalDuration = this.timeline.totalDuration || 0;
+                console.log(`[Elevation] Profile loaded: ${profile.points.length} points, range ${Math.round(profile.minElevation)}-${Math.round(profile.maxElevation)}m, duration ${totalDuration}s`);
+                this.elevationOverlay.setProfile(profile, totalDuration);
+
+                // Also pass to telemetry graphs if available
+                if (this.telemetryGraphs) {
+                    this.telemetryGraphs.setElevationProfile(profile, totalDuration);
+                }
+            }
+        } catch (error) {
+            console.warn('[Elevation] Failed to load elevation data:', error);
+        }
+    }
+
+    /**
+     * Schedule telemetry graphs data loading (debounced to wait for multiple clips to load)
+     */
+    _scheduleGraphsLoad(event) {
+        // Clear any pending load
+        if (this._graphsLoadTimeout) {
+            clearTimeout(this._graphsLoadTimeout);
+        }
+
+        // Wait a bit for more clips to load, then load graphs data
+        this._graphsLoadTimeout = setTimeout(() => {
+            this._loadGraphsData(event);
+        }, 1500); // Wait 1.5 seconds after last clip loads
+    }
+
+    /**
+     * Load telemetry graphs data for the current event
+     */
+    _loadGraphsData(event) {
+        if (!this.telemetryGraphs || !this.telemetryOverlay) {
+            return;
+        }
+
+        try {
+            // Get clip SEI data from telemetryOverlay
+            const clipSeiMap = this.telemetryOverlay.clipSeiData;
+            if (!clipSeiMap || clipSeiMap.size === 0) {
+                console.log('[Graphs] No SEI data available for graphs');
+                return;
+            }
+
+            // Convert Map with compound keys to object indexed by clip number
+            const clipSeiData = {};
+            for (const [key, data] of clipSeiMap.entries()) {
+                const clipIndex = parseInt(key.split('_')[0]);
+                clipSeiData[clipIndex] = data;
+            }
+
+            const totalDuration = this.timeline.totalDuration || 0;
+            console.log(`[Graphs] Loading data: ${Object.keys(clipSeiData).length} clips, total duration ${totalDuration}s`);
+
+            // Set up near-miss detection callback to update timeline markers
+            // Preserve any existing callback (e.g., from incidentSlowMo)
+            const existingCallback = this.telemetryGraphs.onNearMissesDetected;
+            this.telemetryGraphs.onNearMissesDetected = (nearMisses) => {
+                if (this.timeline) {
+                    this.timeline.setNearMissMarkers(nearMisses);
+                }
+                // Chain to existing callback (e.g., incidentSlowMo)
+                if (existingCallback) {
+                    existingCallback(nearMisses);
+                }
+                // Cache near-miss data for event browser display
+                this._cacheNearMissData(nearMisses);
+            };
+
+            // Load data into graphs
+            this.telemetryGraphs.loadData(clipSeiData, totalDuration);
+
+            // Set units from settings
+            const useMetric = this.settingsManager.get('useMetricUnits');
+            this.telemetryGraphs.setUnits(useMetric ? 'kph' : 'mph');
+
+            // Queue GPS positions for background speed limit loading
+            this._queueSpeedLimitPositions(clipSeiData, totalDuration);
+
+        } catch (error) {
+            console.warn('[Graphs] Failed to load graphs data:', error);
+        }
+    }
+
+    /**
+     * Cache near-miss detection data for event browser display
+     * @param {Array} nearMisses - Array of near-miss objects
+     */
+    _cacheNearMissData(nearMisses) {
+        if (!this.currentEvent) return;
+
+        const eventKey = this.currentEvent.compoundKey || this.currentEvent.name;
+        const flaggedIncidents = nearMisses.filter(nm => nm.score >= 5);
+        const flaggedCount = flaggedIncidents.length;
+        const maxScore = nearMisses.length > 0 ? Math.max(...nearMisses.map(nm => nm.score)) : 0;
+
+        try {
+            // Load existing cache
+            const cacheKey = 'teslacamviewer_nearmiss_cache';
+            const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+
+            // Save this event's near-miss data including incident times for navigation
+            cache[eventKey] = {
+                count: flaggedCount,
+                maxScore: maxScore,
+                incidents: flaggedIncidents.map(nm => ({
+                    time: nm.time,
+                    score: nm.score,
+                    severity: nm.severity
+                })),
+                timestamp: Date.now()
+            };
+
+            // Keep cache size reasonable (last 100 events)
+            const keys = Object.keys(cache);
+            if (keys.length > 100) {
+                const sortedKeys = keys.sort((a, b) => cache[a].timestamp - cache[b].timestamp);
+                for (let i = 0; i < keys.length - 100; i++) {
+                    delete cache[sortedKeys[i]];
+                }
+            }
+
+            localStorage.setItem(cacheKey, JSON.stringify(cache));
+
+            // Update event browser if available
+            if (this.eventBrowser && flaggedCount > 0) {
+                this.eventBrowser.updateNearMissIndicator(eventKey, flaggedCount, maxScore);
+            }
+        } catch (e) {
+            console.warn('[App] Failed to cache near-miss data:', e);
+        }
+    }
+
+    /**
+     * Navigate to a near-miss incident in a specific event
+     * @param {string} eventKey - Event identifier
+     * @param {number} incidentIndex - Index of the incident to navigate to (0-based)
+     */
+    async navigateToNearMiss(eventKey, incidentIndex = 0) {
+        try {
+            console.log(`[App] navigateToNearMiss called: eventKey=${eventKey}, index=${incidentIndex}`);
+
+            // Get cached near-miss data
+            const cacheKey = 'teslacamviewer_nearmiss_cache';
+            const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+            const data = cache[eventKey];
+
+            if (!data || !data.incidents || data.incidents.length === 0) {
+                console.warn('[App] No near-miss data found for event:', eventKey);
+                return;
+            }
+
+            // Get the incident to navigate to
+            const incident = data.incidents[incidentIndex % data.incidents.length];
+            if (!incident) {
+                console.warn('[App] No incident at index:', incidentIndex);
+                return;
+            }
+
+            console.log(`[App] Target incident: time=${incident.time}, score=${incident.score}`);
+
+            // Find and load the event if not already loaded
+            const currentEventKey = this.currentEvent?.compoundKey || this.currentEvent?.name;
+            if (currentEventKey !== eventKey) {
+                console.log(`[App] Need to load event: current=${currentEventKey}, target=${eventKey}`);
+
+                // Find the event in allEvents
+                const event = this.allEvents.find(e =>
+                    (e.compoundKey || e.name) === eventKey
+                );
+
+                if (!event) {
+                    console.warn('[App] Event not found in allEvents:', eventKey);
+                    return;
+                }
+
+                console.log('[App] Found event:', event.name);
+
+                // Use eventBrowser.selectEvent to properly load the event and update UI
+                // This will also call onEventSelected through the callback
+                let eventLoaded = false;
+                if (this.eventBrowser) {
+                    // selectEvent will find the element and call onEventSelect callback
+                    this.eventBrowser.selectEvent(event);
+                    // Check if the event was actually selected
+                    eventLoaded = this.eventBrowser.selectedEvent === event;
+                }
+
+                // Fallback: if selectEvent didn't work (element not found), load directly
+                if (!eventLoaded) {
+                    console.log('[App] selectEvent did not find element, loading directly');
+                    await this.onEventSelected(event);
+                }
+
+                // Wait for event to load and telemetry data to be processed
+                await new Promise(r => setTimeout(r, 1500));
+            }
+
+            // Seek to the incident time (with a small buffer before)
+            const seekTime = Math.max(0, incident.time - 2);
+            console.log(`[App] Seeking to time: ${seekTime}`);
+            await this.videoPlayer.seekToEventTime(seekTime);
+
+            console.log(`[App] Navigated to near-miss at ${incident.time.toFixed(1)}s (score: ${incident.score})`);
+        } catch (e) {
+            console.error('[App] Failed to navigate to near-miss:', e);
+        }
+    }
+
+    /**
+     * Update mini-map from event GPS coordinates (fallback for sentry events)
+     * Used when no telemetry data is available from video SEI
+     */
+    _updateMiniMapFromEventGPS() {
+        if (!this.currentEvent) return;
+
+        const event = this.currentEvent;
+        if (event.metadata?.est_lat && event.metadata?.est_lon) {
+            const lat = parseFloat(event.metadata.est_lat);
+            const lng = parseFloat(event.metadata.est_lon);
+            if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                // Update mini-map
+                if (this.miniMapOverlay) {
+                    // Only update once if position hasn't changed (static position for sentry)
+                    if (this.miniMapOverlay.currentLat !== lat || this.miniMapOverlay.currentLng !== lng) {
+                        this.miniMapOverlay.updatePosition(lat, lng, 0);
+                    }
+                }
+                // Update street view overlay (if using the overlay)
+                if (this.streetViewOverlay && this.streetViewOverlay.isVisible) {
+                    this.streetViewOverlay.updatePosition(lat, lng, 0);
+                }
+                // Update street view button in info bar
+                this._updateStreetViewButton(lat, lng, 0);
+            }
+        }
+    }
+
+    /**
+     * Set up handler to update telemetry overlay during playback
+     */
+    setupTelemetryUpdateHandler() {
+        if (!this.telemetryOverlay) return;
+
+        // Use requestAnimationFrame for smooth updates
+        const updateTelemetry = () => {
+            if (this.videoPlayer && this.telemetryOverlay.isVisible) {
+                const clipIndex = this.videoPlayer.currentClipIndex || 0;
+                const timeInClip = this.videoPlayer.getCurrentTime() || 0;
+                const videoDuration = this.videoPlayer.getCurrentDuration() || 0;
+                this.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+
+                // Update mini-map and street view with GPS data from telemetry
+                const data = this.telemetryOverlay.currentData;
+                const hasTelemetryGps = data && data.latitude_deg && data.longitude_deg;
+
+                if (this.miniMapOverlay && this.miniMapOverlay.isVisible) {
+                    if (hasTelemetryGps) {
+                        this.miniMapOverlay.updatePosition(
+                            data.latitude_deg,
+                            data.longitude_deg,
+                            data.heading_deg || 0
+                        );
+                    } else {
+                        // Fallback to event GPS coordinates (for sentry events without telemetry)
+                        this._updateMiniMapFromEventGPS();
+                    }
+                }
+
+                // Update street view overlay
+                if (this.streetViewOverlay && this.streetViewOverlay.isVisible) {
+                    if (hasTelemetryGps) {
+                        this.streetViewOverlay.updatePosition(
+                            data.latitude_deg,
+                            data.longitude_deg,
+                            data.heading_deg || 0
+                        );
+                    } else {
+                        this._updateMiniMapFromEventGPS();
+                    }
+                }
+
+                // Update street view button in info bar
+                if (hasTelemetryGps) {
+                    this._updateStreetViewButton(data.latitude_deg, data.longitude_deg, data.heading_deg || 0);
+                    // Update speed limit display
+                    this._updateSpeedLimitDisplay(data.latitude_deg, data.longitude_deg);
+                } else {
+                    this._updateMiniMapFromEventGPS();
+                }
+            }
+
+            // Also update overlays if they are visible but telemetry overlay is hidden
+            const miniMapVisible = this.miniMapOverlay && this.miniMapOverlay.isVisible;
+            const streetViewVisible = this.streetViewOverlay && this.streetViewOverlay.isVisible;
+
+            if ((miniMapVisible || streetViewVisible) && !this.telemetryOverlay.isVisible) {
+                // Need to manually get telemetry data when telemetry overlay is hidden
+                const clipIndex = this.videoPlayer?.currentClipIndex || 0;
+                const timeInClip = this.videoPlayer?.getCurrentTime() || 0;
+                const videoDuration = this.videoPlayer?.getCurrentDuration() || 0;
+                this.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+                const data = this.telemetryOverlay.currentData;
+                const hasTelemetryGps = data && data.latitude_deg && data.longitude_deg;
+
+                if (miniMapVisible) {
+                    if (hasTelemetryGps) {
+                        this.miniMapOverlay.updatePosition(
+                            data.latitude_deg,
+                            data.longitude_deg,
+                            data.heading_deg || 0
+                        );
+                    } else {
+                        this._updateMiniMapFromEventGPS();
+                    }
+                }
+
+                if (streetViewVisible) {
+                    if (hasTelemetryGps) {
+                        this.streetViewOverlay.updatePosition(
+                            data.latitude_deg,
+                            data.longitude_deg,
+                            data.heading_deg || 0
+                        );
+                    } else {
+                        this._updateMiniMapFromEventGPS();
+                    }
+                }
+
+                // Update street view button in info bar
+                if (hasTelemetryGps) {
+                    this._updateStreetViewButton(data.latitude_deg, data.longitude_deg, data.heading_deg || 0);
+                    // Update speed limit display
+                    this._updateSpeedLimitDisplay(data.latitude_deg, data.longitude_deg);
+                } else {
+                    this._updateMiniMapFromEventGPS();
+                }
+            }
+
+            if (this.telemetryOverlay.isVisible || miniMapVisible || streetViewVisible) {
+                requestAnimationFrame(updateTelemetry);
+            }
+        };
+
+        // Start the update loop if any overlay is visible
+        const miniMapVisible = this.miniMapOverlay && this.miniMapOverlay.isVisible;
+        const streetViewVisible = this.streetViewOverlay && this.streetViewOverlay.isVisible;
+        if (this.telemetryOverlay.isVisible || miniMapVisible || streetViewVisible) {
+            requestAnimationFrame(updateTelemetry);
+        }
+
+        // Restart loop when telemetry overlay is shown
+        const originalShow = this.telemetryOverlay.show.bind(this.telemetryOverlay);
+        this.telemetryOverlay.show = () => {
+            originalShow();
+            requestAnimationFrame(updateTelemetry);
+        };
+
+        // Also restart loop when mini-map is shown
+        if (this.miniMapOverlay) {
+            const originalMiniMapShow = this.miniMapOverlay.show.bind(this.miniMapOverlay);
+            this.miniMapOverlay.show = () => {
+                originalMiniMapShow();
+                requestAnimationFrame(updateTelemetry);
+            };
+        }
+
+        // Also restart loop when street view is shown
+        if (this.streetViewOverlay) {
+            const originalStreetViewShow = this.streetViewOverlay.show.bind(this.streetViewOverlay);
+            this.streetViewOverlay.show = () => {
+                originalStreetViewShow();
+                requestAnimationFrame(updateTelemetry);
+                this._updateOverlayButtonStates();
+            };
+        }
+    }
+
+    // ==================== PILLAR CAMERA SUPPORT ====================
+
+    /**
+     * Cycle between repeaters and pillars in 4-camera layouts
+     */
+    cyclePillarMode() {
+        if (!this.layoutManager.hasPillarCameras) return;
+
+        this.layoutManager.cyclePillarMode();
+        this.updatePillarCycleButton();
+    }
+
+    /**
+     * Update pillar layout options visibility based on whether event has pillar cameras
+     * @param {boolean} hasPillars
+     */
+    updatePillarLayoutOptions(hasPillars) {
+        // Show/hide 6-camera layout option
+        const pillarLayoutOptions = document.querySelectorAll('.pillar-layout-option');
+        pillarLayoutOptions.forEach(opt => {
+            opt.style.display = hasPillars ? '' : 'none';
+        });
+
+        // Show/hide pillar camera options in focus mode selector
+        const pillarCameraOptions = document.querySelectorAll('.pillar-option');
+        pillarCameraOptions.forEach(opt => {
+            opt.style.display = hasPillars ? '' : 'none';
+        });
+
+        // Update cycle button
+        this.updatePillarCycleButton();
+    }
+
+    /**
+     * Update the pillar cycle button state
+     */
+    updatePillarCycleButton() {
+        const cycleBtn = document.getElementById('pillarCycleBtn');
+        if (!cycleBtn) return;
+
+        const hasPillars = this.layoutManager.hasPillarCameras;
+        const pillarMode = this.layoutManager.pillarMode;
+
+        cycleBtn.style.display = hasPillars ? '' : 'none';
+
+        if (hasPillars) {
+            const label = cycleBtn.querySelector('.pillar-cycle-label');
+            if (label) {
+                label.textContent = pillarMode === 'pillars' ? 'Pillars' : 'Repeaters';
+            }
+            cycleBtn.classList.toggle('pillars-active', pillarMode === 'pillars');
+        }
+    }
+
+    /**
+     * Initialize pillar cycle button click handler
+     */
+    initPillarCycleButton() {
+        const cycleBtn = document.getElementById('pillarCycleBtn');
+        if (cycleBtn) {
+            cycleBtn.addEventListener('click', () => this.cyclePillarMode());
+        }
+    }
+
 }
 
 // Initialize app when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize i18n first
+    if (window.i18n) {
+        await window.i18n.init();
+    }
+
     window.app = new TeslaCamViewerApp();
+
+    // Initialize plate enhancer (delayed and wrapped in try-catch)
+    setTimeout(() => {
+        try {
+            if (window.plateEnhancer && typeof window.plateEnhancer.init === 'function') {
+                window.plateEnhancer.init();
+            }
+        } catch (e) {
+            console.error('[PlateEnhancer] Init error (non-fatal):', e);
+        }
+    }, 2000);
 
     // Debug helper for export troubleshooting
     window.debugExport = () => {

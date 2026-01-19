@@ -1,0 +1,523 @@
+{
+  "_meta": {
+    "language": "French",
+    "locale": "fr",
+    "status": "complete"
+  },
+
+  "app": {
+    "title": "TeslaCamViewer.com",
+    "description": "Visualisez les enregistrements de la dashcam Tesla avec lecture synchronisée"
+  },
+
+  "header": {
+    "github": "GitHub",
+    "donate": "Faire un don",
+    "statistics": "Statistiques",
+    "keyboardShortcuts": "Raccourcis clavier (?)",
+    "settings": "Paramètres (,)",
+    "viewOnGitHub": "Voir sur GitHub",
+    "supportProject": "Soutenir ce projet"
+  },
+
+  "sidebar": {
+    "events": "Événements",
+    "map": "Carte",
+    "allDrives": "Tous les lecteurs",
+    "addDrive": "Ajouter un autre lecteur",
+    "manageDrives": "Gérer les lecteurs",
+    "syncDrives": "Synchroniser entre lecteurs",
+    "selectFolder": "Sélectionner le dossier TeslaCam",
+    "emptyState": "Cliquez sur \"Sélectionner le dossier TeslaCam\" pour commencer",
+    "emptyStateHint": "Vous pouvez sélectionner le dossier TeslaCam, ou tout dossier contenant des enregistrements de la dashcam Tesla"
+  },
+
+  "player": {
+    "noEventSelected": "Aucun événement sélectionné",
+    "selectEventHint": "👈 Sélectionnez un événement dans la barre latérale",
+    "noEventLoaded": "Aucun événement chargé",
+    "hidden": "Masquées:",
+    "fullscreen": "Plein écran",
+    "exitFullscreen": "Quitter le plein écran"
+  },
+
+  "cameras": {
+    "front": "Avant",
+    "back": "Arrière",
+    "left": "Gauche",
+    "right": "Droite",
+    "hideFront": "Masquer la caméra avant",
+    "hideBack": "Masquer la caméra arrière",
+    "hideLeft": "Masquer la caméra gauche",
+    "hideRight": "Masquer la caméra droite"
+  },
+
+  "controls": {
+    "play": "Lecture",
+    "pause": "Pause",
+    "previousFrame": "Image précédente (Maintenir pour ralenti)",
+    "nextFrame": "Image suivante (Maintenir pour ralenti)",
+    "previousClip": "Clip précédent",
+    "nextClip": "Clip suivant",
+    "previousEvent": "Événement précédent",
+    "nextEvent": "Événement suivant",
+    "screenshot": "Capturer l'écran",
+    "enhance": "Amélioration vidéo",
+    "markIn": "Marquer le point d'entrée",
+    "markOut": "Marquer le point de sortie",
+    "clearMarks": "Effacer les marqueurs",
+    "export": "Exporter toutes les caméras",
+    "exportOptions": "Options d'exportation",
+    "zoomOut": "Zoom arrière timeline",
+    "zoomIn": "Zoom avant timeline",
+    "resetZoom": "Réinitialiser le zoom",
+    "loop": "Boucle",
+    "speed": "Vitesse:",
+    "layout": "Disposition:",
+    "camera": "Caméra:"
+  },
+
+  "bookmarks": {
+    "title": "Signets",
+    "previous": "Signet précédent ([)",
+    "add": "Ajouter un signet (B)",
+    "next": "Signet suivant (])",
+    "manage": "Gérer les signets",
+    "clearAll": "Tout effacer",
+    "noBookmarks": "Pas encore de signets"
+  },
+
+  "export": {
+    "header": "Exporter la caméra",
+    "allCameras": "Toutes les caméras (Grille)",
+    "frontOnly": "Avant uniquement",
+    "rearOnly": "Arrière uniquement",
+    "leftOnly": "Gauche uniquement",
+    "rightOnly": "Droite uniquement",
+    "exporting": "Exportation {{percent}}%",
+    "preparing": "Préparation de l'exportation...",
+    "encoding": "Encodage de la vidéo...",
+    "complete": "Exportation terminée",
+    "cancelled": "Exportation annulée",
+    "failed": "Échec de l'exportation"
+  },
+
+  "layouts": {
+    "grid2x2": "Grille 2×2",
+    "layout63": "6:3 Centré",
+    "layout43": "4:3 Principal",
+    "all169": "Tout 16:9",
+    "frontLeft": "Avant + Gauche",
+    "frontRight": "Avant + Droite",
+    "frontRepeaters": "Avant + Répéteurs",
+    "focus": "Mode focus"
+  },
+
+  "loading": {
+    "loading": "Chargement...",
+    "buffering": "Mise en mémoire tampon...",
+    "bufferHealth": "État du tampon"
+  },
+
+  "notes": {
+    "title": "Notes et tags (N)",
+    "notes": "Notes",
+    "tags": "Tags",
+    "tagPlaceholder": "Tapez un tag, appuyez sur Entrée ou cliquez +",
+    "addTag": "Ajouter un tag",
+    "existingTags": "Tags existants",
+    "placeholder": "Ajouter des notes sur cet événement..."
+  },
+
+  "help": {
+    "title": "Raccourcis clavier",
+    "close": "Fermer",
+    "tip": "Astuce: La plupart des raccourcis ne fonctionnent que lorsque vous ne tapez pas dans un champ de texte",
+
+    "sections": {
+      "playback": "Lecture",
+      "navigation": "Navigation",
+      "viewLayout": "Affichage & Disposition",
+      "markingExport": "Marquage & Exportation",
+      "bookmarks": "Signets",
+      "speedControl": "Contrôle de vitesse",
+      "general": "Général"
+    },
+
+    "shortcuts": {
+      "playPause": "Lecture / Pause",
+      "previousFrame": "Image précédente",
+      "nextFrame": "Image suivante",
+      "slowMotion": "Lecture au ralenti",
+      "previousClip": "Clip précédent",
+      "nextClip": "Clip suivant",
+      "goToStart": "Aller au début",
+      "goToEnd": "Aller à la fin",
+      "previousEvent": "Événement précédent",
+      "nextEvent": "Événement suivant",
+      "selectPreviousEvent": "Sélectionner l'événement précédent",
+      "selectNextEvent": "Sélectionner l'événement suivant",
+      "cycleLayouts": "Parcourir les dispositions",
+      "focusCamera": "Focaliser la caméra (1=Avant, 2=Arrière, 3=Gauche, 4=Droite)",
+      "toggleFullscreen": "Basculer plein écran",
+      "focusCameraFullscreen": "Focaliser la caméra en plein écran",
+      "markIn": "Marquer le point d'entrée",
+      "markOut": "Marquer le point de sortie",
+      "clearMarks": "Effacer les marqueurs",
+      "takeScreenshot": "Prendre une capture d'écran",
+      "exportVideo": "Exporter la vidéo",
+      "addBookmark": "Ajouter un signet à la position actuelle",
+      "jumpToPreviousBookmark": "Aller au signet précédent",
+      "jumpToNextBookmark": "Aller au signet suivant",
+      "zoomTimeline": "Zoom avant/arrière (si activé dans les paramètres)",
+      "increaseSpeed": "Augmenter la vitesse",
+      "decreaseSpeed": "Diminuer la vitesse",
+      "resetSpeed": "Réinitialiser à vitesse 1x",
+      "showHelp": "Afficher cette aide",
+      "openSettings": "Ouvrir les paramètres",
+      "closeModal": "Fermer le modal / Effacer les marqueurs"
+    }
+  },
+
+  "settings": {
+    "title": "Paramètres",
+    "close": "Fermer",
+    "done": "Terminé",
+    "resetToDefaults": "Réinitialiser par défaut",
+    "confirmReset": "Réinitialiser tous les paramètres par défaut?",
+
+    "sections": {
+      "playback": "Lecture",
+      "performance": "Performance",
+      "ui": "Interface utilisateur",
+      "timeline": "Timeline",
+      "session": "Session",
+      "offline": "Mode hors ligne",
+      "accessibility": "Accessibilité",
+      "mobile": "Mobile",
+      "export": "Exportation",
+      "language": "Langue"
+    },
+
+    "language": {
+      "selectLanguage": "Langue",
+      "languageHint": "Sélectionnez votre langue préférée"
+    }
+  },
+
+  "filter": {
+    "search": "Rechercher des événements",
+    "type": "Type",
+    "date": "Date",
+    "all": "Tous",
+    "savedClips": "Clips sauvegardés",
+    "sentryClips": "Clips Sentinelle",
+    "recentClips": "Clips récents",
+    "clear": "Effacer les filtres",
+    "filters": "Filtres",
+    "eventTypes": "Types d'événements",
+    "onlyBookmarked": "Événements avec signets uniquement",
+    "onlyWithNotes": "Événements avec notes/tags uniquement",
+    "sortBy": "Trier par",
+    "newestFirst": "Plus récent d'abord",
+    "oldestFirst": "Plus ancien d'abord"
+  },
+
+  "map": {
+    "noLocation": "Aucune donnée de localisation",
+    "showAll": "Afficher tous les événements",
+    "centerOnEvent": "Centrer sur l'événement",
+    "toggleHeatmap": "Basculer la vue carte thermique",
+    "toggleStruggleZones": "Basculer les zones de difficulté Autopilot",
+    "loadingStruggleZones": "Chargement des données de désactivation AP...",
+    "struggleZonesLoaded": "{{count}} désactivations AP trouvées",
+    "togglePhantomBrakes": "Basculer les points chauds de freinage fantôme",
+    "loadingPhantomBrakes": "Chargement des données de freinage fantôme...",
+    "phantomBrakesLoaded": "{{count}} freinages fantômes trouvés",
+    "phantomBrakeHotspot": "Point chaud de freinage fantôme",
+    "phantomBrakesAtLocation": "{{count}} freinage(s) fantôme(s) à cet endroit",
+    "phantomBrakeTip": "Cet endroit a des freinages fantômes répétés - envisagez de le signaler à Tesla s'il s'agit d'un faux positif.",
+    "toggleDarkMode": "Basculer le mode sombre de la carte"
+  },
+
+  "statistics": {
+    "title": "Statistiques",
+    "close": "Fermer",
+    "recordingOverview": "Aperçu des enregistrements",
+    "totalEvents": "Événements totaux",
+    "totalClips": "Clips totaux",
+    "recordingTime": "Temps d'enregistrement",
+    "estStorage": "Stock. estimé",
+    "eventsLast14Days": "Événements - 14 derniers jours",
+    "eventTypes": "Types d'événements",
+    "saved": "Sauvegardé",
+    "sentry": "Sentinelle",
+    "recent": "Récent",
+    "triggerReasons": "Raisons de déclenchement",
+    "manualSave": "Sauvegarde manuelle",
+    "objectDetected": "Objet détecté",
+    "vehicleBump": "Choc véhicule",
+    "honk": "Klaxon",
+    "other": "Autre",
+    "unknown": "Inconnu",
+    "topLocations": "Top 10 des emplacements (Tous les événements)",
+    "sentryByTimeOfDay": "Événements sentinelle par heure",
+    "topSentryLocations": "Top emplacements sentinelle",
+    "dateRange": "Plage de dates",
+    "eventTrends": "Tendances des événements",
+    "weekly": "Hebdomadaire",
+    "monthly": "Mensuel",
+    "exportStatistics": "Exporter les statistiques",
+    "exportJson": "Exporter JSON",
+    "exportCsv": "Exporter CSV",
+    "noEvents": "Aucun événement chargé. Ouvrez d'abord un dossier TeslaCam.",
+    "noStatsToExport": "Aucune statistique à exporter",
+    "noTimelineData": "Aucune donnée chronologique disponible",
+    "noEventsLast14Days": "Aucun événement au cours des 14 derniers jours",
+    "noSentryEvents": "Aucun événement sentinelle à analyser",
+    "noTrendData": "Aucune donnée de tendance disponible",
+    "noLocationData": "Aucune donnée de localisation disponible",
+    "noSentryLocationData": "Aucune donnée de localisation sentinelle",
+    "events": "événements"
+  },
+
+  "errors": {
+    "folderNotFound": "Dossier introuvable",
+    "noVideosFound": "Aucune vidéo trouvée dans cet événement",
+    "loadFailed": "Échec du chargement de la vidéo",
+    "exportFailed": "Échec de l'exportation",
+    "browserNotSupported": "Votre navigateur ne prend pas en charge cette fonctionnalité",
+    "permissionDenied": "Permission refusée",
+    "fileAccessError": "Erreur d'accès au fichier"
+  },
+
+  "time": {
+    "hours": "h",
+    "minutes": "m",
+    "seconds": "s",
+    "ago": "il y a",
+    "justNow": "à l'instant"
+  },
+
+  "quickstart": {
+    "skip": "Passer",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "getStarted": "Commencer",
+    "welcome": {
+      "title": "Bienvenue sur TeslaCam Viewer",
+      "description": "Visualisez et gérez vos enregistrements de dashcam Tesla directement dans votre navigateur.",
+      "noUpload": "Aucun téléchargement requis",
+      "videosStay": "vos vidéos restent sur votre ordinateur.",
+      "language": "Langue"
+    },
+    "step1": {
+      "title": "Étape 1: Sélectionnez votre dossier TeslaCam",
+      "description": "Cliquez sur \"Sélectionner le dossier TeslaCam\" pour choisir votre clé USB ou dossier contenant les données TeslaCam.",
+      "hint": "Recherchez les dossiers nommés TeslaCam, SavedClips, SentryClips ou RecentClips."
+    },
+    "step2": {
+      "title": "Étape 2: Parcourir les événements",
+      "description": "Les événements apparaissent dans la barre latérale gauche, triés par date. Cliquez sur un événement pour le charger.",
+      "saved": "Sauvegardes manuelles de la dashcam",
+      "sentry": "Enregistrements déclenchés par mouvement",
+      "recent": "Enregistrement tampon roulant"
+    },
+    "step3": {
+      "title": "Étape 3: Voir les 4 caméras",
+      "description": "Regardez les 4 angles de caméra synchronisés: Avant, Arrière, Gauche et Droite.",
+      "tip": "Astuce",
+      "tipText": "Faites glisser les caméras pour échanger leurs positions, ou masquez celles dont vous n'avez pas besoin."
+    },
+    "shortcuts": {
+      "title": "Raccourcis clavier",
+      "playPause": "Lecture / Pause",
+      "seek": "Avancer de 5 secondes",
+      "screenshot": "Capture d'écran",
+      "markInOut": "Marquer entrée / sortie",
+      "export": "Exporter",
+      "showAll": "Afficher tous les raccourcis"
+    }
+  },
+
+  "driveManager": {
+    "title": "Gérer les lecteurs",
+    "noDrives": "Aucun lecteur ajouté",
+    "events": "événements",
+    "removeDrive": "Retirer le lecteur",
+    "addDrive": "Ajouter un lecteur",
+    "changeColor": "Cliquez pour changer la couleur"
+  },
+
+  "driveSync": {
+    "title": "Synchronisation des lecteurs",
+    "close": "Fermer (Esc)",
+    "settings": "Paramètres",
+    "sourceDestination": "Source et destination",
+    "selectSource": "Sélectionner la source...",
+    "selectDestination": "Sélectionner la destination...",
+    "compare": "Comparer",
+    "comparing": "Comparaison...",
+    "comparisonStats": "Statistiques de comparaison",
+    "selectDrivesToCompare": "Sélectionnez les lecteurs et comparez pour voir les statistiques",
+    "selectDrivesHint": "Sélectionnez les lecteurs à comparer",
+    "quickLoad": "Chargement rapide :",
+    "noPresets": "Aucun préréglage enregistré",
+    "save": "Enregistrer",
+    "copy": "Copier",
+    "move": "Déplacer",
+    "cancel": "Annuler",
+    "pause": "Pause",
+    "resume": "Reprendre",
+    "startSync": "Démarrer la synchronisation",
+    "done": "Terminé",
+    "preparing": "Préparation...",
+    "syncComplete": "Synchronisation terminée",
+    "syncFailed": "Synchronisation échouée",
+    "selected": "Sélectionnés :",
+    "events": "événements",
+    "missingOnDest": "Manquants sur la destination",
+    "newerOnSource": "Plus récents sur la source",
+    "differentSize": "Taille différente",
+    "alreadySynced": "Déjà synchronisés",
+    "includeNotes": "Inclure les notes et étiquettes",
+    "eta": "Temps restant :",
+    "sourceEvents": "Événements source",
+    "destEvents": "Événements destination",
+    "missing": "Manquants",
+    "newerCount": "Plus récents sur la source",
+    "synced": "Déjà synchronisés",
+    "syncCoverage": "Couverture de synchronisation",
+    "storageBreakdown": "Détail du stockage",
+    "sourceTotal": "Total source",
+    "destTotal": "Total destination",
+    "toTransfer": "À transférer",
+    "dateRange": "Plage de dates",
+    "source": "Source :",
+    "destination": "Destination :",
+    "eventsByType": "Événements par type",
+    "topLocations": "Principaux emplacements",
+    "noLocationData": "Aucune donnée de localisation disponible",
+    "eventsByMonth": "Événements par mois",
+    "noMonthlyData": "Aucune donnée mensuelle disponible",
+    "detailedBreakdown": "Détail des événements",
+    "allEvents": "Tous les événements",
+    "missingOnly": "Manquants uniquement",
+    "newerOnly": "Plus récents uniquement",
+    "syncedOnly": "Synchronisés uniquement",
+    "showingFirst": "Affichage des {{count}} premiers sur {{total}} événements"
+  },
+
+  "syncSettings": {
+    "title": "Paramètres de synchronisation",
+    "verifyAfterCopy": "Vérifier les fichiers après la copie",
+    "syncNotes": "Synchroniser les notes et étiquettes",
+    "writeSyncFile": "Écrire le fichier de configuration sur la destination",
+    "confirmBeforeDelete": "Confirmer avant de supprimer les fichiers source",
+    "noteConflict": "Résolution des conflits de notes :",
+    "askEachTime": "Demander à chaque fois",
+    "mergeAutomatically": "Fusionner automatiquement",
+    "saveSettings": "Enregistrer les paramètres",
+    "close": "Fermer"
+  },
+
+  "presets": {
+    "title": "Gérer les préréglages",
+    "noPresets": "Aucun préréglage enregistré. Sélectionnez des lecteurs et cliquez sur \"Enregistrer\".",
+    "importFromDrives": "Importer depuis les lecteurs",
+    "close": "Fermer",
+    "delete": "Supprimer",
+    "importedFrom": "Importé depuis",
+    "lastUsed": "Dernière utilisation :",
+    "deleteConfirm": "Supprimer le préréglage \"{{name}}\" ?",
+    "couldNotFind": "Impossible de trouver les lecteurs pour ce préréglage.",
+    "lookingFor": "Recherche de :",
+    "sourceLabel": "Source :",
+    "destLabel": "Destination :",
+    "makeSureLoaded": "Assurez-vous que les deux lecteurs sont chargés.",
+    "enterName": "Entrez un nom pour ce préréglage :",
+    "savedSuccess": "Préréglage enregistré avec succès !",
+    "imported": "{{count}} préréglages importés.",
+    "errors": "Erreurs :",
+    "noNewPresets": "Aucun nouveau préréglage trouvé sur les lecteurs."
+  },
+
+  "layoutEditor": {
+    "title": "Éditeur de disposition",
+    "close": "Fermer",
+    "new": "Nouveau",
+    "newLayout": "Nouvelle disposition",
+    "import": "Importer",
+    "importLayout": "Importer une disposition",
+    "export": "Exporter",
+    "exportLayout": "Exporter la disposition",
+    "snap": "Aimanter",
+    "aspect": "Format :",
+    "aspectWide": "Large",
+    "aspectUltraWide": "Ultra large",
+    "aspectTriple": "Triple",
+    "aspectCinematic": "Cinématique",
+    "selectedCamera": "Caméra sélectionnée",
+    "futureCamera": "Caméra future - pas encore disponible",
+    "position": "Position",
+    "size": "Taille",
+    "layer": "Calque",
+    "sendBackward": "Envoyer en arrière",
+    "bringForward": "Ramener en avant",
+    "fit": "Ajustement :",
+    "contain": "Contenir",
+    "cover": "Remplir",
+    "cropEdges": "Recadrer les bords",
+    "top": "Haut :",
+    "bottom": "Bas :",
+    "left": "Gauche :",
+    "right": "Droite :",
+    "cameras": "Caméras",
+    "savedLayouts": "Dispositions enregistrées",
+    "noLayouts": "Aucune disposition personnalisée enregistrée",
+    "cancel": "Annuler",
+    "saveLayout": "Enregistrer la disposition",
+    "layoutName": "Nom de la disposition",
+    "hint": "Cliquez pour sélectionner, glissez pour déplacer, coins pour redimensionner",
+    "untitled": "Disposition sans titre",
+    "invalidLayout": "Disposition invalide :",
+    "deleteConfirm": "Supprimer \"{{name}}\" ?",
+    "importFailed": "Échec de l'importation :",
+    "readFailed": "Échec de la lecture du fichier :",
+    "failedToSave": "Échec de l'enregistrement de la disposition",
+    "failedToUpdate": "Échec de la mise à jour de la disposition",
+    "soon": "Bientôt"
+  },
+
+  "common": {
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "yes": "Oui",
+    "no": "Non",
+    "ok": "OK",
+    "loading": "Chargement...",
+    "error": "Erreur",
+    "success": "Succès",
+    "warning": "Avertissement"
+  },
+
+  "incidentDetection": {
+    "toggleSlowMo": "Basculer ralenti d'incident",
+    "slowMoEnabled": "Ralenti d'incident: ACTIVÉ",
+    "slowMoDisabled": "Ralenti d'incident: DÉSACTIVÉ",
+    "slowMoIndicator": "RALENTI",
+    "slowMoScore": "Score: {{score}}/10",
+    "toggleBirdsEye": "Basculer vue aérienne",
+    "birdsEyeTitle": "Vue Aérienne",
+    "birdsEyeWaitingGps": "En attente des données GPS...",
+    "birdsEyeRadius": "{{radius}}m de rayon",
+    "birdsEyeLowG": "G Faible",
+    "birdsEyeMedG": "G Moyen",
+    "birdsEyeHighG": "G Élevé"
+  }
+}

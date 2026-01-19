@@ -10,6 +10,13 @@ class StatisticsManager {
     }
 
     /**
+     * Get translation helper
+     */
+    t(key) {
+        return window.i18n ? window.i18n.t(key) : key.split('.').pop();
+    }
+
+    /**
      * Set the events data for analysis
      * @param {Array} events - Array of parsed events from folderParser
      */
@@ -39,7 +46,18 @@ class StatisticsManager {
             eventsByDay: {},
             sentryByHour: new Array(24).fill(0),
             earliestEvent: null,
-            latestEvent: null
+            latestEvent: null,
+            // New statistics
+            triggeringCamera: {},
+            sentryByDayOfWeek: new Array(7).fill(0),
+            dayVsNight: { day: 0, night: 0 },
+            eventsWithTelemetry: 0,
+            highGForceEvents: 0,
+            maxGForce: 0,
+            autopilotEvents: 0,
+            totalAutopilotTime: 0,
+            speedStats: { max: 0, total: 0, count: 0 },
+            nearMissCount: 0
         };
 
         for (const event of this.events) {
@@ -60,6 +78,13 @@ class StatisticsManager {
             if (reason) {
                 const normalizedReason = this.normalizeTriggerReason(reason);
                 stats.triggerReasons[normalizedReason] = (stats.triggerReasons[normalizedReason] || 0) + 1;
+            }
+
+            // Track triggering camera for sentry events
+            const triggeringCamera = event.camera || event.metadata?.camera;
+            if (type === 'sentry' && triggeringCamera) {
+                const cameraName = this.normalizeCameraName(triggeringCamera);
+                stats.triggeringCamera[cameraName] = (stats.triggeringCamera[cameraName] || 0) + 1;
             }
 
             // Track locations (check both event.city and event.metadata.city)
@@ -83,9 +108,19 @@ class StatisticsManager {
                 stats.eventsByDay[dayKey] = (stats.eventsByDay[dayKey] || 0) + 1;
 
                 // Track sentry events by hour of day
+                const hour = date.getHours();
                 if (type === 'sentry') {
-                    const hour = date.getHours();
                     stats.sentryByHour[hour]++;
+                    // Track sentry by day of week (0=Sunday, 6=Saturday)
+                    const dayOfWeek = date.getDay();
+                    stats.sentryByDayOfWeek[dayOfWeek]++;
+                }
+
+                // Day vs Night classification (6am-8pm = day)
+                if (hour >= 6 && hour < 20) {
+                    stats.dayVsNight.day++;
+                } else {
+                    stats.dayVsNight.night++;
                 }
 
                 // Track earliest/latest
@@ -95,6 +130,11 @@ class StatisticsManager {
                 if (!stats.latestEvent || date > new Date(stats.latestEvent)) {
                     stats.latestEvent = event.timestamp;
                 }
+            }
+
+            // Check for telemetry data
+            if (event.hasTelemetry || event.telemetryFile) {
+                stats.eventsWithTelemetry++;
             }
         }
 
@@ -112,6 +152,31 @@ class StatisticsManager {
             .slice(0, 10);
 
         return stats;
+    }
+
+    /**
+     * Normalize camera ID to readable name
+     * @param {string|number} camera - Camera ID or name
+     * @returns {string} Normalized camera name
+     */
+    normalizeCameraName(camera) {
+        const cameraMap = {
+            '0': 'Front',
+            '1': 'Rear',
+            '2': 'Front Left',
+            '3': 'Front Right',
+            '4': 'Left Pillar',
+            '5': 'Left Repeater',
+            '6': 'Right Repeater',
+            '7': 'Right Pillar',
+            'front': 'Front',
+            'back': 'Rear',
+            'left_repeater': 'Left Repeater',
+            'right_repeater': 'Right Repeater',
+            'left_pillar': 'Left Pillar',
+            'right_pillar': 'Right Pillar'
+        };
+        return cameraMap[String(camera).toLowerCase()] || String(camera);
     }
 
     /**
@@ -172,12 +237,12 @@ class StatisticsManager {
      */
     createTimelineChart(data) {
         if (!data || data.length === 0) {
-            return '<p class="stats-empty">No timeline data available</p>';
+            return `<p class="stats-empty">${this.t('statistics.noTimelineData')}</p>`;
         }
 
         const hasEvents = data.some(d => d.count > 0);
         if (!hasEvents) {
-            return '<p class="stats-empty">No events in the last 14 days</p>';
+            return `<p class="stats-empty">${this.t('statistics.noEventsLast14Days')}</p>`;
         }
 
         return `
@@ -207,7 +272,7 @@ class StatisticsManager {
         const totalSentry = sentryByHour.reduce((a, b) => a + b, 0);
 
         if (totalSentry === 0) {
-            return '<p class="stats-empty">No sentry events to analyze</p>';
+            return `<p class="stats-empty">${this.t('statistics.noSentryEvents')}</p>`;
         }
 
         // Color gradient from night (dark blue) to day (yellow) to night
@@ -244,6 +309,127 @@ class StatisticsManager {
                 <span>12pm</span>
                 <span>6pm</span>
                 <span>12am</span>
+            </div>
+        `;
+    }
+
+    /**
+     * Create triggering camera distribution chart
+     * @param {Object} triggeringCamera - Object with camera names and counts
+     * @returns {string} HTML string
+     */
+    createCameraDistributionChart(triggeringCamera) {
+        const entries = Object.entries(triggeringCamera);
+        if (entries.length === 0) {
+            return `<p class="stats-empty">${this.t('statistics.noTriggeringCameraData')}</p>`;
+        }
+
+        const total = entries.reduce((sum, [_, count]) => sum + count, 0);
+        const colors = {
+            'Front': '#4a9eff',
+            'Rear': '#ff6b6b',
+            'Left Repeater': '#4caf50',
+            'Right Repeater': '#ff9800',
+            'Left Pillar': '#9c27b0',
+            'Right Pillar': '#00bcd4'
+        };
+
+        const sortedEntries = entries.sort((a, b) => b[1] - a[1]);
+        const eventsText = this.t('statistics.events');
+
+        return `
+            <div class="stats-camera-distribution">
+                ${sortedEntries.map(([camera, count]) => {
+                    const percent = Math.round((count / total) * 100);
+                    const color = colors[camera] || '#888';
+                    return `
+                        <div class="stats-camera-row">
+                            <span class="stats-camera-label" style="color: ${color}">${camera}</span>
+                            <div class="stats-camera-bar-track">
+                                <div class="stats-camera-bar-fill" style="width: ${percent}%; background: ${color}"></div>
+                            </div>
+                            <span class="stats-camera-value">${count} (${percent}%)</span>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    /**
+     * Create sentry by day of week chart
+     * @param {Array} sentryByDayOfWeek - Array of 7 daily counts (0=Sunday)
+     * @returns {string} HTML string
+     */
+    createDayOfWeekChart(sentryByDayOfWeek) {
+        const maxCount = Math.max(...sentryByDayOfWeek, 1);
+        const total = sentryByDayOfWeek.reduce((a, b) => a + b, 0);
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        if (total === 0) {
+            return `<p class="stats-empty">${this.t('statistics.noSentryEvents')}</p>`;
+        }
+
+        const bars = sentryByDayOfWeek.map((count, day) => {
+            const percent = (count / maxCount) * 100;
+            // Weekend vs weekday coloring
+            const color = (day === 0 || day === 6) ? '#ff9800' : '#4a9eff';
+            return `
+                <div class="stats-dow-bar" title="${dayNames[day]}: ${count} events">
+                    <div class="stats-dow-fill" style="height: ${Math.max(percent, count > 0 ? 5 : 0)}%; background: ${color}"></div>
+                    <span class="stats-dow-label">${dayNames[day]}</span>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="stats-dow-chart">
+                ${bars}
+            </div>
+            <div class="stats-dow-legend">
+                <span class="stats-legend-item"><span class="stats-legend-color" style="background: #4a9eff"></span>Weekday</span>
+                <span class="stats-legend-item"><span class="stats-legend-color" style="background: #ff9800"></span>Weekend</span>
+            </div>
+        `;
+    }
+
+    /**
+     * Create day vs night pie chart
+     * @param {Object} dayVsNight - Object with day and night counts
+     * @returns {string} HTML string
+     */
+    createDayNightChart(dayVsNight) {
+        const total = dayVsNight.day + dayVsNight.night;
+        if (total === 0) {
+            return `<p class="stats-empty">${this.t('statistics.noEventData')}</p>`;
+        }
+
+        const dayPercent = Math.round((dayVsNight.day / total) * 100);
+        const nightPercent = 100 - dayPercent;
+
+        return `
+            <div class="stats-day-night">
+                <div class="stats-day-night-visual">
+                    <div class="stats-dn-donut" style="--day-percent: ${dayPercent}">
+                        <div class="stats-dn-center">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="#ffc107">
+                                <path d="M6.76 4.84l-1.8-1.79-1.41 1.41 1.79 1.79 1.42-1.41zM4 10.5H1v2h3v-2zm9-9.95h-2V3.5h2V.55zm7.45 3.91l-1.41-1.41-1.79 1.79 1.41 1.41 1.79-1.79zm-3.21 13.7l1.79 1.8 1.41-1.41-1.8-1.79-1.4 1.4zM20 10.5v2h3v-2h-3zm-8-5c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm-1 16.95h2V19.5h-2v2.95zm-7.45-3.91l1.41 1.41 1.79-1.8-1.41-1.41-1.79 1.8z"/>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="stats-day-night-legend">
+                    <div class="stats-dn-item">
+                        <span class="stats-dn-color" style="background: #ffc107"></span>
+                        <span class="stats-dn-label">Day (6am-8pm)</span>
+                        <span class="stats-dn-value">${dayVsNight.day} (${dayPercent}%)</span>
+                    </div>
+                    <div class="stats-dn-item">
+                        <span class="stats-dn-color" style="background: #1a237e"></span>
+                        <span class="stats-dn-label">Night (8pm-6am)</span>
+                        <span class="stats-dn-value">${dayVsNight.night} (${nightPercent}%)</span>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -334,11 +520,12 @@ class StatisticsManager {
         const hasMonthlyData = monthlyData.some(d => d.count > 0);
 
         if (!hasWeeklyData && !hasMonthlyData) {
-            return '<p class="stats-empty">No trend data available</p>';
+            return `<p class="stats-empty">${this.t('statistics.noTrendData')}</p>`;
         }
 
+        const eventsText = this.t('statistics.events');
         const createBars = (data) => data.map(d => `
-            <div class="stats-trend-bar" title="${d.label}: ${d.count} events">
+            <div class="stats-trend-bar" title="${d.label}: ${d.count} ${eventsText}">
                 <div class="stats-trend-fill" style="height: ${Math.max(d.percent, d.count > 0 ? 5 : 0)}%"></div>
                 <span class="stats-trend-count">${d.count || ''}</span>
             </div>
@@ -346,8 +533,8 @@ class StatisticsManager {
 
         return `
             <div class="stats-trends-toggle">
-                <button class="stats-trend-btn active" data-mode="weekly">Weekly</button>
-                <button class="stats-trend-btn" data-mode="monthly">Monthly</button>
+                <button class="stats-trend-btn active" data-mode="weekly">${this.t('statistics.weekly')}</button>
+                <button class="stats-trend-btn" data-mode="monthly">${this.t('statistics.monthly')}</button>
             </div>
             <div class="stats-trends-container">
                 <div class="stats-trends-chart" id="weeklyTrends">
@@ -377,7 +564,7 @@ class StatisticsManager {
     exportStats(format = 'json') {
         const stats = this.calculateStats();
         if (!stats) {
-            alert('No statistics to export');
+            alert(this.t('statistics.noStatsToExport'));
             return;
         }
 
@@ -408,7 +595,16 @@ class StatisticsManager {
                 label: hour === 0 ? '12am' : hour === 12 ? '12pm' : hour > 12 ? `${hour - 12}pm` : `${hour}am`,
                 count: count
             })),
-            eventsByDay: stats.eventsByDay
+            eventsByDay: stats.eventsByDay,
+            // New statistics
+            triggeringCamera: stats.triggeringCamera,
+            sentryByDayOfWeek: stats.sentryByDayOfWeek.map((count, day) => ({
+                day: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day],
+                count: count
+            })),
+            dayVsNight: stats.dayVsNight,
+            eventsWithTelemetry: stats.eventsWithTelemetry,
+            telemetryPercentage: stats.totalEvents > 0 ? Math.round((stats.eventsWithTelemetry / stats.totalEvents) * 100) : 0
         };
 
         let blob, filename;
@@ -444,7 +640,23 @@ class StatisticsManager {
                 '',
                 '## Sentry Events by Hour',
                 'Hour,Count',
-                ...stats.sentryByHour.map((count, hour) => `${hour},${count}`)
+                ...stats.sentryByHour.map((count, hour) => `${hour},${count}`),
+                '',
+                '## Triggering Camera Distribution',
+                ...Object.entries(stats.triggeringCamera).map(([camera, count]) => `${camera},${count}`),
+                '',
+                '## Sentry by Day of Week',
+                'Day,Count',
+                ...stats.sentryByDayOfWeek.map((count, day) =>
+                    `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day]},${count}`),
+                '',
+                '## Day vs Night Events',
+                `Day (6am-8pm),${stats.dayVsNight.day}`,
+                `Night (8pm-6am),${stats.dayVsNight.night}`,
+                '',
+                '## Data Quality',
+                `Events with Telemetry,${stats.eventsWithTelemetry}`,
+                `Telemetry Percentage,${stats.totalEvents > 0 ? Math.round((stats.eventsWithTelemetry / stats.totalEvents) * 100) : 0}%`
             ];
             blob = new Blob([lines.join('\n')], { type: 'text/csv' });
             filename = `teslacam-stats-${new Date().toISOString().split('T')[0]}.csv`;
@@ -467,24 +679,24 @@ class StatisticsManager {
      * @returns {string} Normalized reason
      */
     normalizeTriggerReason(reason) {
-        if (!reason) return 'Unknown';
+        if (!reason) return this.t('statistics.unknown');
 
         const lowerReason = reason.toLowerCase();
 
         if (lowerReason.includes('user_interaction') || lowerReason.includes('dashcam_launcher')) {
-            return 'Manual Save';
+            return this.t('statistics.manualSave');
         }
         if (lowerReason.includes('object_detection')) {
-            return 'Object Detected';
+            return this.t('statistics.objectDetected');
         }
         if (lowerReason.includes('accel') || lowerReason.includes('bump')) {
-            return 'Vehicle Bump';
+            return this.t('statistics.vehicleBump');
         }
         if (lowerReason.includes('honk')) {
-            return 'Honk';
+            return this.t('statistics.honk');
         }
 
-        return 'Other';
+        return this.t('statistics.other');
     }
 
     /**
@@ -511,7 +723,7 @@ class StatisticsManager {
         const stats = this.calculateStats();
 
         if (!stats) {
-            alert('No events loaded. Open a TeslaCam folder first.');
+            alert(this.t('statistics.noEvents'));
             return;
         }
 
@@ -526,6 +738,11 @@ class StatisticsManager {
         const timelineChartHTML = this.createTimelineChart(timelineData);
         const timeOfDayChartHTML = this.createTimeOfDayChart(stats.sentryByHour);
         const trendsChartHTML = this.createTrendsChart(stats.eventsByDay);
+
+        // New chart data
+        const cameraDistributionHTML = this.createCameraDistributionChart(stats.triggeringCamera);
+        const dayOfWeekChartHTML = this.createDayOfWeekChart(stats.sentryByDayOfWeek);
+        const dayNightChartHTML = this.createDayNightChart(stats.dayVsNight);
 
         // Build trigger breakdown HTML
         const triggerHTML = Object.entries(stats.triggerReasons)
@@ -544,14 +761,15 @@ class StatisticsManager {
             }).join('');
 
         // Build locations HTML (top 10)
+        const eventsText = this.t('statistics.events');
         const locationsHTML = stats.topLocations
             .map(([location, count], index) => `
                 <div class="stats-location-row">
                     <span class="stats-location-rank">${index + 1}.</span>
                     <span class="stats-location-name">${location}</span>
-                    <span class="stats-location-count">${count} events</span>
+                    <span class="stats-location-count">${count} ${eventsText}</span>
                 </div>
-            `).join('') || '<p class="stats-empty">No location data available</p>';
+            `).join('') || `<p class="stats-empty">${this.t('statistics.noLocationData')}</p>`;
 
         // Build sentry locations HTML
         const sentryLocationsHTML = stats.sentryLocations.length > 0 ?
@@ -559,9 +777,9 @@ class StatisticsManager {
                 <div class="stats-location-row">
                     <span class="stats-location-rank">${index + 1}.</span>
                     <span class="stats-location-name">${location}</span>
-                    <span class="stats-location-count">${count} events</span>
+                    <span class="stats-location-count">${count} ${eventsText}</span>
                 </div>
-            `).join('') : '<p class="stats-empty">No sentry location data</p>';
+            `).join('') : `<p class="stats-empty">${this.t('statistics.noSentryLocationData')}</p>`;
 
         // Build event types HTML with icons
         const typeIcons = {
@@ -570,6 +788,11 @@ class StatisticsManager {
             recent: '<svg width="12" height="12" viewBox="0 0 24 24" fill="#9e9e9e"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>'
         };
         const typeColors = { saved: '#4caf50', sentry: '#f44336', recent: '#9e9e9e' };
+        const typeNames = {
+            saved: this.t('statistics.saved'),
+            sentry: this.t('statistics.sentry'),
+            recent: this.t('statistics.recent')
+        };
         const typesHTML = Object.entries(stats.eventsByType)
             .filter(([_, count]) => count > 0)
             .map(([type, count]) => {
@@ -579,7 +802,7 @@ class StatisticsManager {
                         <div class="stats-type-bar" style="width: ${percent}%; background: ${typeColors[type]}"></div>
                         <span class="stats-type-label">
                             ${typeIcons[type] || ''}
-                            ${type.charAt(0).toUpperCase() + type.slice(1)}: ${count}
+                            ${typeNames[type] || type}: ${count}
                         </span>
                     </div>
                 `;
@@ -595,9 +818,9 @@ class StatisticsManager {
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px; vertical-align: middle;">
                             <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
                         </svg>
-                        Statistics
+                        ${this.t('statistics.title')}
                     </h2>
-                    <button class="stats-close-btn" title="Close">
+                    <button class="stats-close-btn" title="${this.t('statistics.close')}">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                         </svg>
@@ -606,36 +829,36 @@ class StatisticsManager {
                 <div class="stats-content">
                     <!-- Overview Cards -->
                     <div class="stats-section">
-                        <h3>Recording Overview</h3>
+                        <h3>${this.t('statistics.recordingOverview')}</h3>
                         <div class="stats-grid stats-grid-4">
                             <div class="stats-card">
                                 <span class="stats-card-value">${stats.totalEvents}</span>
-                                <span class="stats-card-label">Total Events</span>
+                                <span class="stats-card-label">${this.t('statistics.totalEvents')}</span>
                             </div>
                             <div class="stats-card">
                                 <span class="stats-card-value">${stats.totalClips}</span>
-                                <span class="stats-card-label">Total Clips</span>
+                                <span class="stats-card-label">${this.t('statistics.totalClips')}</span>
                             </div>
                             <div class="stats-card">
                                 <span class="stats-card-value">${this.formatDuration(stats.totalRecordingTime)}</span>
-                                <span class="stats-card-label">Recording Time</span>
+                                <span class="stats-card-label">${this.t('statistics.recordingTime')}</span>
                             </div>
                             <div class="stats-card">
                                 <span class="stats-card-value">${storage.displayValue}</span>
-                                <span class="stats-card-label">Est. Storage</span>
+                                <span class="stats-card-label">${this.t('statistics.estStorage')}</span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Timeline Chart -->
                     <div class="stats-section">
-                        <h3>Events - Last 14 Days</h3>
+                        <h3>${this.t('statistics.eventsLast14Days')}</h3>
                         ${timelineChartHTML}
                     </div>
 
                     <!-- Event Types -->
                     <div class="stats-section">
-                        <h3>Event Types</h3>
+                        <h3>${this.t('statistics.eventTypes')}</h3>
                         <div class="stats-types">
                             ${typesHTML}
                         </div>
@@ -643,15 +866,15 @@ class StatisticsManager {
 
                     <!-- Trigger Breakdown -->
                     <div class="stats-section">
-                        <h3>Trigger Reasons</h3>
+                        <h3>${this.t('statistics.triggerReasons')}</h3>
                         <div class="stats-bars">
-                            ${triggerHTML || '<p class="stats-empty">No trigger data available</p>'}
+                            ${triggerHTML || `<p class="stats-empty">${this.t('statistics.noTrendData')}</p>`}
                         </div>
                     </div>
 
                     <!-- Top Locations -->
                     <div class="stats-section">
-                        <h3>Top 10 Locations (All Events)</h3>
+                        <h3>${this.t('statistics.topLocations')}</h3>
                         <div class="stats-locations">
                             ${locationsHTML}
                         </div>
@@ -660,7 +883,7 @@ class StatisticsManager {
                     <!-- Sentry Time of Day -->
                     ${stats.eventsByType.sentry > 0 ? `
                     <div class="stats-section">
-                        <h3>Sentry Events by Time of Day</h3>
+                        <h3>${this.t('statistics.sentryByTimeOfDay')}</h3>
                         ${timeOfDayChartHTML}
                     </div>
                     ` : ''}
@@ -668,17 +891,56 @@ class StatisticsManager {
                     <!-- Sentry Locations -->
                     ${stats.sentryLocations.length > 0 ? `
                     <div class="stats-section">
-                        <h3>Top Sentry Locations</h3>
+                        <h3>${this.t('statistics.topSentryLocations')}</h3>
                         <div class="stats-locations">
                             ${sentryLocationsHTML}
                         </div>
                     </div>
                     ` : ''}
 
+                    <!-- Triggering Camera Distribution -->
+                    ${Object.keys(stats.triggeringCamera).length > 0 ? `
+                    <div class="stats-section">
+                        <h3>${this.t('statistics.triggeringCamera')}</h3>
+                        ${cameraDistributionHTML}
+                    </div>
+                    ` : ''}
+
+                    <!-- Sentry by Day of Week -->
+                    ${stats.sentryByDayOfWeek.some(c => c > 0) ? `
+                    <div class="stats-section">
+                        <h3>${this.t('statistics.sentryByDayOfWeek')}</h3>
+                        ${dayOfWeekChartHTML}
+                    </div>
+                    ` : ''}
+
+                    <!-- Day vs Night Events -->
+                    <div class="stats-section">
+                        <h3>${this.t('statistics.dayVsNight')}</h3>
+                        ${dayNightChartHTML}
+                    </div>
+
+                    <!-- Data Quality Stats -->
+                    <div class="stats-section">
+                        <h3>${this.t('statistics.dataQuality')}</h3>
+                        <div class="stats-grid stats-grid-2">
+                            <div class="stats-card stats-card-small">
+                                <span class="stats-card-value">${stats.eventsWithTelemetry}</span>
+                                <span class="stats-card-label">${this.t('statistics.eventsWithTelemetry')}</span>
+                                <span class="stats-card-percent">${stats.totalEvents > 0 ? Math.round((stats.eventsWithTelemetry / stats.totalEvents) * 100) : 0}%</span>
+                            </div>
+                            <div class="stats-card stats-card-small">
+                                <span class="stats-card-value">${stats.totalEvents - stats.eventsWithTelemetry}</span>
+                                <span class="stats-card-label">${this.t('statistics.eventsWithoutTelemetry')}</span>
+                                <span class="stats-card-percent">${stats.totalEvents > 0 ? Math.round(((stats.totalEvents - stats.eventsWithTelemetry) / stats.totalEvents) * 100) : 0}%</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Date Range -->
                     ${stats.earliestEvent ? `
                     <div class="stats-section">
-                        <h3>Date Range</h3>
+                        <h3>${this.t('statistics.dateRange')}</h3>
                         <p class="stats-date-range">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                                 <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm-8 4H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/>
@@ -690,25 +952,25 @@ class StatisticsManager {
 
                     <!-- Trends Chart -->
                     <div class="stats-section">
-                        <h3>Event Trends</h3>
+                        <h3>${this.t('statistics.eventTrends')}</h3>
                         ${trendsChartHTML}
                     </div>
 
                     <!-- Export Buttons -->
                     <div class="stats-section stats-export-section">
-                        <h3>Export Statistics</h3>
+                        <h3>${this.t('statistics.exportStatistics')}</h3>
                         <div class="stats-export-buttons">
                             <button class="stats-export-btn" data-format="json">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                                 </svg>
-                                Export JSON
+                                ${this.t('statistics.exportJson')}
                             </button>
                             <button class="stats-export-btn" data-format="csv">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                                 </svg>
-                                Export CSV
+                                ${this.t('statistics.exportCsv')}
                             </button>
                         </div>
                     </div>

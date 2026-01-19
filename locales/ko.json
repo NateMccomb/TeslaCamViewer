@@ -1,0 +1,523 @@
+{
+  "_meta": {
+    "language": "Korean",
+    "locale": "ko",
+    "status": "complete"
+  },
+
+  "app": {
+    "title": "TeslaCamViewer.com",
+    "description": "테슬라 대시캠 영상을 동기화된 재생으로 시청"
+  },
+
+  "header": {
+    "github": "GitHub",
+    "donate": "기부",
+    "statistics": "통계",
+    "keyboardShortcuts": "키보드 단축키 (?)",
+    "settings": "설정 (,)",
+    "viewOnGitHub": "GitHub에서 보기",
+    "supportProject": "프로젝트 지원"
+  },
+
+  "sidebar": {
+    "events": "이벤트",
+    "map": "지도",
+    "allDrives": "모든 드라이브",
+    "addDrive": "다른 드라이브 추가",
+    "manageDrives": "드라이브 관리",
+    "syncDrives": "드라이브 간 동기화",
+    "selectFolder": "TeslaCam 폴더 선택",
+    "emptyState": "\"TeslaCam 폴더 선택\"을 클릭하여 시작하세요",
+    "emptyStateHint": "TeslaCam 폴더 또는 테슬라 대시캠 녹화가 포함된 폴더를 선택할 수 있습니다"
+  },
+
+  "player": {
+    "noEventSelected": "선택된 이벤트 없음",
+    "selectEventHint": "👈 사이드바에서 이벤트를 선택하세요",
+    "noEventLoaded": "로드된 이벤트 없음",
+    "hidden": "숨김:",
+    "fullscreen": "전체 화면",
+    "exitFullscreen": "전체 화면 종료"
+  },
+
+  "cameras": {
+    "front": "전방",
+    "back": "후방",
+    "left": "좌측",
+    "right": "우측",
+    "hideFront": "전방 카메라 숨기기",
+    "hideBack": "후방 카메라 숨기기",
+    "hideLeft": "좌측 카메라 숨기기",
+    "hideRight": "우측 카메라 숨기기"
+  },
+
+  "controls": {
+    "play": "재생",
+    "pause": "일시정지",
+    "previousFrame": "이전 프레임 (길게 누르면 슬로우 모션)",
+    "nextFrame": "다음 프레임 (길게 누르면 슬로우 모션)",
+    "previousClip": "이전 클립",
+    "nextClip": "다음 클립",
+    "previousEvent": "이전 이벤트",
+    "nextEvent": "다음 이벤트",
+    "screenshot": "스크린샷 캡처",
+    "enhance": "비디오 향상",
+    "markIn": "시작점 표시",
+    "markOut": "종료점 표시",
+    "clearMarks": "표시 지우기",
+    "export": "모든 카메라 내보내기",
+    "exportOptions": "내보내기 옵션",
+    "zoomOut": "타임라인 축소",
+    "zoomIn": "타임라인 확대",
+    "resetZoom": "확대/축소 재설정",
+    "loop": "반복",
+    "speed": "속도:",
+    "layout": "레이아웃:",
+    "camera": "카메라:"
+  },
+
+  "bookmarks": {
+    "title": "북마크",
+    "previous": "이전 북마크 ([)",
+    "add": "북마크 추가 (B)",
+    "next": "다음 북마크 (])",
+    "manage": "북마크 관리",
+    "clearAll": "모두 지우기",
+    "noBookmarks": "북마크 없음"
+  },
+
+  "export": {
+    "header": "카메라 내보내기",
+    "allCameras": "모든 카메라 (그리드)",
+    "frontOnly": "전방만",
+    "rearOnly": "후방만",
+    "leftOnly": "좌측만",
+    "rightOnly": "우측만",
+    "exporting": "내보내기 {{percent}}%",
+    "preparing": "내보내기 준비 중...",
+    "encoding": "비디오 인코딩 중...",
+    "complete": "내보내기 완료",
+    "cancelled": "내보내기 취소됨",
+    "failed": "내보내기 실패"
+  },
+
+  "layouts": {
+    "grid2x2": "2×2 그리드",
+    "layout63": "6:3 중앙",
+    "layout43": "4:3 메인",
+    "all169": "모두 16:9",
+    "frontLeft": "전방 + 좌측",
+    "frontRight": "전방 + 우측",
+    "frontRepeaters": "전방 + 리피터",
+    "focus": "포커스 모드"
+  },
+
+  "loading": {
+    "loading": "로딩 중...",
+    "buffering": "버퍼링 중...",
+    "bufferHealth": "버퍼 상태"
+  },
+
+  "notes": {
+    "title": "메모 및 태그 (N)",
+    "notes": "메모",
+    "tags": "태그",
+    "tagPlaceholder": "태그 입력, Enter 또는 + 클릭",
+    "addTag": "태그 추가",
+    "existingTags": "기존 태그",
+    "placeholder": "이 이벤트에 대한 메모 추가..."
+  },
+
+  "help": {
+    "title": "키보드 단축키",
+    "close": "닫기",
+    "tip": "팁: 대부분의 단축키는 텍스트 입력 중에는 작동하지 않습니다",
+
+    "sections": {
+      "playback": "재생",
+      "navigation": "탐색",
+      "viewLayout": "보기 및 레이아웃",
+      "markingExport": "마킹 및 내보내기",
+      "bookmarks": "북마크",
+      "speedControl": "속도 조절",
+      "general": "일반"
+    },
+
+    "shortcuts": {
+      "playPause": "재생 / 일시정지",
+      "previousFrame": "이전 프레임",
+      "nextFrame": "다음 프레임",
+      "slowMotion": "슬로우 모션 재생",
+      "previousClip": "이전 클립",
+      "nextClip": "다음 클립",
+      "goToStart": "처음으로 이동",
+      "goToEnd": "끝으로 이동",
+      "previousEvent": "이전 이벤트",
+      "nextEvent": "다음 이벤트",
+      "selectPreviousEvent": "이전 이벤트 선택",
+      "selectNextEvent": "다음 이벤트 선택",
+      "cycleLayouts": "레이아웃 순환",
+      "focusCamera": "카메라 포커스 (1=전방, 2=후방, 3=좌측, 4=우측)",
+      "toggleFullscreen": "전체 화면 전환",
+      "focusCameraFullscreen": "전체 화면에서 카메라 포커스",
+      "markIn": "시작점 표시",
+      "markOut": "종료점 표시",
+      "clearMarks": "표시 지우기",
+      "takeScreenshot": "스크린샷 캡처",
+      "exportVideo": "비디오 내보내기",
+      "addBookmark": "현재 위치에 북마크 추가",
+      "jumpToPreviousBookmark": "이전 북마크로 이동",
+      "jumpToNextBookmark": "다음 북마크로 이동",
+      "zoomTimeline": "확대/축소 (설정에서 활성화된 경우)",
+      "increaseSpeed": "속도 증가",
+      "decreaseSpeed": "속도 감소",
+      "resetSpeed": "1배속으로 재설정",
+      "showHelp": "이 도움말 표시",
+      "openSettings": "설정 열기",
+      "closeModal": "모달 닫기 / 표시 지우기"
+    }
+  },
+
+  "settings": {
+    "title": "설정",
+    "close": "닫기",
+    "done": "완료",
+    "resetToDefaults": "기본값으로 재설정",
+    "confirmReset": "모든 설정을 기본값으로 재설정하시겠습니까?",
+
+    "sections": {
+      "playback": "재생",
+      "performance": "성능",
+      "ui": "사용자 인터페이스",
+      "timeline": "타임라인",
+      "session": "세션",
+      "offline": "오프라인 모드",
+      "accessibility": "접근성",
+      "mobile": "모바일",
+      "export": "내보내기",
+      "language": "언어"
+    },
+
+    "language": {
+      "selectLanguage": "언어",
+      "languageHint": "선호하는 언어를 선택하세요"
+    }
+  },
+
+  "filter": {
+    "search": "이벤트 검색",
+    "type": "유형",
+    "date": "날짜",
+    "all": "전체",
+    "savedClips": "저장된 클립",
+    "sentryClips": "센트리 클립",
+    "recentClips": "최근 클립",
+    "clear": "필터 지우기",
+    "filters": "필터",
+    "eventTypes": "이벤트 유형",
+    "onlyBookmarked": "북마크된 이벤트만",
+    "onlyWithNotes": "메모/태그가 있는 이벤트만",
+    "sortBy": "정렬 기준",
+    "newestFirst": "최신순",
+    "oldestFirst": "오래된순"
+  },
+
+  "map": {
+    "noLocation": "위치 데이터 없음",
+    "showAll": "모든 이벤트 표시",
+    "centerOnEvent": "이벤트 중심으로",
+    "toggleHeatmap": "히트맵 보기 전환",
+    "toggleStruggleZones": "오토파일럿 문제 구역 전환",
+    "loadingStruggleZones": "AP 해제 데이터 로드 중...",
+    "struggleZonesLoaded": "{{count}}개의 AP 해제 발견",
+    "togglePhantomBrakes": "유령 제동 핫스팟 전환",
+    "loadingPhantomBrakes": "유령 제동 데이터 로드 중...",
+    "phantomBrakesLoaded": "{{count}}개의 유령 제동 발견",
+    "phantomBrakeHotspot": "유령 제동 핫스팟",
+    "phantomBrakesAtLocation": "이 위치에서 {{count}}개의 유령 제동",
+    "phantomBrakeTip": "이 위치에서 반복적인 유령 제동이 발생합니다 - 오탐인 경우 Tesla에 보고를 고려하세요.",
+    "toggleDarkMode": "지도 다크 모드 전환"
+  },
+
+  "statistics": {
+    "title": "통계",
+    "close": "닫기",
+    "recordingOverview": "녹화 개요",
+    "totalEvents": "총 이벤트",
+    "totalClips": "총 클립",
+    "recordingTime": "녹화 시간",
+    "estStorage": "예상 저장 용량",
+    "eventsLast14Days": "이벤트 - 최근 14일",
+    "eventTypes": "이벤트 유형",
+    "saved": "저장됨",
+    "sentry": "센트리",
+    "recent": "최근",
+    "triggerReasons": "트리거 이유",
+    "manualSave": "수동 저장",
+    "objectDetected": "물체 감지",
+    "vehicleBump": "차량 충격",
+    "honk": "경적",
+    "other": "기타",
+    "unknown": "알 수 없음",
+    "topLocations": "상위 10개 위치 (모든 이벤트)",
+    "sentryByTimeOfDay": "시간대별 센트리 이벤트",
+    "topSentryLocations": "상위 센트리 위치",
+    "dateRange": "날짜 범위",
+    "eventTrends": "이벤트 추세",
+    "weekly": "주간",
+    "monthly": "월간",
+    "exportStatistics": "통계 내보내기",
+    "exportJson": "JSON 내보내기",
+    "exportCsv": "CSV 내보내기",
+    "noEvents": "로드된 이벤트가 없습니다. TeslaCam 폴더를 먼저 여세요.",
+    "noStatsToExport": "내보낼 통계가 없습니다",
+    "noTimelineData": "타임라인 데이터가 없습니다",
+    "noEventsLast14Days": "최근 14일 동안 이벤트가 없습니다",
+    "noSentryEvents": "분석할 센트리 이벤트가 없습니다",
+    "noTrendData": "추세 데이터가 없습니다",
+    "noLocationData": "위치 데이터가 없습니다",
+    "noSentryLocationData": "센트리 위치 데이터가 없습니다",
+    "events": "이벤트"
+  },
+
+  "errors": {
+    "folderNotFound": "폴더를 찾을 수 없음",
+    "noVideosFound": "이 이벤트에 비디오가 없습니다",
+    "loadFailed": "비디오 로드 실패",
+    "exportFailed": "내보내기 실패",
+    "browserNotSupported": "브라우저가 이 기능을 지원하지 않습니다",
+    "permissionDenied": "권한이 거부되었습니다",
+    "fileAccessError": "파일 액세스 오류"
+  },
+
+  "time": {
+    "hours": "시간",
+    "minutes": "분",
+    "seconds": "초",
+    "ago": "전",
+    "justNow": "방금"
+  },
+
+  "quickstart": {
+    "skip": "건너뛰기",
+    "previous": "이전",
+    "next": "다음",
+    "getStarted": "시작하기",
+    "welcome": {
+      "title": "TeslaCam Viewer에 오신 것을 환영합니다",
+      "description": "브라우저에서 직접 테슬라 대시캠 영상을 보고 관리하세요.",
+      "noUpload": "업로드 불필요",
+      "videosStay": "영상은 컴퓨터에 그대로 유지됩니다.",
+      "language": "언어"
+    },
+    "step1": {
+      "title": "1단계: TeslaCam 폴더 선택",
+      "description": "\"TeslaCam 폴더 선택\" 버튼을 클릭하여 TeslaCam 데이터가 있는 USB 드라이브 또는 폴더를 선택하세요.",
+      "hint": "TeslaCam, SavedClips, SentryClips 또는 RecentClips라는 이름의 폴더를 찾으세요."
+    },
+    "step2": {
+      "title": "2단계: 이벤트 탐색",
+      "description": "이벤트가 왼쪽 사이드바에 날짜순으로 표시됩니다. 이벤트를 클릭하여 로드하세요.",
+      "saved": "대시캠에서 수동 저장",
+      "sentry": "모션 감지 녹화",
+      "recent": "롤링 버퍼 영상"
+    },
+    "step3": {
+      "title": "3단계: 4개 카메라 보기",
+      "description": "전방, 후방, 좌측, 우측 4개 카메라 앵글을 동기화하여 시청하세요.",
+      "tip": "팁",
+      "tipText": "카메라를 드래그하여 위치를 바꾸거나 필요 없는 카메라를 숨길 수 있습니다."
+    },
+    "shortcuts": {
+      "title": "키보드 단축키",
+      "playPause": "재생 / 일시정지",
+      "seek": "5초 이동",
+      "screenshot": "스크린샷",
+      "markInOut": "시작점 / 종료점 표시",
+      "export": "내보내기",
+      "showAll": "모든 단축키 보기"
+    }
+  },
+
+  "driveManager": {
+    "title": "드라이브 관리",
+    "noDrives": "추가된 드라이브 없음",
+    "events": "이벤트",
+    "removeDrive": "드라이브 제거",
+    "addDrive": "드라이브 추가",
+    "changeColor": "클릭하여 색상 변경"
+  },
+
+  "driveSync": {
+    "title": "드라이브 동기화",
+    "close": "닫기 (Esc)",
+    "settings": "설정",
+    "sourceDestination": "소스 및 대상",
+    "selectSource": "소스 선택...",
+    "selectDestination": "대상 선택...",
+    "compare": "비교",
+    "comparing": "비교 중...",
+    "comparisonStats": "비교 통계",
+    "selectDrivesToCompare": "드라이브를 선택하고 비교하여 통계 보기",
+    "selectDrivesHint": "비교할 드라이브 선택",
+    "quickLoad": "빠른 로드:",
+    "noPresets": "저장된 프리셋 없음",
+    "save": "저장",
+    "copy": "복사",
+    "move": "이동",
+    "cancel": "취소",
+    "pause": "일시정지",
+    "resume": "재개",
+    "startSync": "동기화 시작",
+    "done": "완료",
+    "preparing": "준비 중...",
+    "syncComplete": "동기화 완료",
+    "syncFailed": "동기화 실패",
+    "selected": "선택됨:",
+    "events": "이벤트",
+    "missingOnDest": "대상에 없음",
+    "newerOnSource": "소스가 더 최신",
+    "differentSize": "크기 다름",
+    "alreadySynced": "이미 동기화됨",
+    "includeNotes": "메모 및 태그 포함",
+    "eta": "남은 시간:",
+    "sourceEvents": "소스 이벤트",
+    "destEvents": "대상 이벤트",
+    "missing": "없음",
+    "newerCount": "소스가 더 최신",
+    "synced": "이미 동기화됨",
+    "syncCoverage": "동기화 범위",
+    "storageBreakdown": "저장소 세부정보",
+    "sourceTotal": "소스 합계",
+    "destTotal": "대상 합계",
+    "toTransfer": "전송 예정",
+    "dateRange": "날짜 범위",
+    "source": "소스:",
+    "destination": "대상:",
+    "eventsByType": "유형별 이벤트",
+    "topLocations": "주요 위치",
+    "noLocationData": "위치 데이터 없음",
+    "eventsByMonth": "월별 이벤트",
+    "noMonthlyData": "월별 데이터 없음",
+    "detailedBreakdown": "상세 이벤트 분류",
+    "allEvents": "모든 이벤트",
+    "missingOnly": "없는 것만",
+    "newerOnly": "최신 것만",
+    "syncedOnly": "동기화된 것만",
+    "showingFirst": "{{total}}개 중 처음 {{count}}개 표시"
+  },
+
+  "syncSettings": {
+    "title": "동기화 설정",
+    "verifyAfterCopy": "복사 후 파일 확인",
+    "syncNotes": "메모 및 태그 동기화",
+    "writeSyncFile": "대상에 동기화 설정 파일 쓰기",
+    "confirmBeforeDelete": "소스 파일 삭제 전 확인",
+    "noteConflict": "메모 충돌 해결:",
+    "askEachTime": "매번 묻기",
+    "mergeAutomatically": "자동 병합",
+    "saveSettings": "설정 저장",
+    "close": "닫기"
+  },
+
+  "presets": {
+    "title": "프리셋 관리",
+    "noPresets": "저장된 프리셋이 없습니다. 드라이브를 선택하고 \"저장\"을 클릭하세요.",
+    "importFromDrives": "드라이브에서 가져오기",
+    "close": "닫기",
+    "delete": "삭제",
+    "importedFrom": "가져온 위치",
+    "lastUsed": "마지막 사용:",
+    "deleteConfirm": "프리셋 \"{{name}}\"을(를) 삭제하시겠습니까?",
+    "couldNotFind": "이 프리셋의 드라이브를 찾을 수 없습니다.",
+    "lookingFor": "찾는 중:",
+    "sourceLabel": "소스:",
+    "destLabel": "대상:",
+    "makeSureLoaded": "두 드라이브가 모두 로드되었는지 확인하세요.",
+    "enterName": "이 프리셋의 이름 입력:",
+    "savedSuccess": "프리셋이 저장되었습니다!",
+    "imported": "{{count}}개의 프리셋을 가져왔습니다.",
+    "errors": "오류:",
+    "noNewPresets": "드라이브에서 새 프리셋을 찾을 수 없습니다."
+  },
+
+  "layoutEditor": {
+    "title": "레이아웃 편집기",
+    "close": "닫기",
+    "new": "새로 만들기",
+    "newLayout": "새 레이아웃",
+    "import": "가져오기",
+    "importLayout": "레이아웃 가져오기",
+    "export": "내보내기",
+    "exportLayout": "레이아웃 내보내기",
+    "snap": "스냅",
+    "aspect": "종횡비:",
+    "aspectWide": "와이드",
+    "aspectUltraWide": "울트라와이드",
+    "aspectTriple": "트리플",
+    "aspectCinematic": "시네마틱",
+    "selectedCamera": "선택된 카메라",
+    "futureCamera": "미래 카메라 - 아직 사용 불가",
+    "position": "위치",
+    "size": "크기",
+    "layer": "레이어",
+    "sendBackward": "뒤로 보내기",
+    "bringForward": "앞으로 가져오기",
+    "fit": "맞춤:",
+    "contain": "포함",
+    "cover": "채우기",
+    "cropEdges": "가장자리 자르기",
+    "top": "위:",
+    "bottom": "아래:",
+    "left": "왼쪽:",
+    "right": "오른쪽:",
+    "cameras": "카메라",
+    "savedLayouts": "저장된 레이아웃",
+    "noLayouts": "아직 사용자 정의 레이아웃이 없습니다",
+    "cancel": "취소",
+    "saveLayout": "레이아웃 저장",
+    "layoutName": "레이아웃 이름",
+    "hint": "클릭하여 선택, 드래그하여 이동, 모서리를 드래그하여 크기 조정",
+    "untitled": "제목 없는 레이아웃",
+    "invalidLayout": "잘못된 레이아웃:",
+    "deleteConfirm": "\"{{name}}\"을(를) 삭제하시겠습니까?",
+    "importFailed": "가져오기 실패:",
+    "readFailed": "파일 읽기 실패:",
+    "failedToSave": "레이아웃 저장 실패",
+    "failedToUpdate": "레이아웃 업데이트 실패",
+    "soon": "곧 출시"
+  },
+
+  "common": {
+    "close": "닫기",
+    "cancel": "취소",
+    "save": "저장",
+    "delete": "삭제",
+    "edit": "편집",
+    "add": "추가",
+    "remove": "제거",
+    "yes": "예",
+    "no": "아니오",
+    "ok": "확인",
+    "loading": "로딩 중...",
+    "error": "오류",
+    "success": "성공",
+    "warning": "경고"
+  },
+
+  "incidentDetection": {
+    "toggleSlowMo": "사고 슬로우모션 전환",
+    "slowMoEnabled": "사고 슬로우모션: 켜짐",
+    "slowMoDisabled": "사고 슬로우모션: 꺼짐",
+    "slowMoIndicator": "슬로우모션",
+    "slowMoScore": "점수: {{score}}/10",
+    "toggleBirdsEye": "조감도 전환",
+    "birdsEyeTitle": "조감도",
+    "birdsEyeWaitingGps": "GPS 데이터 대기 중...",
+    "birdsEyeRadius": "{{radius}}m 반경",
+    "birdsEyeLowG": "낮은 G",
+    "birdsEyeMedG": "중간 G",
+    "birdsEyeHighG": "높은 G"
+  }
+}

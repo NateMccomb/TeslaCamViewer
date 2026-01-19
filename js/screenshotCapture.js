@@ -8,7 +8,7 @@ class ScreenshotCapture {
     }
 
     /**
-     * Capture current frame from all 4 cameras as a composite image
+     * Capture current frame using the current layout
      * @param {Object} options - Capture options
      * @param {boolean} options.includeTimestamp - Add timestamp overlay
      * @param {string} options.format - 'png' or 'jpeg'
@@ -25,8 +25,9 @@ class ScreenshotCapture {
         // Get all video elements
         const videos = this.videoPlayer.videos;
 
-        // Check if videos are loaded
-        if (!videos.front.src) {
+        // Check if any video is loaded
+        const hasVideo = Object.values(videos).some(v => v && v.src);
+        if (!hasVideo) {
             throw new Error('No video loaded');
         }
 
@@ -34,13 +35,33 @@ class ScreenshotCapture {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
-        // Get video dimensions from front camera
-        const videoWidth = videos.front.videoWidth;
-        const videoHeight = videos.front.videoHeight;
+        // Get video dimensions from first available video
+        const firstVideo = Object.values(videos).find(v => v && v.src && v.videoWidth);
+        const videoWidth = firstVideo?.videoWidth || 1280;
+        const videoHeight = firstVideo?.videoHeight || 960;
 
-        // Set canvas size for 2x2 grid
-        canvas.width = videoWidth * 2;
-        canvas.height = videoHeight * 2;
+        // Try to use the current layout from layoutManager
+        const layoutManager = window.app?.layoutManager;
+        let layoutConfig = null;
+
+        if (layoutManager && layoutManager.renderer) {
+            layoutConfig = layoutManager.getCurrentConfig();
+            if (layoutConfig) {
+                // Calculate export config to get proper canvas dimensions
+                const exportConfig = layoutManager.renderer.calculateExportConfig(
+                    layoutConfig, videoWidth, videoHeight
+                );
+                canvas.width = exportConfig.canvasWidth;
+                canvas.height = exportConfig.canvasHeight;
+                layoutConfig = exportConfig; // Use export config with calculated positions
+            }
+        }
+
+        // Fallback to 2x2 grid if no layout available
+        if (!layoutConfig) {
+            canvas.width = videoWidth * 2;
+            canvas.height = videoHeight * 2;
+        }
 
         // Fill background with black
         ctx.fillStyle = '#000000';
@@ -55,28 +76,103 @@ class ScreenshotCapture {
             }
         }
 
-        // Draw each video to canvas in 2x2 grid
-        // Top left: Front
-        ctx.drawImage(videos.front, 0, 0, videoWidth, videoHeight);
+        if (layoutConfig && layoutConfig.cameras) {
+            // Draw using current layout configuration
+            // Camera names in config match video element keys directly
+            const sortedCameras = Object.entries(layoutConfig.cameras)
+                .filter(([name, cam]) => cam.visible && cam.w > 0 && cam.h > 0)
+                .sort((a, b) => (a[1].zIndex || 1) - (b[1].zIndex || 1));
 
-        // Top right: Back
-        ctx.drawImage(videos.back, videoWidth, 0, videoWidth, videoHeight);
+            for (const [cameraName, camConfig] of sortedCameras) {
+                const video = videos[cameraName];
 
-        // Bottom left: Left Repeater
-        ctx.drawImage(videos.left_repeater, 0, videoHeight, videoWidth, videoHeight);
+                if (!video || !video.src || video.readyState < 2) continue;
 
-        // Bottom right: Right Repeater
-        ctx.drawImage(videos.right_repeater, videoWidth, videoHeight, videoWidth, videoHeight);
+                const crop = camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 };
+                const dx = camConfig.x;
+                const dy = camConfig.y;
+                const dw = camConfig.w;
+                const dh = camConfig.h;
 
-        // Reset filter for labels and overlays
-        ctx.filter = 'none';
+                const vw = video.videoWidth;
+                const vh = video.videoHeight;
+                const sx = vw * (crop.left / 100);
+                const sy = vh * (crop.top / 100);
+                const sw = vw * (1 - crop.left / 100 - crop.right / 100);
+                const sh = vh * (1 - crop.top / 100 - crop.bottom / 100);
 
-        // Add camera labels
-        this.addCameraLabels(ctx, videoWidth, videoHeight);
+                ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
+            }
 
-        // Add timestamp overlay if requested
-        if (includeTimestamp) {
+            // Reset filter for labels
+            ctx.filter = 'none';
+
+            // Add camera labels for layout
+            this.addCameraLabelsForLayout(ctx, layoutConfig);
+        } else {
+            // Fallback: Draw 2x2 grid
+            if (videos.front?.src) ctx.drawImage(videos.front, 0, 0, videoWidth, videoHeight);
+            if (videos.back?.src) ctx.drawImage(videos.back, videoWidth, 0, videoWidth, videoHeight);
+            if (videos.left_repeater?.src) ctx.drawImage(videos.left_repeater, 0, videoHeight, videoWidth, videoHeight);
+            if (videos.right_repeater?.src) ctx.drawImage(videos.right_repeater, videoWidth, videoHeight, videoWidth, videoHeight);
+
+            // Reset filter for labels
+            ctx.filter = 'none';
+
+            // Add camera labels for 2x2 grid
+            this.addCameraLabels(ctx, videoWidth, videoHeight);
+        }
+
+        // Check privacy mode setting
+        const settings = window.app?.settingsManager;
+        const privacyMode = settings && settings.get('privacyModeExport') === true;
+
+        // Add timestamp overlay if requested (skipped in privacy mode)
+        if (includeTimestamp && !privacyMode) {
             this.addTimestampOverlay(ctx, canvas.width, canvas.height);
+        }
+
+        // Add telemetry overlay if enabled (skipped in privacy mode)
+        const telemetryEnabled = !settings || settings.get('telemetryOverlayInExport') !== false;
+
+        if (!privacyMode && window.app?.telemetryOverlay && telemetryEnabled && window.app.telemetryOverlay.hasTelemetryData()) {
+            const clipIndex = this.videoPlayer.currentClipIndex || 0;
+            const timeInClip = this.videoPlayer.getCurrentTime() || 0;
+            const videoDuration = this.videoPlayer.getCurrentDuration() || 60;
+
+            window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+            const telemetryData = window.app.telemetryOverlay.currentData;
+
+            if (telemetryData) {
+                try {
+                    window.app.telemetryOverlay.renderToCanvas(ctx, canvas.width, canvas.height, telemetryData, { blinkState: true });
+                } catch (e) {
+                    console.error('[Screenshot] Telemetry render error:', e);
+                }
+            }
+        }
+
+        // Add Mini-Map overlay if enabled (skipped in privacy mode)
+        const miniMapEnabled = !settings || settings.get('miniMapInExport') !== false;
+        if (!privacyMode && window.app?.miniMapOverlay?.isVisible && miniMapEnabled) {
+            const telemetryData = window.app.telemetryOverlay?.currentData;
+            if (telemetryData?.latitude_deg && telemetryData?.longitude_deg) {
+                try {
+                    // Pre-cache tiles for current position before drawing
+                    await window.app.miniMapOverlay.preCacheTilesForExport([
+                        { lat: telemetryData.latitude_deg, lng: telemetryData.longitude_deg }
+                    ]);
+
+                    window.app.miniMapOverlay.updatePositionForExport(
+                        telemetryData.latitude_deg,
+                        telemetryData.longitude_deg,
+                        telemetryData.heading_deg || 0
+                    );
+                    window.app.miniMapOverlay.drawToCanvas(ctx, canvas.width, canvas.height);
+                } catch (e) {
+                    console.error('[Screenshot] Mini-Map render error:', e);
+                }
+            }
         }
 
         // Convert canvas to blob
@@ -92,6 +188,29 @@ class ScreenshotCapture {
 
         // Trigger download
         this.downloadBlob(blob, filename);
+    }
+
+    /**
+     * Add camera labels for current layout
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {Object} layoutConfig - Layout configuration with cameras
+     */
+    addCameraLabelsForLayout(ctx, layoutConfig) {
+        const cameraLabels = {
+            front: 'Front',
+            back: 'Back',
+            left_repeater: 'Left',
+            right_repeater: 'Right',
+            left_pillar: 'Left Pillar',
+            right_pillar: 'Right Pillar'
+        };
+
+        for (const [cameraName, camConfig] of Object.entries(layoutConfig.cameras)) {
+            if (!camConfig.visible || camConfig.w <= 0 || camConfig.h <= 0) continue;
+
+            const label = cameraLabels[cameraName] || cameraName;
+            this.addCameraLabel(ctx, label, camConfig.x + 10, camConfig.y + 30);
+        }
     }
 
     /**
@@ -135,11 +254,15 @@ class ScreenshotCapture {
         // Reset filter for labels and overlays
         ctx.filter = 'none';
 
-        // Add camera label
+        // Add camera label (kept even in privacy mode)
         this.addCameraLabel(ctx, camera, 10, 30);
 
-        // Add timestamp overlay if requested
-        if (includeTimestamp) {
+        // Check privacy mode setting
+        const settings = window.app?.settingsManager;
+        const privacyMode = settings && settings.get('privacyModeExport') === true;
+
+        // Add timestamp overlay if requested (skipped in privacy mode)
+        if (includeTimestamp && !privacyMode) {
             this.addTimestampOverlay(ctx, canvas.width, canvas.height);
         }
 

@@ -42,6 +42,8 @@ class Timeline {
         this.bookmarks = [];
         this.currentEventId = null; // Track which event's bookmarks we're managing
         this.BOOKMARKS_STORAGE_KEY = 'teslacamviewer_bookmarks';
+        this.bookmarkJumpTime = 0; // Timestamp of last bookmark jump (for ignoring timeupdate temporarily)
+        this.lastJumpedBookmarkId = null; // Track the bookmark we just jumped to
 
         // Event lookup for backup
         this.eventLookup = new Map(); // eventKey -> event object with folderHandle
@@ -498,6 +500,7 @@ class Timeline {
 
         // Add clip markers
         if (this._lastClipGroups && this._lastClipGroups.length > 0) {
+            const cachedDurations = window.app?.videoPlayer?.cachedClipDurations || [];
             let accumulatedTime = 0;
             for (let i = 0; i < this._lastClipGroups.length; i++) {
                 if (i > 0) {
@@ -507,7 +510,8 @@ class Timeline {
                     marker.style.left = `${percent}%`;
                     this.minimapMarkers.appendChild(marker);
                 }
-                accumulatedTime += 60; // Approximate clip duration
+                // Use cached duration if available, otherwise fallback to 60s
+                accumulatedTime += cachedDurations[i] || 60;
             }
         }
 
@@ -528,6 +532,19 @@ class Timeline {
             marker.style.left = `${percent}%`;
             marker.title = bookmark.label;
             this.minimapMarkers.appendChild(marker);
+        }
+
+        // Add near-miss markers (score >= 5 only)
+        if (this._nearMisses && this._nearMisses.length > 0) {
+            const flaggedNearMisses = this._nearMisses.filter(nm => nm.score >= 5);
+            for (const nearMiss of flaggedNearMisses) {
+                const percent = (nearMiss.time / this.totalDuration) * 100;
+                const marker = document.createElement('div');
+                marker.className = `minimap-near-miss-marker severity-${nearMiss.severity}`;
+                marker.style.left = `${percent}%`;
+                marker.title = `Near-Miss: Score ${nearMiss.score.toFixed(1)}`;
+                this.minimapMarkers.appendChild(marker);
+            }
         }
     }
 
@@ -566,11 +583,6 @@ class Timeline {
      * Zoom in on timeline (increase zoom level)
      */
     zoomIn() {
-        if (!this.zoomEnabled) {
-            console.log('Zoom is disabled. Enable it in Settings > Timeline.');
-            return;
-        }
-
         const newZoom = Math.min(this.maxZoom, this.zoomLevel + 0.5);
         if (newZoom !== this.zoomLevel) {
             // Keep current time centered
@@ -595,11 +607,6 @@ class Timeline {
      * Zoom out on timeline (decrease zoom level)
      */
     zoomOut() {
-        if (!this.zoomEnabled) {
-            console.log('Zoom is disabled. Enable it in Settings > Timeline.');
-            return;
-        }
-
         const newZoom = Math.max(this.minZoom, this.zoomLevel - 0.5);
         if (newZoom !== this.zoomLevel) {
             // Keep current time centered
@@ -672,7 +679,7 @@ class Timeline {
      */
     rerenderClipMarkers() {
         // Remove existing clip markers
-        const existingMarkers = this.clipsContainer.querySelectorAll('.clip-marker, .sentry-trigger-marker');
+        const existingMarkers = this.clipsContainer.querySelectorAll('.clip-marker, .sentry-trigger-marker, .near-miss-marker');
         existingMarkers.forEach(m => m.remove());
 
         // Re-add if we have stored clip group info
@@ -681,6 +688,9 @@ class Timeline {
         }
         if (this._sentryTriggerTime) {
             this.setSentryTriggerMarker(this._sentryTriggerTime);
+        }
+        if (this._nearMisses) {
+            this.setNearMissMarkers(this._nearMisses);
         }
     }
 
@@ -889,6 +899,24 @@ class Timeline {
     updateTime(time) {
         if (this.isDragging) return; // Don't update while dragging
 
+        // After a bookmark jump, ignore video timeupdate for 1000ms
+        // This prevents the overshooting video time from overwriting the bookmark's target time
+        const timeSinceBookmarkJump = Date.now() - this.bookmarkJumpTime;
+        if (timeSinceBookmarkJump < 1000) {
+            // Still update visual position but don't update currentTime for navigation
+            const percent = this.totalDuration > 0 ? time / this.totalDuration : 0;
+            this.updateVisualPosition(percent);
+            this.updateTimeDisplay();
+            this.updateMinimap();
+            return;
+        }
+
+        // If time changed significantly (user seeked manually), clear the bookmark tracking
+        // This allows "previous" to work correctly after user manually navigates
+        if (Math.abs(time - this.currentTime) > 5) {
+            this.lastJumpedBookmarkId = null;
+        }
+
         this.currentTime = time;
         const percent = this.totalDuration > 0 ? time / this.totalDuration : 0;
 
@@ -962,12 +990,13 @@ class Timeline {
 
         let accumulatedTime = 0;
         const totalDuration = this.totalDuration;
+        const cachedDurations = window.app?.videoPlayer?.cachedClipDurations || [];
 
         for (let i = 0; i < clipGroups.length; i++) {
             const clipGroup = clipGroups[i];
 
-            // Get clip duration (simplified - using estimate)
-            const duration = 60; // Approximate
+            // Get clip duration from cache, fallback to 60s approximation
+            const duration = cachedDurations[i] || 60;
 
             if (i > 0) {
                 // Add marker at clip boundary
@@ -1037,12 +1066,19 @@ class Timeline {
 
         if (!gaps || gaps.length === 0 || !clipGroups) return;
 
-        const CLIP_DURATION = 60; // Approximate seconds per clip
+        const cachedDurations = window.app?.videoPlayer?.cachedClipDurations || [];
 
         for (const gap of gaps) {
-            // Calculate position after the clip where gap occurs
+            // Calculate position after the clip where gap occurs using cached durations
             const clipIndexAfter = gap.afterClipIndex;
-            let timePosition = (clipIndexAfter + 1) * CLIP_DURATION;
+            let timePosition = 0;
+            for (let i = 0; i <= clipIndexAfter && i < cachedDurations.length; i++) {
+                timePosition += cachedDurations[i] || 60;
+            }
+            // If no cached durations available, fallback to approximation
+            if (cachedDurations.length === 0) {
+                timePosition = (clipIndexAfter + 1) * 60;
+            }
 
             const percent = this.getZoomedPosition(timePosition);
 
@@ -1059,6 +1095,63 @@ class Timeline {
     }
 
     /**
+     * Set near-miss markers on timeline
+     * @param {Array} nearMisses Array of near-miss objects from TelemetryGraphs._detectNearMisses()
+     */
+    setNearMissMarkers(nearMisses) {
+        // Store for re-rendering on zoom
+        this._nearMisses = nearMisses;
+
+        // Remove existing near-miss markers
+        const existingMarkers = this.clipsContainer.querySelectorAll('.near-miss-marker');
+        existingMarkers.forEach(m => m.remove());
+
+        if (!nearMisses || nearMisses.length === 0 || !this.totalDuration) {
+            this.renderMinimapMarkers();
+            return;
+        }
+
+        // Only show markers for near-misses with score >= 5
+        const flaggedNearMisses = nearMisses.filter(nm => nm.score >= 5);
+
+        for (const nearMiss of flaggedNearMisses) {
+            const percent = this.getZoomedPosition(nearMiss.time);
+
+            // Skip if outside visible window when zoomed
+            if (percent < 0 || percent > 100) continue;
+
+            const marker = document.createElement('div');
+            marker.className = `near-miss-marker severity-${nearMiss.severity}`;
+            marker.style.left = `${percent}%`;
+
+            // Build detailed tooltip
+            const steeringInfo = nearMiss.hasEvasiveSteering
+                ? `, Steering: ${nearMiss.steeringRate.toFixed(0)}\u00B0/s`
+                : '';
+            marker.title = `Near-Miss (Score: ${nearMiss.score.toFixed(1)})\n` +
+                `Time: ${this.formatTime(nearMiss.time)}\n` +
+                `Brake: ${nearMiss.brakeG.toFixed(2)}g${steeringInfo}\n` +
+                `Speed: ${nearMiss.speed.toFixed(0)} mph`;
+
+            marker.dataset.score = nearMiss.score;
+            marker.dataset.time = nearMiss.time;
+
+            // Click to seek to near-miss time
+            marker.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (this.onSeek) {
+                    this.onSeek(nearMiss.time);
+                }
+            });
+
+            this.clipsContainer.appendChild(marker);
+        }
+
+        // Update minimap markers
+        this.renderMinimapMarkers();
+    }
+
+    /**
      * Reset timeline
      */
     reset() {
@@ -1069,6 +1162,7 @@ class Timeline {
         this.totalDurationDisplay.textContent = '00:00:00';
         this.clipsContainer.innerHTML = '';
         this._gaps = null;
+        this._nearMisses = null;
     }
 
     /**
@@ -1163,9 +1257,19 @@ class Timeline {
     jumpToNextBookmark() {
         // Sort bookmarks by time and find the first one after current position
         const sortedBookmarks = [...this.bookmarks].sort((a, b) => a.time - b.time);
-        const nextBookmark = sortedBookmarks.find(b => b.time > this.currentTime + 0.5);
+
+        // Find next bookmark, excluding the one we just jumped to
+        const nextBookmark = sortedBookmarks.find(b => {
+            const isAfterCurrentTime = b.time > this.currentTime + 0.5;
+            const isNotCurrentBookmark = b.id !== this.lastJumpedBookmarkId;
+            return isAfterCurrentTime && isNotCurrentBookmark;
+        });
 
         if (nextBookmark && this.onSeek) {
+            // Update currentTime immediately so repeated clicks work correctly
+            this.currentTime = nextBookmark.time;
+            this.bookmarkJumpTime = Date.now(); // Prevent timeupdate from overwriting
+            this.lastJumpedBookmarkId = nextBookmark.id; // Track which bookmark we're at
             this.onSeek(nextBookmark.time);
             return nextBookmark;
         }
@@ -1179,10 +1283,21 @@ class Timeline {
     jumpToPreviousBookmark() {
         // Sort bookmarks by time and find the last one before current position
         const sortedBookmarks = [...this.bookmarks].sort((a, b) => a.time - b.time);
-        const prevBookmarks = sortedBookmarks.filter(b => b.time < this.currentTime - 0.5);
+
+        // Filter for bookmarks before current position, excluding the one we just jumped to
+        // (video seek may overshoot, so we need to skip the current bookmark)
+        const prevBookmarks = sortedBookmarks.filter(b => {
+            const isBeforeCurrentTime = b.time < this.currentTime - 0.5;
+            const isNotCurrentBookmark = b.id !== this.lastJumpedBookmarkId;
+            return isBeforeCurrentTime && isNotCurrentBookmark;
+        });
 
         if (prevBookmarks.length > 0) {
             const prevBookmark = prevBookmarks[prevBookmarks.length - 1];
+            // Update currentTime immediately so repeated clicks work correctly
+            this.currentTime = prevBookmark.time;
+            this.bookmarkJumpTime = Date.now(); // Prevent timeupdate from overwriting
+            this.lastJumpedBookmarkId = prevBookmark.id; // Track which bookmark we're at
             if (this.onSeek) {
                 this.onSeek(prevBookmark.time);
             }

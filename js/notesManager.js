@@ -10,6 +10,20 @@ class NotesManager {
         this.onNotesChanged = null; // Callback for when notes are saved
         this.eventLookup = new Map(); // eventKey -> event object with folderHandle
         this.getBookmarksForEvent = null; // Function to get bookmarks for an event
+
+        // Listen for locale changes to re-render modal
+        window.addEventListener('localeChanged', () => {
+            if (this.modal && this.currentEvent) {
+                this.showModal(this.currentEvent);
+            }
+        });
+    }
+
+    /**
+     * Get translation helper
+     */
+    t(key) {
+        return window.i18n ? window.i18n.t(key) : key.split('.').pop();
     }
 
     /**
@@ -244,9 +258,9 @@ class NotesManager {
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px; vertical-align: middle;">
                             <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
                         </svg>
-                        Notes & Tags
+                        ${this.t('notes.title')}
                     </h2>
-                    <button class="notes-close-btn" title="Close">
+                    <button class="notes-close-btn" title="${this.t('common.close')}">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                         </svg>
@@ -262,7 +276,7 @@ class NotesManager {
 
                     <!-- Tags Section -->
                     <div class="notes-section">
-                        <label class="notes-label">Tags</label>
+                        <label class="notes-label">${this.t('notes.tags') || 'Tags'}</label>
                         <div class="tags-container">
                             <div id="currentTags" class="current-tags">
                                 ${notes.tags.map(tag => `
@@ -273,14 +287,14 @@ class NotesManager {
                                 `).join('')}
                             </div>
                             <div class="tag-input-container">
-                                <input type="text" id="tagInput" class="tag-input" placeholder="Type tag, press Enter or click +" maxlength="30">
-                                <button type="button" id="addTagBtn" class="add-tag-btn" title="Add tag">+</button>
+                                <input type="text" id="tagInput" class="tag-input" placeholder="${this.t('notes.tagPlaceholder') || 'Type tag, press Enter or click +'}" maxlength="30">
+                                <button type="button" id="addTagBtn" class="add-tag-btn" title="${this.t('notes.addTag') || 'Add tag'}">+</button>
                                 <div id="tagSuggestions" class="tag-suggestions hidden"></div>
                             </div>
                         </div>
                         ${allTags.length > 0 ? `
                             <div class="existing-tags">
-                                <span class="existing-tags-label">Existing tags:</span>
+                                <span class="existing-tags-label">${this.t('notes.existingTags') || 'Existing tags'}:</span>
                                 ${allTags.slice(0, 8).map(tag => `
                                     <button class="existing-tag-btn" data-tag="${this.escapeHtml(tag)}">${this.escapeHtml(tag)}</button>
                                 `).join('')}
@@ -290,16 +304,16 @@ class NotesManager {
 
                     <!-- Notes Section -->
                     <div class="notes-section">
-                        <label class="notes-label">Notes</label>
-                        <textarea id="notesTextarea" class="notes-textarea" placeholder="Add notes about this event..." maxlength="2000">${this.escapeHtml(notes.text)}</textarea>
+                        <label class="notes-label">${this.t('notes.notes')}</label>
+                        <textarea id="notesTextarea" class="notes-textarea" placeholder="${this.t('notes.placeholder') || 'Add notes about this event...'}" maxlength="2000">${this.escapeHtml(notes.text)}</textarea>
                         <div class="notes-char-count">
                             <span id="charCount">${notes.text.length}</span>/2000
                         </div>
                     </div>
                 </div>
                 <div class="notes-footer">
-                    <button id="cancelNotesBtn" class="notes-btn secondary">Cancel</button>
-                    <button id="saveNotesBtn" class="notes-btn primary">Save</button>
+                    <button id="cancelNotesBtn" class="notes-btn secondary">${this.t('common.cancel')}</button>
+                    <button id="saveNotesBtn" class="notes-btn primary">${this.t('common.save')}</button>
                 </div>
             </div>
         `;

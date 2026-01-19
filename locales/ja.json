@@ -1,0 +1,523 @@
+{
+  "_meta": {
+    "language": "Japanese",
+    "locale": "ja",
+    "status": "complete"
+  },
+
+  "app": {
+    "title": "TeslaCamViewer.com",
+    "description": "テスラのダッシュカム映像を同期再生で視聴"
+  },
+
+  "header": {
+    "github": "GitHub",
+    "donate": "寄付",
+    "statistics": "統計",
+    "keyboardShortcuts": "キーボードショートカット (?)",
+    "settings": "設定 (,)",
+    "viewOnGitHub": "GitHubで見る",
+    "supportProject": "プロジェクトを支援"
+  },
+
+  "sidebar": {
+    "events": "イベント",
+    "map": "地図",
+    "allDrives": "すべてのドライブ",
+    "addDrive": "別のドライブを追加",
+    "manageDrives": "ドライブを管理",
+    "syncDrives": "ドライブ間で同期",
+    "selectFolder": "TeslaCamフォルダを選択",
+    "emptyState": "「TeslaCamフォルダを選択」をクリックして開始",
+    "emptyStateHint": "TeslaCamフォルダ、またはテスラのダッシュカム録画を含む任意のフォルダを選択できます"
+  },
+
+  "player": {
+    "noEventSelected": "イベントが選択されていません",
+    "selectEventHint": "👈 サイドバーからイベントを選択してください",
+    "noEventLoaded": "イベントが読み込まれていません",
+    "hidden": "非表示：",
+    "fullscreen": "全画面",
+    "exitFullscreen": "全画面を終了"
+  },
+
+  "cameras": {
+    "front": "前",
+    "back": "後",
+    "left": "左",
+    "right": "右",
+    "hideFront": "フロントカメラを非表示",
+    "hideBack": "リアカメラを非表示",
+    "hideLeft": "左カメラを非表示",
+    "hideRight": "右カメラを非表示"
+  },
+
+  "controls": {
+    "play": "再生",
+    "pause": "一時停止",
+    "previousFrame": "前のフレーム（長押しでスロー再生）",
+    "nextFrame": "次のフレーム（長押しでスロー再生）",
+    "previousClip": "前のクリップ",
+    "nextClip": "次のクリップ",
+    "previousEvent": "前のイベント",
+    "nextEvent": "次のイベント",
+    "screenshot": "スクリーンショット",
+    "enhance": "ビデオ補正",
+    "markIn": "開始点をマーク",
+    "markOut": "終了点をマーク",
+    "clearMarks": "マークをクリア",
+    "export": "すべてのカメラをエクスポート",
+    "exportOptions": "エクスポートオプション",
+    "zoomOut": "タイムラインを縮小",
+    "zoomIn": "タイムラインを拡大",
+    "resetZoom": "ズームをリセット",
+    "loop": "ループ",
+    "speed": "速度：",
+    "layout": "レイアウト：",
+    "camera": "カメラ："
+  },
+
+  "bookmarks": {
+    "title": "ブックマーク",
+    "previous": "前のブックマーク ([)",
+    "add": "ブックマークを追加 (B)",
+    "next": "次のブックマーク (])",
+    "manage": "ブックマークを管理",
+    "clearAll": "すべてクリア",
+    "noBookmarks": "ブックマークはまだありません"
+  },
+
+  "export": {
+    "header": "カメラをエクスポート",
+    "allCameras": "すべてのカメラ（グリッド）",
+    "frontOnly": "フロントのみ",
+    "rearOnly": "リアのみ",
+    "leftOnly": "左のみ",
+    "rightOnly": "右のみ",
+    "exporting": "エクスポート中 {{percent}}%",
+    "preparing": "エクスポートを準備中...",
+    "encoding": "ビデオをエンコード中...",
+    "complete": "エクスポート完了",
+    "cancelled": "エクスポートがキャンセルされました",
+    "failed": "エクスポート失敗"
+  },
+
+  "layouts": {
+    "grid2x2": "2×2 グリッド",
+    "layout63": "6:3 センター",
+    "layout43": "4:3 メイン",
+    "all169": "すべて 16:9",
+    "frontLeft": "前 + 左",
+    "frontRight": "前 + 右",
+    "frontRepeaters": "前 + リピーター",
+    "focus": "フォーカスモード"
+  },
+
+  "loading": {
+    "loading": "読み込み中...",
+    "buffering": "バッファリング中...",
+    "bufferHealth": "バッファ状態"
+  },
+
+  "notes": {
+    "title": "メモとタグ (N)",
+    "notes": "メモ",
+    "tags": "タグ",
+    "tagPlaceholder": "タグを入力し、Enter または + をクリック",
+    "addTag": "タグを追加",
+    "existingTags": "既存のタグ",
+    "placeholder": "このイベントについてのメモを追加..."
+  },
+
+  "help": {
+    "title": "キーボードショートカット",
+    "close": "閉じる",
+    "tip": "ヒント：ほとんどのショートカットはテキスト入力中は動作しません",
+
+    "sections": {
+      "playback": "再生",
+      "navigation": "ナビゲーション",
+      "viewLayout": "表示とレイアウト",
+      "markingExport": "マーキングとエクスポート",
+      "bookmarks": "ブックマーク",
+      "speedControl": "速度調整",
+      "general": "一般"
+    },
+
+    "shortcuts": {
+      "playPause": "再生 / 一時停止",
+      "previousFrame": "前のフレーム",
+      "nextFrame": "次のフレーム",
+      "slowMotion": "スロー再生",
+      "previousClip": "前のクリップ",
+      "nextClip": "次のクリップ",
+      "goToStart": "最初へ移動",
+      "goToEnd": "最後へ移動",
+      "previousEvent": "前のイベント",
+      "nextEvent": "次のイベント",
+      "selectPreviousEvent": "前のイベントを選択",
+      "selectNextEvent": "次のイベントを選択",
+      "cycleLayouts": "レイアウトを切り替え",
+      "focusCamera": "カメラをフォーカス (1=前, 2=後, 3=左, 4=右)",
+      "toggleFullscreen": "全画面切り替え",
+      "focusCameraFullscreen": "カメラを全画面でフォーカス",
+      "markIn": "開始点をマーク",
+      "markOut": "終了点をマーク",
+      "clearMarks": "マークをクリア",
+      "takeScreenshot": "スクリーンショットを撮る",
+      "exportVideo": "ビデオをエクスポート",
+      "addBookmark": "現在位置にブックマークを追加",
+      "jumpToPreviousBookmark": "前のブックマークへジャンプ",
+      "jumpToNextBookmark": "次のブックマークへジャンプ",
+      "zoomTimeline": "ズームイン/アウト（設定で有効時）",
+      "increaseSpeed": "速度を上げる",
+      "decreaseSpeed": "速度を下げる",
+      "resetSpeed": "1倍速にリセット",
+      "showHelp": "このヘルプを表示",
+      "openSettings": "設定を開く",
+      "closeModal": "モーダルを閉じる / マークをクリア"
+    }
+  },
+
+  "settings": {
+    "title": "設定",
+    "close": "閉じる",
+    "done": "完了",
+    "resetToDefaults": "デフォルトに戻す",
+    "confirmReset": "すべての設定をデフォルトに戻しますか？",
+
+    "sections": {
+      "playback": "再生",
+      "performance": "パフォーマンス",
+      "ui": "ユーザーインターフェース",
+      "timeline": "タイムライン",
+      "session": "セッション",
+      "offline": "オフラインモード",
+      "accessibility": "アクセシビリティ",
+      "mobile": "モバイル",
+      "export": "エクスポート",
+      "language": "言語"
+    },
+
+    "language": {
+      "selectLanguage": "言語",
+      "languageHint": "お好みの言語を選択してください"
+    }
+  },
+
+  "filter": {
+    "search": "イベントを検索",
+    "type": "タイプ",
+    "date": "日付",
+    "all": "すべて",
+    "savedClips": "保存済みクリップ",
+    "sentryClips": "セントリークリップ",
+    "recentClips": "最近のクリップ",
+    "clear": "フィルターをクリア",
+    "filters": "フィルター",
+    "eventTypes": "イベントタイプ",
+    "onlyBookmarked": "ブックマーク付きのみ",
+    "onlyWithNotes": "メモ/タグ付きのみ",
+    "sortBy": "並び替え",
+    "newestFirst": "新しい順",
+    "oldestFirst": "古い順"
+  },
+
+  "map": {
+    "noLocation": "位置データなし",
+    "showAll": "すべてのイベントを表示",
+    "centerOnEvent": "イベントを中心に",
+    "toggleHeatmap": "ヒートマップ表示切替",
+    "toggleStruggleZones": "オートパイロット問題ゾーン切替",
+    "loadingStruggleZones": "AP解除データを読み込み中...",
+    "struggleZonesLoaded": "{{count}}件のAP解除を検出",
+    "togglePhantomBrakes": "ファントムブレーキホットスポット切替",
+    "loadingPhantomBrakes": "ファントムブレーキデータを読み込み中...",
+    "phantomBrakesLoaded": "{{count}}件のファントムブレーキを検出",
+    "phantomBrakeHotspot": "ファントムブレーキホットスポット",
+    "phantomBrakesAtLocation": "この場所で{{count}}件のファントムブレーキ",
+    "phantomBrakeTip": "この場所で繰り返しファントムブレーキが発生しています - 誤検知の場合はテスラに報告を検討してください。",
+    "toggleDarkMode": "マップダークモード切替"
+  },
+
+  "statistics": {
+    "title": "統計",
+    "close": "閉じる",
+    "recordingOverview": "録画概要",
+    "totalEvents": "イベント合計",
+    "totalClips": "クリップ合計",
+    "recordingTime": "録画時間",
+    "estStorage": "推定ストレージ",
+    "eventsLast14Days": "イベント - 過去14日間",
+    "eventTypes": "イベントタイプ",
+    "saved": "保存済み",
+    "sentry": "セントリー",
+    "recent": "最近",
+    "triggerReasons": "トリガー理由",
+    "manualSave": "手動保存",
+    "objectDetected": "物体検出",
+    "vehicleBump": "車両衝突",
+    "honk": "クラクション",
+    "other": "その他",
+    "unknown": "不明",
+    "topLocations": "上位10箇所（全イベント）",
+    "sentryByTimeOfDay": "時間帯別セントリーイベント",
+    "topSentryLocations": "セントリー上位箇所",
+    "dateRange": "期間",
+    "eventTrends": "イベント傾向",
+    "weekly": "週間",
+    "monthly": "月間",
+    "exportStatistics": "統計をエクスポート",
+    "exportJson": "JSONエクスポート",
+    "exportCsv": "CSVエクスポート",
+    "noEvents": "イベントが読み込まれていません。TeslaCamフォルダを開いてください。",
+    "noStatsToExport": "エクスポートする統計がありません",
+    "noTimelineData": "タイムラインデータがありません",
+    "noEventsLast14Days": "過去14日間にイベントがありません",
+    "noSentryEvents": "分析するセントリーイベントがありません",
+    "noTrendData": "トレンドデータがありません",
+    "noLocationData": "位置データがありません",
+    "noSentryLocationData": "セントリー位置データがありません",
+    "events": "イベント"
+  },
+
+  "errors": {
+    "folderNotFound": "フォルダが見つかりません",
+    "noVideosFound": "このイベントにビデオがありません",
+    "loadFailed": "ビデオの読み込みに失敗しました",
+    "exportFailed": "エクスポートに失敗しました",
+    "browserNotSupported": "お使いのブラウザはこの機能をサポートしていません",
+    "permissionDenied": "権限が拒否されました",
+    "fileAccessError": "ファイルアクセスエラー"
+  },
+
+  "time": {
+    "hours": "時間",
+    "minutes": "分",
+    "seconds": "秒",
+    "ago": "前",
+    "justNow": "たった今"
+  },
+
+  "quickstart": {
+    "skip": "スキップ",
+    "previous": "戻る",
+    "next": "次へ",
+    "getStarted": "始める",
+    "welcome": {
+      "title": "TeslaCam Viewer へようこそ",
+      "description": "ブラウザでテスラのダッシュカム映像を直接表示・管理できます。",
+      "noUpload": "アップロード不要",
+      "videosStay": "動画はお使いのコンピュータに残ります。",
+      "language": "言語"
+    },
+    "step1": {
+      "title": "ステップ 1: TeslaCam フォルダを選択",
+      "description": "「TeslaCamフォルダを選択」ボタンをクリックして、TeslaCam データを含む USB ドライブまたはフォルダを選択してください。",
+      "hint": "TeslaCam、SavedClips、SentryClips、RecentClips という名前のフォルダを探してください。"
+    },
+    "step2": {
+      "title": "ステップ 2: イベントを参照",
+      "description": "イベントは日付順に左サイドバーに表示されます。イベントをクリックして読み込みます。",
+      "saved": "ダッシュカムから手動保存",
+      "sentry": "動体検知による録画",
+      "recent": "ローリングバッファ映像"
+    },
+    "step3": {
+      "title": "ステップ 3: 4 カメラを表示",
+      "description": "前、後、左、右の 4 つのカメラアングルを同期して視聴できます。",
+      "tip": "ヒント",
+      "tipText": "カメラをドラッグして位置を入れ替えたり、不要なカメラを非表示にできます。"
+    },
+    "shortcuts": {
+      "title": "キーボードショートカット",
+      "playPause": "再生 / 一時停止",
+      "seek": "5 秒スキップ",
+      "screenshot": "スクリーンショット",
+      "markInOut": "イン / アウト点をマーク",
+      "export": "エクスポート",
+      "showAll": "すべてのショートカットを表示"
+    }
+  },
+
+  "driveManager": {
+    "title": "ドライブ管理",
+    "noDrives": "ドライブが追加されていません",
+    "events": "イベント",
+    "removeDrive": "ドライブを削除",
+    "addDrive": "ドライブを追加",
+    "changeColor": "クリックして色を変更"
+  },
+
+  "driveSync": {
+    "title": "ドライブ同期",
+    "close": "閉じる (Esc)",
+    "settings": "設定",
+    "sourceDestination": "ソースと宛先",
+    "selectSource": "ソースを選択...",
+    "selectDestination": "宛先を選択...",
+    "compare": "比較",
+    "comparing": "比較中...",
+    "comparisonStats": "比較統計",
+    "selectDrivesToCompare": "ドライブを選択して比較すると統計が表示されます",
+    "selectDrivesHint": "比較するドライブを選択",
+    "quickLoad": "クイックロード：",
+    "noPresets": "保存されたプリセットはありません",
+    "save": "保存",
+    "copy": "コピー",
+    "move": "移動",
+    "cancel": "キャンセル",
+    "pause": "一時停止",
+    "resume": "再開",
+    "startSync": "同期開始",
+    "done": "完了",
+    "preparing": "準備中...",
+    "syncComplete": "同期完了",
+    "syncFailed": "同期失敗",
+    "selected": "選択済み：",
+    "events": "イベント",
+    "missingOnDest": "宛先に不足",
+    "newerOnSource": "ソースの方が新しい",
+    "differentSize": "サイズが異なる",
+    "alreadySynced": "同期済み",
+    "includeNotes": "メモとタグを含める",
+    "eta": "残り時間：",
+    "sourceEvents": "ソースイベント",
+    "destEvents": "宛先イベント",
+    "missing": "不足",
+    "newerCount": "ソースの方が新しい",
+    "synced": "同期済み",
+    "syncCoverage": "同期カバレッジ",
+    "storageBreakdown": "ストレージ詳細",
+    "sourceTotal": "ソース合計",
+    "destTotal": "宛先合計",
+    "toTransfer": "転送予定",
+    "dateRange": "日付範囲",
+    "source": "ソース：",
+    "destination": "宛先：",
+    "eventsByType": "タイプ別イベント",
+    "topLocations": "主な場所",
+    "noLocationData": "位置データがありません",
+    "eventsByMonth": "月別イベント",
+    "noMonthlyData": "月別データがありません",
+    "detailedBreakdown": "詳細イベント分類",
+    "allEvents": "すべてのイベント",
+    "missingOnly": "不足のみ",
+    "newerOnly": "新しいもののみ",
+    "syncedOnly": "同期済みのみ",
+    "showingFirst": "{{total}} 件中最初の {{count}} 件を表示"
+  },
+
+  "syncSettings": {
+    "title": "同期設定",
+    "verifyAfterCopy": "コピー後にファイルを検証",
+    "syncNotes": "メモとタグを同期",
+    "writeSyncFile": "宛先に同期設定ファイルを書き込む",
+    "confirmBeforeDelete": "ソースファイル削除前に確認",
+    "noteConflict": "メモの競合解決：",
+    "askEachTime": "毎回確認",
+    "mergeAutomatically": "自動的にマージ",
+    "saveSettings": "設定を保存",
+    "close": "閉じる"
+  },
+
+  "presets": {
+    "title": "プリセット管理",
+    "noPresets": "保存されたプリセットはありません。ドライブを選択して「保存」をクリックしてください。",
+    "importFromDrives": "ドライブからインポート",
+    "close": "閉じる",
+    "delete": "削除",
+    "importedFrom": "インポート元",
+    "lastUsed": "最終使用：",
+    "deleteConfirm": "プリセット \"{{name}}\" を削除しますか？",
+    "couldNotFind": "このプリセットのドライブが見つかりません。",
+    "lookingFor": "検索中：",
+    "sourceLabel": "ソース：",
+    "destLabel": "宛先：",
+    "makeSureLoaded": "両方のドライブが読み込まれていることを確認してください。",
+    "enterName": "このプリセットの名前を入力：",
+    "savedSuccess": "プリセットが保存されました！",
+    "imported": "{{count}} 件のプリセットをインポートしました。",
+    "errors": "エラー：",
+    "noNewPresets": "ドライブに新しいプリセットが見つかりませんでした。"
+  },
+
+  "layoutEditor": {
+    "title": "レイアウトエディター",
+    "close": "閉じる",
+    "new": "新規",
+    "newLayout": "新規レイアウト",
+    "import": "インポート",
+    "importLayout": "レイアウトをインポート",
+    "export": "エクスポート",
+    "exportLayout": "レイアウトをエクスポート",
+    "snap": "スナップ",
+    "aspect": "アスペクト比：",
+    "aspectWide": "ワイド",
+    "aspectUltraWide": "ウルトラワイド",
+    "aspectTriple": "トリプル",
+    "aspectCinematic": "シネマティック",
+    "selectedCamera": "選択されたカメラ",
+    "futureCamera": "将来のカメラ - まだ利用できません",
+    "position": "位置",
+    "size": "サイズ",
+    "layer": "レイヤー",
+    "sendBackward": "背面へ",
+    "bringForward": "前面へ",
+    "fit": "フィット：",
+    "contain": "含める",
+    "cover": "カバー",
+    "cropEdges": "エッジをトリミング",
+    "top": "上：",
+    "bottom": "下：",
+    "left": "左：",
+    "right": "右：",
+    "cameras": "カメラ",
+    "savedLayouts": "保存されたレイアウト",
+    "noLayouts": "カスタムレイアウトはまだありません",
+    "cancel": "キャンセル",
+    "saveLayout": "レイアウトを保存",
+    "layoutName": "レイアウト名",
+    "hint": "クリックして選択、ドラッグして移動、角をドラッグしてサイズ変更",
+    "untitled": "無題のレイアウト",
+    "invalidLayout": "無効なレイアウト：",
+    "deleteConfirm": "\"{{name}}\" を削除しますか？",
+    "importFailed": "インポート失敗：",
+    "readFailed": "ファイル読み込み失敗：",
+    "failedToSave": "レイアウトの保存に失敗しました",
+    "failedToUpdate": "レイアウトの更新に失敗しました",
+    "soon": "近日公開"
+  },
+
+  "common": {
+    "close": "閉じる",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "edit": "編集",
+    "add": "追加",
+    "remove": "削除",
+    "yes": "はい",
+    "no": "いいえ",
+    "ok": "OK",
+    "loading": "読み込み中...",
+    "error": "エラー",
+    "success": "成功",
+    "warning": "警告"
+  },
+
+  "incidentDetection": {
+    "toggleSlowMo": "インシデントスローモーションを切り替え",
+    "slowMoEnabled": "インシデントスローモーション：オン",
+    "slowMoDisabled": "インシデントスローモーション：オフ",
+    "slowMoIndicator": "スローモ",
+    "slowMoScore": "スコア：{{score}}/10",
+    "toggleBirdsEye": "俯瞰ビューを切り替え",
+    "birdsEyeTitle": "俯瞰ビュー",
+    "birdsEyeWaitingGps": "GPSデータを待機中...",
+    "birdsEyeRadius": "{{radius}}m半径",
+    "birdsEyeLowG": "低G",
+    "birdsEyeMedG": "中G",
+    "birdsEyeHighG": "高G"
+  }
+}

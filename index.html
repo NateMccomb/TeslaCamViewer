@@ -10,7 +10,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="styles/main.css">
+    <link rel="stylesheet" href="styles/main.css?v=4">
+    <link rel="stylesheet" href="styles/plate-enhancer.css">
 </head>
 <body>
     <div class="app-container" role="application" aria-label="TeslaCam Viewer Application">
@@ -52,29 +53,30 @@
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
                     </svg>
-                    <span>GitHub</span>
+                    <span data-i18n="header.github">GitHub</span>
                 </a>
                 <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=8UKFUQCU9476N&source=url"
                    target="_blank"
                    rel="noopener noreferrer"
                    class="header-btn donate-btn"
+                   data-i18n-title="header.supportProject"
                    title="Support this project">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
                     </svg>
-                    <span>Donate</span>
+                    <span data-i18n="header.donate">Donate</span>
                 </a>
-                <button id="statsBtn" class="header-btn" title="Statistics">
+                <button id="statsBtn" class="header-btn" data-i18n-title="header.statistics" title="Statistics">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/>
                     </svg>
                 </button>
-                <button id="helpBtn" class="header-btn" title="Keyboard Shortcuts (?)">
+                <button id="helpBtn" class="header-btn" data-i18n-title="header.keyboardShortcuts" title="Keyboard Shortcuts (?)">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/>
                     </svg>
                 </button>
-                <button id="settingsBtn" class="header-btn" title="Settings (,)">
+                <button id="settingsBtn" class="header-btn" data-i18n-title="header.settings" title="Settings (,)">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
                     </svg>
@@ -87,8 +89,10 @@
             <div id="sidebarOverlay" class="sidebar-overlay hidden"></div>
             <!-- Sidebar - Event Browser & Map -->
             <aside class="sidebar" id="sidebar">
+                <div class="sidebar-resize-handle" id="sidebarResizeHandle" title="Drag to resize"></div>
+
                 <div class="sidebar-header">
-                    <h2>Events</h2>
+                    <h2><span data-i18n="sidebar.events">Events</span> <span id="eventCount" class="event-count"></span></h2>
                     <div id="eventStats" class="event-stats"></div>
                 </div>
 
@@ -96,19 +100,19 @@
                 <div id="driveSelector" class="drive-selector hidden">
                     <div class="drive-selector-header">
                         <select id="driveSelect" class="drive-select">
-                            <option value="">All Drives</option>
+                            <option value="" data-i18n="sidebar.allDrives">All Drives</option>
                         </select>
-                        <button id="addDriveBtn" class="drive-action-btn" title="Add another drive">
+                        <button id="addDriveBtn" class="drive-action-btn" data-i18n-title="sidebar.addDrive" title="Add another drive">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                             </svg>
                         </button>
-                        <button id="manageDrivesBtn" class="drive-action-btn" title="Manage drives">
+                        <button id="manageDrivesBtn" class="drive-action-btn" data-i18n-title="sidebar.manageDrives" title="Manage drives">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
                             </svg>
                         </button>
-                        <button id="syncDrivesBtn" class="drive-action-btn sync-drives-btn" title="Sync between drives" disabled>
+                        <button id="syncDrivesBtn" class="drive-action-btn sync-drives-btn" data-i18n-title="sidebar.syncDrives" title="Sync between drives" disabled>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
                             </svg>
@@ -118,8 +122,8 @@
 
                 <!-- Tab Navigation -->
                 <div class="sidebar-tabs">
-                    <button class="tab-btn active" data-tab="events">Events</button>
-                    <button class="tab-btn" data-tab="map">Map</button>
+                    <button class="tab-btn active" data-tab="events" data-i18n="sidebar.events">Events</button>
+                    <button class="tab-btn" data-tab="map" data-i18n="sidebar.map">Map</button>
                 </div>
 
                 <!-- Filter Panel (shared across tabs) -->
@@ -130,7 +134,7 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px;">
                         <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
                     </svg>
-                    Select TeslaCam Folder
+                    <span data-i18n="sidebar.selectFolder">Select TeslaCam Folder</span>
                 </button>
 
                 <!-- Tab Content -->
@@ -139,8 +143,8 @@
                     <div id="eventsTab" class="tab-pane active">
                         <div id="eventList" class="event-list">
                             <div class="empty-state" id="emptyState">
-                                <p>👆 Click "Select TeslaCam Folder" to get started</p>
-                                <p class="hint">You can select the TeslaCam folder, or any parent/child folder containing Tesla dashcam footage</p>
+                                <p data-i18n="sidebar.emptyState">👆 Click "Select TeslaCam Folder" to get started</p>
+                                <p class="hint" data-i18n="sidebar.emptyStateHint">You can select the TeslaCam folder, or any parent/child folder containing Tesla dashcam footage</p>
                             </div>
                         </div>
                     </div>
@@ -148,6 +152,36 @@
                     <!-- Map Tab -->
                     <div id="mapTab" class="tab-pane">
                         <div id="map"></div>
+                    </div>
+                </div>
+
+                <!-- Bird's Eye View Panel (collapsible, auto-hides when no GPS) -->
+                <div id="birdsEyePanel" class="sidebar-panel collapsible" style="display: none;">
+                    <div class="sidebar-panel-header" id="birdsEyeHeader">
+                        <span class="panel-title">Bird's Eye View</span>
+                        <button class="panel-collapse-btn" aria-label="Toggle panel">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="sidebar-panel-content" id="birdsEyeContent">
+                        <!-- Bird's Eye View canvas will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- Telemetry Graphs Panel (collapsible, auto-hides when no data) -->
+                <div id="telemetryPanel" class="sidebar-panel collapsible" style="display: none;">
+                    <div class="sidebar-panel-header" id="telemetryHeader">
+                        <span class="panel-title">Telemetry</span>
+                        <button class="panel-collapse-btn" aria-label="Toggle panel">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="sidebar-panel-content" id="telemetryContent">
+                        <!-- Telemetry graphs will be rendered here -->
                     </div>
                 </div>
             </aside>
@@ -158,15 +192,15 @@
                 <div class="video-grid-container">
                     <div id="videoGridPlaceholder" class="video-grid-placeholder">
                         <div class="placeholder-content">
-                            <p style="font-size: 1.2rem; margin-bottom: 0.5rem;">No event selected</p>
-                            <p style="font-size: 0.9rem; color: var(--text-secondary);">👈 Select an event from the sidebar to start viewing</p>
+                            <p style="font-size: 1.2rem; margin-bottom: 0.5rem;" data-i18n="player.noEventSelected">No event selected</p>
+                            <p style="font-size: 0.9rem; color: var(--text-secondary);" data-i18n="player.selectEventHint">👈 Select an event from the sidebar to start viewing</p>
                         </div>
                     </div>
                     <div class="video-grid">
                     <div class="video-container">
                         <video id="videoFront" class="video-player"></video>
-                        <div class="video-label">Front</div>
-                        <button class="camera-hide-btn" data-camera="front" title="Hide Front Camera">
+                        <div class="video-label" data-i18n="cameras.front">Front</div>
+                        <button class="camera-hide-btn" data-camera="front" data-i18n-title="cameras.hideFront" title="Hide Front Camera">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
                             </svg>
@@ -174,8 +208,8 @@
                     </div>
                     <div class="video-container">
                         <video id="videoBack" class="video-player"></video>
-                        <div class="video-label">Back</div>
-                        <button class="camera-hide-btn" data-camera="back" title="Hide Back Camera">
+                        <div class="video-label" data-i18n="cameras.back">Back</div>
+                        <button class="camera-hide-btn" data-camera="back" data-i18n-title="cameras.hideBack" title="Hide Back Camera">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
                             </svg>
@@ -183,8 +217,8 @@
                     </div>
                     <div class="video-container">
                         <video id="videoLeft" class="video-player"></video>
-                        <div class="video-label">Left</div>
-                        <button class="camera-hide-btn" data-camera="left_repeater" title="Hide Left Camera">
+                        <div class="video-label" data-i18n="cameras.left">Left</div>
+                        <button class="camera-hide-btn" data-camera="left_repeater" data-i18n-title="cameras.hideLeft" title="Hide Left Camera">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
                             </svg>
@@ -192,8 +226,26 @@
                     </div>
                     <div class="video-container">
                         <video id="videoRight" class="video-player"></video>
-                        <div class="video-label">Right</div>
-                        <button class="camera-hide-btn" data-camera="right_repeater" title="Hide Right Camera">
+                        <div class="video-label" data-i18n="cameras.right">Right</div>
+                        <button class="camera-hide-btn" data-camera="right_repeater" data-i18n-title="cameras.hideRight" title="Hide Right Camera">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="video-container pillar-camera" style="display: none;">
+                        <video id="videoLeftPillar" class="video-player"></video>
+                        <div class="video-label" data-i18n="cameras.leftPillar">Left Pillar</div>
+                        <button class="camera-hide-btn" data-camera="left_pillar" data-i18n-title="cameras.hideLeftPillar" title="Hide Left Pillar Camera">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="video-container pillar-camera" style="display: none;">
+                        <video id="videoRightPillar" class="video-player"></video>
+                        <div class="video-label" data-i18n="cameras.rightPillar">Right Pillar</div>
+                        <button class="camera-hide-btn" data-camera="right_pillar" data-i18n-title="cameras.hideRightPillar" title="Hide Right Pillar Camera">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
                             </svg>
@@ -202,11 +254,11 @@
                     </div>
                     <!-- Hidden Cameras Panel -->
                     <div id="hiddenCamerasPanel" class="hidden-cameras-panel hidden">
-                        <span class="hidden-label">Hidden:</span>
+                        <span class="hidden-label" data-i18n="player.hidden">Hidden:</span>
                         <div id="hiddenCamerasList" class="hidden-cameras-list"></div>
                     </div>
                     <!-- Mobile Fullscreen Button -->
-                    <button id="mobileFullscreenBtn" class="mobile-fullscreen-btn hidden" title="Fullscreen">
+                    <button id="mobileFullscreenBtn" class="mobile-fullscreen-btn hidden" data-i18n-title="player.fullscreen" title="Fullscreen">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                         </svg>
@@ -220,7 +272,7 @@
                             <path d="M8 5v14l11-7z"/>
                         </svg>
                     </button>
-                    <button id="exitFullscreenBtn" class="fullscreen-exit-btn" title="Exit fullscreen">
+                    <button id="exitFullscreenBtn" class="fullscreen-exit-btn" data-i18n-title="player.exitFullscreen" title="Exit fullscreen">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
                         </svg>
@@ -230,232 +282,295 @@
                 <!-- Event Info Bar -->
                 <div id="eventInfo" class="event-info">
                     <div class="event-info-content">
-                        <span id="eventDate" class="event-date">No event loaded</span>
+                        <span id="eventDate" class="event-date" data-i18n="player.noEventLoaded">No event loaded</span>
                         <span id="eventLocation" class="event-location"></span>
+                        <button id="streetViewBtn" class="street-view-btn" disabled title="Open Street View">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <circle cx="12" cy="4.5" r="2.5"/>
+                                <path d="M12 7c-1.1 0-2 .9-2 2v6h1.5v7h1v-7h1v7h1v-7H16v-6c0-1.1-.9-2-2-2h-2z"/>
+                            </svg>
+                        </button>
                         <span id="eventReason" class="event-reason"></span>
+                        <span id="eventWeather" class="event-weather"></span>
+                        <span id="speedLimitDisplay" class="speed-limit-display" title="Speed Limit"></span>
                     </div>
-                    <button id="notesBtn" class="event-info-notes-btn" disabled title="Notes & Tags (N)">
+                    <button id="notesBtn" class="event-info-notes-btn" disabled data-i18n-title="notes.title" title="Notes & Tags (N)">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
                         </svg>
-                        <span>Notes</span>
+                        <span data-i18n="notes.notes">Notes</span>
                     </button>
                 </div>
 
-                <!-- Timeline -->
-                <div class="timeline-container">
-                    <div class="timeline-header">
-                        <span id="currentTime" class="time-display">00:00:00</span>
-                        <span id="totalDuration" class="time-display">00:00:00</span>
+                <!-- Timeline Row with Side Controls -->
+                <div class="timeline-row">
+                    <!-- Bookmark Controls (left side) -->
+                    <div class="timeline-bookmark-controls">
+                        <button id="addBookmarkBtn" class="control-btn bookmark-btn" disabled data-i18n-title="bookmarks.add" title="Add Bookmark (B)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/>
+                                <path d="M11 7h2v3h3v2h-3v3h-2v-3H8v-2h3V7z"/>
+                            </svg>
+                        </button>
+                        <button id="prevBookmarkBtn" class="control-btn bookmark-btn" disabled data-i18n-title="bookmarks.previous" title="Previous Bookmark ([)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/>
+                            </svg>
+                        </button>
+                        <button id="nextBookmarkBtn" class="control-btn bookmark-btn" disabled data-i18n-title="bookmarks.next" title="Next Bookmark (])">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/>
+                            </svg>
+                        </button>
+                        <div class="bookmarks-dropdown-container">
+                            <button id="bookmarksListBtn" class="control-btn bookmark-btn" disabled data-i18n-title="bookmarks.manage" title="Manage Bookmarks">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
+                                </svg>
+                            </button>
+                            <div id="bookmarksDropdown" class="bookmarks-dropdown hidden">
+                                <div class="bookmarks-dropdown-header">
+                                    <span data-i18n="bookmarks.title">Bookmarks</span>
+                                    <button id="clearAllBookmarksBtn" class="clear-all-btn" data-i18n-title="bookmarks.clearAll" title="Clear All">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div id="bookmarksList" class="bookmarks-list"></div>
+                            </div>
+                        </div>
                     </div>
-                    <!-- Mini-map for zoomed timeline -->
-                    <div id="timelineMinimap" class="timeline-minimap hidden">
-                        <div id="minimapProgress" class="minimap-progress"></div>
-                        <div id="minimapMarkers" class="minimap-markers"></div>
-                        <div id="minimapViewport" class="minimap-viewport"></div>
-                        <div id="minimapPosition" class="minimap-position"></div>
+
+                    <!-- Timeline -->
+                    <div class="timeline-container">
+                        <div class="timeline-header">
+                            <span id="currentTime" class="time-display">00:00:00</span>
+                            <span id="totalDuration" class="time-display">00:00:00</span>
+                        </div>
+                        <!-- Mini-map for zoomed timeline -->
+                        <div id="timelineMinimap" class="timeline-minimap hidden">
+                            <div id="minimapProgress" class="minimap-progress"></div>
+                            <div id="minimapMarkers" class="minimap-markers"></div>
+                            <div id="minimapViewport" class="minimap-viewport"></div>
+                            <div id="minimapPosition" class="minimap-position"></div>
+                        </div>
+                        <div id="timeline" class="timeline">
+                            <div id="timelineProgress" class="timeline-progress"></div>
+                            <div id="timelineScrubber" class="timeline-scrubber"></div>
+                            <div id="timelineClips" class="timeline-clips"></div>
+                        </div>
                     </div>
-                    <div id="timeline" class="timeline">
-                        <div id="timelineProgress" class="timeline-progress"></div>
-                        <div id="timelineScrubber" class="timeline-scrubber"></div>
-                        <div id="timelineClips" class="timeline-clips"></div>
+
+                    <!-- Zoom Controls (right side) -->
+                    <div class="timeline-zoom-controls">
+                        <button id="zoomInBtn" class="control-btn zoom-btn" disabled data-i18n-title="controls.zoomIn" title="Zoom In Timeline">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                            </svg>
+                        </button>
+                        <button id="zoomOutBtn" class="control-btn zoom-btn" disabled data-i18n-title="controls.zoomOut" title="Zoom Out Timeline">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 13H5v-2h14v2z"/>
+                            </svg>
+                        </button>
+                        <button id="zoomResetBtn" class="control-btn zoom-btn" disabled data-i18n-title="controls.resetZoom" title="Reset Zoom">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
-                <!-- Playback Controls -->
+                <!-- Playback Controls - Reorganized -->
                 <div class="controls">
-                    <button id="playBtn" class="control-btn" disabled aria-label="Play">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M8 5v14l11-7z"/>
-                        </svg>
-                    </button>
-                    <button id="pauseBtn" class="control-btn" disabled aria-label="Pause">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                        </svg>
-                    </button>
-                    <button id="frameBackBtn" class="control-btn" disabled title="Previous Frame (Hold for slow-mo)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M11 18V6l-8.5 6 8.5 6zm7 0V6l-8.5 6 8.5 6z"/>
-                        </svg>
-                    </button>
-                    <button id="prevClipBtn" class="control-btn" disabled title="Previous Clip">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6 6h2v12H6zm3.5 6l8.5 6V6l-8.5 6z"/>
-                        </svg>
-                    </button>
-                    <button id="nextClipBtn" class="control-btn" disabled title="Next Clip">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
-                        </svg>
-                    </button>
-                    <button id="frameForwardBtn" class="control-btn" disabled title="Next Frame (Hold for slow-mo)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6 18V6l8.5 6-8.5 6zm7 0V6l8.5 6-8.5 6z"/>
-                        </svg>
-                    </button>
-                    <div class="event-nav-separator"></div>
-                    <button id="prevEventBtn" class="control-btn" disabled title="Previous Event">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M18 7h-4V5h4v2zm0 4h-4V9h4v2zm0 4h-4v-2h4v2zm0 4h-4v-2h4v2zM8 7H4V5h4v2zm0 4H4V9h4v2zm0 4H4v-2h4v2zm0 4H4v-2h4v2zm2-7l6 4V8l-6 4z"/>
-                        </svg>
-                    </button>
-                    <button id="nextEventBtn" class="control-btn" disabled title="Next Event">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M6 7h4V5H6v2zm0 4h4V9H6v2zm0 4h4v-2H6v2zm0 4h4v-2H6v2zm8 0h4v-2h-4v2zm0-4h4v-2h-4v2zm0-4h4V9h-4v2zm0-4h4V5h-4v2zm-4 7l-6-4v8l6-4z"/>
-                        </svg>
-                    </button>
-                    <div class="event-nav-separator"></div>
-                    <button id="screenshotBtn" class="control-btn" disabled title="Capture Screenshot">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
-                            <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                    </button>
-                    <button id="pipBtn" class="control-btn" disabled title="Picture-in-Picture (P)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
-                        </svg>
-                    </button>
-                    <button id="enhanceBtn" class="control-btn" disabled title="Video Enhancement">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>
-                        </svg>
-                    </button>
-                    <div class="event-nav-separator"></div>
-                    <button id="markInBtn" class="control-btn" disabled title="Mark In Point">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M2 4h4v16H2V4zm6 0v16l11-8L8 4z" fill="#4caf50"/>
-                        </svg>
-                    </button>
-                    <button id="markOutBtn" class="control-btn" disabled title="Mark Out Point">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M18 4h4v16h-4V4zM5 12l11 8V4L5 12z" fill="#f44336"/>
-                        </svg>
-                    </button>
-                    <button id="clearMarksBtn" class="control-btn" disabled title="Clear Marks">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                        </svg>
-                    </button>
-                    <div class="export-dropdown-container">
-                        <button id="exportBtn" class="control-btn" disabled title="Export All Cameras">
+                    <!-- Primary Playback Group -->
+                    <div class="control-group control-group-playback">
+                        <button id="playBtn" class="control-btn" disabled data-i18n-aria="controls.play" aria-label="Play">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M8 5v14l11-7z"/>
+                            </svg>
+                        </button>
+                        <button id="pauseBtn" class="control-btn" disabled data-i18n-aria="controls.pause" aria-label="Pause">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                            </svg>
+                        </button>
+                        <button id="prevClipBtn" class="control-btn" disabled data-i18n-title="controls.previousClip" title="Previous Clip">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"/>
+                                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6l-8.5 6z"/>
                             </svg>
                         </button>
-                        <button id="exportDropdownBtn" class="control-btn dropdown-toggle" disabled title="Export Options">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M7 10l5 5 5-5z"/>
+                        <button id="nextClipBtn" class="control-btn" disabled data-i18n-title="controls.nextClip" title="Next Clip">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z"/>
                             </svg>
                         </button>
-                        <div id="exportDropdown" class="export-dropdown hidden">
-                            <div class="export-dropdown-header">Export Camera</div>
-                            <button class="export-option" data-camera="all">All Cameras (Grid)</button>
-                            <button class="export-option" data-camera="front">Front Only</button>
-                            <button class="export-option" data-camera="back">Rear Only</button>
-                            <button class="export-option" data-camera="left_repeater">Left Only</button>
-                            <button class="export-option" data-camera="right_repeater">Right Only</button>
+                        <div class="speed-control">
+                            <select id="speedSelect" class="speed-select" disabled title="Playback Speed">
+                                <option value="0.25">0.25x</option>
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                                <option value="2">2x</option>
+                                <option value="5">5x</option>
+                            </select>
                         </div>
-                    </div>
-                    <div class="event-nav-separator"></div>
-                    <button id="prevBookmarkBtn" class="control-btn" disabled title="Previous Bookmark ([)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17.5 3H6.5C5.67 3 5 3.67 5 4.5v15l7-3 7 3v-15c0-.83-.67-1.5-1.5-1.5zm0 14.5l-5.5-2.42L6.5 17.5V4.5h11v13z"/>
-                            <path d="M8 10l4-4v3h4v2h-4v3l-4-4z"/>
-                        </svg>
-                    </button>
-                    <button id="addBookmarkBtn" class="control-btn" disabled title="Add Bookmark (B)">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/>
-                            <path d="M11 7h2v3h3v2h-3v3h-2v-3H8v-2h3V7z"/>
-                        </svg>
-                    </button>
-                    <button id="nextBookmarkBtn" class="control-btn" disabled title="Next Bookmark (])">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17.5 3H6.5C5.67 3 5 3.67 5 4.5v15l7-3 7 3v-15c0-.83-.67-1.5-1.5-1.5zm0 14.5l-5.5-2.42L6.5 17.5V4.5h11v13z"/>
-                            <path d="M12 10l4 4h-3v3h-2v-3H8l4-4z"/>
-                        </svg>
-                    </button>
-                    <div class="bookmarks-dropdown-container">
-                        <button id="bookmarksListBtn" class="control-btn" disabled title="Manage Bookmarks">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
+                        <button id="toggleSlowMoBtn" class="control-btn overlay-toggle-btn" disabled title="Toggle Incident Slow-Mo">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12,6 12,12 16,14"/>
+                                <path d="M2 12h2M20 12h2" stroke-dasharray="2,2"/>
                             </svg>
                         </button>
-                        <div id="bookmarksDropdown" class="bookmarks-dropdown hidden">
-                            <div class="bookmarks-dropdown-header">
-                                <span>Bookmarks</span>
-                                <button id="clearAllBookmarksBtn" class="clear-all-btn" title="Clear All Bookmarks">Clear All</button>
-                            </div>
-                            <div id="bookmarksList" class="bookmarks-list">
-                                <p class="no-bookmarks">No bookmarks yet</p>
+                        <button id="loopBtn" class="control-btn" disabled title="Toggle Loop">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                            </svg>
+                        </button>
+                        <input type="checkbox" id="loopCheckbox" disabled style="display: none;">
+                    </div>
+
+                    <!-- Export Group -->
+                    <div class="control-group control-group-export">
+                        <button id="markInBtn" class="control-btn" disabled data-i18n-title="controls.markIn" title="Mark In Point (I)">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M2 4h4v16H2V4zm6 0v16l11-8L8 4z" fill="#4caf50"/>
+                            </svg>
+                        </button>
+                        <button id="markOutBtn" class="control-btn" disabled data-i18n-title="controls.markOut" title="Mark Out Point (O)">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M18 4h4v16h-4V4zM5 12l11 8V4L5 12z" fill="#f44336"/>
+                            </svg>
+                        </button>
+                        <button id="clearMarksBtn" class="control-btn" disabled data-i18n-title="controls.clearMarks" title="Clear Marks">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                            </svg>
+                        </button>
+                        <div class="export-dropdown-container">
+                            <button id="exportBtn" class="control-btn export-main-btn" disabled data-i18n-title="controls.export" title="Export Video">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"/>
+                                </svg>
+                            </button>
+                            <button id="exportDropdownBtn" class="control-btn dropdown-toggle" disabled data-i18n-title="controls.exportOptions" title="Export Options">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M7 10l5 5 5-5z"/>
+                                </svg>
+                            </button>
+                            <div id="exportDropdown" class="export-dropdown hidden">
+                                <div class="export-dropdown-header" data-i18n="export.header">Export Options</div>
+                                <label class="export-option privacy-mode-option">
+                                    <input type="checkbox" id="privacyModeCheckbox">
+                                    <span data-i18n="export.privacyMode">Privacy mode (strip metadata)</span>
+                                    <span class="privacy-mode-hint" data-i18n="export.privacyModeHint">Removes timestamp, GPS, location</span>
+                                </label>
+                                <div class="export-dropdown-divider"></div>
+                                <button class="export-option" data-action="screenshot">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                                    </svg>
+                                    <span data-i18n="controls.screenshot">Screenshot</span>
+                                </button>
+                                <div class="export-dropdown-divider"></div>
+                                <button class="export-option" data-camera="all" data-i18n="export.allCameras">All Cameras (Grid)</button>
+                                <button class="export-option" data-camera="front" data-i18n="export.frontOnly">Front Only</button>
+                                <button class="export-option" data-camera="back" data-i18n="export.rearOnly">Rear Only</button>
+                                <button class="export-option" data-camera="left_repeater" data-i18n="export.leftOnly">Left Only</button>
+                                <button class="export-option" data-camera="right_repeater" data-i18n="export.rightOnly">Right Only</button>
+                                <div class="export-dropdown-divider"></div>
+                                <button class="export-option" data-action="insurance-report" id="insuranceReportBtn">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                                    </svg>
+                                    <span data-i18n="export.insuranceReport">Insurance Report (PDF)</span>
+                                </button>
                             </div>
                         </div>
                     </div>
-                    <div class="event-nav-separator"></div>
-                    <button id="zoomOutBtn" class="control-btn" disabled title="Zoom Out Timeline">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                            <path d="M7 9h5v1H7z"/>
-                        </svg>
+
+                    <!-- View Controls Group -->
+                    <div class="control-group control-group-view">
+                        <button id="enhanceBtn" class="control-btn" disabled data-i18n-title="controls.enhance" title="Video Enhancement">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37c-.39-.39-1.03-.39-1.41 0-.39.39-.39 1.03 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0 .39-.39.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41-.39-.39-1.03-.39-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/>
+                            </svg>
+                        </button>
+                        <div class="layout-control">
+                            <select id="layoutSelect" class="layout-select" title="Layout">
+                                <option value="grid-2x2" data-i18n="layouts.grid2x2">2×2 Grid</option>
+                                <option value="grid-3x2" data-i18n="layouts.grid3x2" class="pillar-layout-option" style="display: none;">3×2 Grid (6 Cam)</option>
+                                <option value="layout-6-3" data-i18n="layouts.layout63">6:3 Centered</option>
+                                <option value="layout-4-3" data-i18n="layouts.layout43">4:3 Main</option>
+                                <option value="layout-all-16-9" data-i18n="layouts.all169">All 16:9</option>
+                                <option value="layout-front-left" data-i18n="layouts.frontLeft">Front + Left</option>
+                                <option value="layout-front-right" data-i18n="layouts.frontRight">Front + Right</option>
+                                <option value="layout-front-repeaters" data-i18n="layouts.frontRepeaters">Front + Repeaters</option>
+                                <option value="layout-focus" data-i18n="layouts.focus">Focus Mode</option>
+                            </select>
+                        </div>
+                        <button id="pillarCycleBtn" class="pillar-cycle-btn" style="display: none;" title="Cycle between Repeaters and Pillars (Shift+P)" data-i18n-title="controls.cyclePillarTitle">
+                            <span class="pillar-cycle-icon">⟳</span>
+                            <span class="pillar-cycle-label" data-i18n="controls.repeaters">Repeaters</span>
+                        </button>
+                        <div class="layout-control" id="focusCameraControl" style="display: none;">
+                            <select id="focusCameraSelect" class="layout-select" title="Focus Camera">
+                                <option value="front" data-i18n="cameras.front">Front</option>
+                                <option value="back" data-i18n="cameras.back">Back</option>
+                                <option value="left_repeater" data-i18n="cameras.left">Left</option>
+                                <option value="right_repeater" data-i18n="cameras.right">Right</option>
+                                <option value="left_pillar" data-i18n="cameras.leftPillar" class="pillar-option" style="display: none;">Left Pillar</option>
+                                <option value="right_pillar" data-i18n="cameras.rightPillar" class="pillar-option" style="display: none;">Right Pillar</option>
+                            </select>
+                        </div>
+                        <div class="sync-status">
+                            <span id="syncStatus" class="sync-indicator"></span>
+                        </div>
+                    </div>
+
+                    <!-- Overlay Controls Group -->
+                    <div class="control-group control-group-overlays">
+                        <button id="toggleHudBtn" class="control-btn overlay-toggle-btn" disabled title="Toggle HUD Overlay (T)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9 8h2v8H9zm4 0h2v8h-2z"/>
+                            </svg>
+                        </button>
+                        <button id="toggleMiniMapBtn" class="control-btn overlay-toggle-btn" disabled title="Toggle Mini-Map (M)">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+                            </svg>
+                        </button>
+                        <button id="toggleStreetViewBtn" class="control-btn overlay-toggle-btn" disabled title="Toggle Street View (V)" style="display: none;">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12.56 14.33c-.34.27-.56.7-.56 1.17V21h7c1.1 0 2-.9 2-2v-5.98c-.94-.33-1.95-.52-3-.52-2.03 0-3.93.7-5.44 1.83z"/>
+                                <circle cx="18" cy="6" r="5"/>
+                                <path d="M11.5 6c0-1.08.27-2.1.74-3H5c-1.1 0-2 .9-2 2v14c0 .55.23 1.05.59 1.41l9.82-9.82C12.23 9.42 11.5 7.8 11.5 6z"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Hidden buttons kept for keyboard shortcuts / compatibility -->
+                    <button id="frameBackBtn" class="control-btn hidden-control" disabled data-i18n-title="controls.previousFrame" title="Previous Frame">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M11 18V6l-8.5 6 8.5 6zm7 0V6l-8.5 6 8.5 6z"/></svg>
                     </button>
-                    <button id="zoomInBtn" class="control-btn" disabled title="Zoom In Timeline">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                            <path d="M9 7v2H7v1h2v2h1v-2h2V9h-2V7H9z"/>
-                        </svg>
+                    <button id="frameForwardBtn" class="control-btn hidden-control" disabled data-i18n-title="controls.nextFrame" title="Next Frame">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18V6l8.5 6-8.5 6zm7 0V6l8.5 6-8.5 6z"/></svg>
                     </button>
-                    <button id="zoomResetBtn" class="control-btn" disabled title="Reset Zoom">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                            <text x="7" y="12" font-size="7" fill="currentColor">1x</text>
-                        </svg>
+                    <button id="prevEventBtn" class="control-btn hidden-control" disabled data-i18n-title="controls.previousEvent" title="Previous Event">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M10 12l6 4V8l-6 4z"/></svg>
                     </button>
-                    <div class="speed-control">
-                        <label for="speedSelect" class="speed-label">Speed:</label>
-                        <select id="speedSelect" class="speed-select" disabled>
-                            <option value="0.25">0.25x</option>
-                            <option value="0.5">0.5x</option>
-                            <option value="0.75">0.75x</option>
-                            <option value="1" selected>1x</option>
-                            <option value="1.25">1.25x</option>
-                            <option value="1.5">1.5x</option>
-                            <option value="2">2x</option>
-                            <option value="5">5x</option>
-                        </select>
-                    </div>
-                    <div class="loop-control">
-                        <label class="loop-label">
-                            <input type="checkbox" id="loopCheckbox" disabled>
-                            <span>Loop</span>
-                        </label>
-                    </div>
-                    <div class="layout-control">
-                        <label for="layoutSelect" class="layout-label">Layout:</label>
-                        <select id="layoutSelect" class="layout-select">
-                            <option value="grid-2x2">2×2 Grid</option>
-                            <option value="layout-6-3">6:3 Centered</option>
-                            <option value="layout-4-3">4:3 Main</option>
-                            <option value="layout-all-16-9">All 16:9</option>
-                            <option value="layout-front-left">Front + Left</option>
-                            <option value="layout-front-right">Front + Right</option>
-                            <option value="layout-front-repeaters">Front + Repeaters</option>
-                            <option value="layout-focus">Focus Mode</option>
-                        </select>
-                    </div>
-                    <div class="layout-control" id="focusCameraControl" style="display: none;">
-                        <label for="focusCameraSelect" class="layout-label">Camera:</label>
-                        <select id="focusCameraSelect" class="layout-select">
-                            <option value="front">Front</option>
-                            <option value="back">Back</option>
-                            <option value="left_repeater">Left</option>
-                            <option value="right_repeater">Right</option>
-                        </select>
-                    </div>
-                    <div class="sync-status">
-                        <span id="syncStatus" class="sync-indicator"></span>
-                    </div>
+                    <button id="nextEventBtn" class="control-btn hidden-control" disabled data-i18n-title="controls.nextEvent" title="Next Event">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M14 12l-6-4v8l6-4z"/></svg>
+                    </button>
+                    <button id="screenshotBtn" class="control-btn hidden-control" disabled data-i18n-title="controls.screenshot" title="Screenshot">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9z"/></svg>
+                    </button>
+                    <button id="pipBtn" class="control-btn hidden-control" disabled style="display: none;">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 7h-8v6h8V7z"/></svg>
+                    </button>
                 </div>
             </main>
         </div>
@@ -532,7 +647,7 @@
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay hidden">
         <div class="loading-spinner"></div>
-        <div id="loadingText" class="loading-text">Loading...</div>
+        <div id="loadingText" class="loading-text" data-i18n="loading.loading">Loading...</div>
     </div>
 
     <!-- Buffering Indicator -->
@@ -540,7 +655,7 @@
         <div class="buffering-content">
             <div class="buffering-spinner"></div>
             <div class="buffering-text">
-                <span id="bufferingLabel">Buffering...</span>
+                <span id="bufferingLabel" data-i18n="loading.buffering">Buffering...</span>
                 <span id="bufferingSpeed" class="buffering-speed"></span>
             </div>
             <div class="buffer-health-bar">
@@ -556,35 +671,62 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <!-- Protocol Buffers for Tesla SEI telemetry -->
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.6/dist/protobuf.min.js"></script>
+    <!-- jsPDF for insurance report generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- TensorFlow.js for license plate detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+    <!-- i18n (load first) -->
+    <script src="js/i18n.js"></script>
 
     <!-- App Modules -->
+    <script src="js/sidebarResize.js"></script>
     <script src="js/eventFilter.js"></script>
     <script src="js/filterPanel.js"></script>
-    <script src="js/mapView.js"></script>
+    <script src="js/mapView.js?v=6"></script>
     <script src="js/folderManager.js"></script>
-    <script src="js/folderParser.js"></script>
-    <script src="js/eventBrowser.js"></script>
+    <script src="js/folderParser.js?v=2"></script>
+    <script src="js/eventBrowser.js?v=2"></script>
     <script src="js/videoPlayer.js"></script>
-    <script src="js/timeline.js"></script>
+    <script src="js/timeline.js?v=2"></script>
     <script src="js/syncController.js"></script>
     <script src="js/layoutConfig.js"></script>
     <script src="js/layoutRenderer.js"></script>
     <script src="js/layoutManager.js"></script>
     <script src="js/layoutEditor.js"></script>
-    <script src="js/screenshotCapture.js"></script>
+    <script src="js/screenshotCapture.js?v=2"></script>
     <script src="js/videoEnhancer.js"></script>
+    <script src="js/seiExtractor.js"></script>
+    <script src="js/telemetryOverlay.js?v=7"></script>
+    <script src="js/miniMapOverlay.js?v=4"></script>
+    <script src="js/weatherService.js"></script>
+    <script src="js/elevationService.js?v=2"></script>
+    <script src="js/speedLimitService.js?v=3"></script>
+    <script src="js/elevationOverlay.js?v=4"></script>
+    <script src="js/telemetryGraphs.js?v=8"></script>
+    <script src="js/incidentSlowMo.js?v=1"></script>
+    <script src="js/collisionReconstruction.js?v=1"></script>
+    <script src="js/streetViewOverlay.js?v=2"></script>
     <script src="js/eventDataBackup.js"></script>
     <script src="js/notesManager.js"></script>
-    <script src="js/videoExport.js"></script>
+    <script src="js/videoExport.js?v=2"></script>
     <script src="js/clipMarking.js"></script>
+    <script src="js/insuranceReport.js"></script>
     <script src="js/settingsManager.js"></script>
-    <script src="js/versionManager.js"></script>
+    <script src="js/versionManager.js?v=3"></script>
     <script src="js/statisticsManager.js"></script>
-    <script src="js/helpModal.js"></script>
+    <script src="js/helpModal.js?v=2"></script>
     <script src="js/quickStartGuide.js"></script>
     <script src="js/offlinePackager.js"></script>
     <script src="js/driveSync.js"></script>
     <script src="js/driveSyncUI.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/regionTracker.js?v=2"></script>
+    <script src="js/frameStacker.js?v=2"></script>
+    <script src="js/plateEnhancer.js?v=2"></script>
+    <script src="js/plateBlur.js?v=1"></script>
+    <script src="js/app.js?v=15"></script>
 </body>
 </html>

@@ -1,0 +1,523 @@
+{
+  "_meta": {
+    "language": "Chinese (Simplified)",
+    "locale": "zh",
+    "status": "complete"
+  },
+
+  "app": {
+    "title": "TeslaCamViewer.com",
+    "description": "查看特斯拉行车记录仪录像，支持同步播放"
+  },
+
+  "header": {
+    "github": "GitHub",
+    "donate": "捐赠",
+    "statistics": "统计",
+    "keyboardShortcuts": "键盘快捷键 (?)",
+    "settings": "设置 (,)",
+    "viewOnGitHub": "在 GitHub 上查看",
+    "supportProject": "支持此项目"
+  },
+
+  "sidebar": {
+    "events": "事件",
+    "map": "地图",
+    "allDrives": "所有驱动器",
+    "addDrive": "添加其他驱动器",
+    "manageDrives": "管理驱动器",
+    "syncDrives": "驱动器间同步",
+    "selectFolder": "选择 TeslaCam 文件夹",
+    "emptyState": "点击\"选择 TeslaCam 文件夹\"开始使用",
+    "emptyStateHint": "您可以选择 TeslaCam 文件夹，或任何包含特斯拉行车记录仪录像的文件夹"
+  },
+
+  "player": {
+    "noEventSelected": "未选择事件",
+    "selectEventHint": "👈 从侧边栏选择一个事件查看",
+    "noEventLoaded": "未加载事件",
+    "hidden": "已隐藏：",
+    "fullscreen": "全屏",
+    "exitFullscreen": "退出全屏"
+  },
+
+  "cameras": {
+    "front": "前",
+    "back": "后",
+    "left": "左",
+    "right": "右",
+    "hideFront": "隐藏前置摄像头",
+    "hideBack": "隐藏后置摄像头",
+    "hideLeft": "隐藏左侧摄像头",
+    "hideRight": "隐藏右侧摄像头"
+  },
+
+  "controls": {
+    "play": "播放",
+    "pause": "暂停",
+    "previousFrame": "上一帧（按住可慢放）",
+    "nextFrame": "下一帧（按住可慢放）",
+    "previousClip": "上一个片段",
+    "nextClip": "下一个片段",
+    "previousEvent": "上一个事件",
+    "nextEvent": "下一个事件",
+    "screenshot": "截图",
+    "enhance": "视频增强",
+    "markIn": "标记入点",
+    "markOut": "标记出点",
+    "clearMarks": "清除标记",
+    "export": "导出所有摄像头",
+    "exportOptions": "导出选项",
+    "zoomOut": "时间轴缩小",
+    "zoomIn": "时间轴放大",
+    "resetZoom": "重置缩放",
+    "loop": "循环",
+    "speed": "速度：",
+    "layout": "布局：",
+    "camera": "摄像头："
+  },
+
+  "bookmarks": {
+    "title": "书签",
+    "previous": "上一个书签 ([)",
+    "add": "添加书签 (B)",
+    "next": "下一个书签 (])",
+    "manage": "管理书签",
+    "clearAll": "全部清除",
+    "noBookmarks": "暂无书签"
+  },
+
+  "export": {
+    "header": "导出摄像头",
+    "allCameras": "所有摄像头（网格）",
+    "frontOnly": "仅前置",
+    "rearOnly": "仅后置",
+    "leftOnly": "仅左侧",
+    "rightOnly": "仅右侧",
+    "exporting": "导出中 {{percent}}%",
+    "preparing": "准备导出...",
+    "encoding": "编码视频...",
+    "complete": "导出完成",
+    "cancelled": "导出已取消",
+    "failed": "导出失败"
+  },
+
+  "layouts": {
+    "grid2x2": "2×2 网格",
+    "layout63": "6:3 居中",
+    "layout43": "4:3 主画面",
+    "all169": "全部 16:9",
+    "frontLeft": "前 + 左",
+    "frontRight": "前 + 右",
+    "frontRepeaters": "前 + 侧翼",
+    "focus": "专注模式"
+  },
+
+  "loading": {
+    "loading": "加载中...",
+    "buffering": "缓冲中...",
+    "bufferHealth": "缓冲状态"
+  },
+
+  "notes": {
+    "title": "备注和标签 (N)",
+    "notes": "备注",
+    "tags": "标签",
+    "tagPlaceholder": "输入标签，按 Enter 或点击 +",
+    "addTag": "添加标签",
+    "existingTags": "现有标签",
+    "placeholder": "添加关于此事件的备注..."
+  },
+
+  "help": {
+    "title": "键盘快捷键",
+    "close": "关闭",
+    "tip": "提示：大多数快捷键只在不输入文本时有效",
+
+    "sections": {
+      "playback": "播放",
+      "navigation": "导航",
+      "viewLayout": "视图和布局",
+      "markingExport": "标记和导出",
+      "bookmarks": "书签",
+      "speedControl": "速度控制",
+      "general": "常规"
+    },
+
+    "shortcuts": {
+      "playPause": "播放 / 暂停",
+      "previousFrame": "上一帧",
+      "nextFrame": "下一帧",
+      "slowMotion": "慢动作播放",
+      "previousClip": "上一个片段",
+      "nextClip": "下一个片段",
+      "goToStart": "跳到开头",
+      "goToEnd": "跳到结尾",
+      "previousEvent": "上一个事件",
+      "nextEvent": "下一个事件",
+      "selectPreviousEvent": "选择上一个事件",
+      "selectNextEvent": "选择下一个事件",
+      "cycleLayouts": "切换布局",
+      "focusCamera": "聚焦摄像头 (1=前, 2=后, 3=左, 4=右)",
+      "toggleFullscreen": "切换全屏",
+      "focusCameraFullscreen": "全屏聚焦摄像头",
+      "markIn": "标记入点",
+      "markOut": "标记出点",
+      "clearMarks": "清除标记",
+      "takeScreenshot": "截图",
+      "exportVideo": "导出视频",
+      "addBookmark": "在当前位置添加书签",
+      "jumpToPreviousBookmark": "跳到上一个书签",
+      "jumpToNextBookmark": "跳到下一个书签",
+      "zoomTimeline": "缩放时间轴（如果在设置中启用）",
+      "increaseSpeed": "加速",
+      "decreaseSpeed": "减速",
+      "resetSpeed": "重置为1倍速",
+      "showHelp": "显示此帮助",
+      "openSettings": "打开设置",
+      "closeModal": "关闭窗口 / 清除标记"
+    }
+  },
+
+  "settings": {
+    "title": "设置",
+    "close": "关闭",
+    "done": "完成",
+    "resetToDefaults": "恢复默认设置",
+    "confirmReset": "确定要恢复所有默认设置吗？",
+
+    "sections": {
+      "playback": "播放",
+      "performance": "性能",
+      "ui": "用户界面",
+      "timeline": "时间轴",
+      "session": "会话",
+      "offline": "离线模式",
+      "accessibility": "无障碍",
+      "mobile": "移动端",
+      "export": "导出",
+      "language": "语言"
+    },
+
+    "language": {
+      "selectLanguage": "语言",
+      "languageHint": "选择您的首选语言"
+    }
+  },
+
+  "filter": {
+    "search": "搜索事件",
+    "type": "类型",
+    "date": "日期",
+    "all": "全部",
+    "savedClips": "已保存片段",
+    "sentryClips": "哨兵片段",
+    "recentClips": "最近片段",
+    "clear": "清除筛选",
+    "filters": "筛选",
+    "eventTypes": "事件类型",
+    "onlyBookmarked": "仅显示已收藏事件",
+    "onlyWithNotes": "仅显示有备注/标签的事件",
+    "sortBy": "排序方式",
+    "newestFirst": "最新优先",
+    "oldestFirst": "最早优先"
+  },
+
+  "map": {
+    "noLocation": "无位置数据",
+    "showAll": "显示所有事件",
+    "centerOnEvent": "居中到事件",
+    "toggleHeatmap": "切换热力图视图",
+    "toggleStruggleZones": "切换自动驾驶问题区域",
+    "loadingStruggleZones": "正在加载自动驾驶脱离数据...",
+    "struggleZonesLoaded": "发现 {{count}} 次自动驾驶脱离",
+    "togglePhantomBrakes": "切换幽灵刹车热点",
+    "loadingPhantomBrakes": "正在加载幽灵刹车数据...",
+    "phantomBrakesLoaded": "发现 {{count}} 次幽灵刹车",
+    "phantomBrakeHotspot": "幽灵刹车热点",
+    "phantomBrakesAtLocation": "此位置有 {{count}} 次幽灵刹车",
+    "phantomBrakeTip": "此位置反复发生幽灵刹车 - 如果是误报，请考虑向特斯拉反馈。",
+    "toggleDarkMode": "切换地图深色模式"
+  },
+
+  "statistics": {
+    "title": "统计",
+    "close": "关闭",
+    "recordingOverview": "录像概览",
+    "totalEvents": "事件总数",
+    "totalClips": "片段总数",
+    "recordingTime": "录像时长",
+    "estStorage": "预估存储",
+    "eventsLast14Days": "事件 - 最近14天",
+    "eventTypes": "事件类型",
+    "saved": "已保存",
+    "sentry": "哨兵",
+    "recent": "最近",
+    "triggerReasons": "触发原因",
+    "manualSave": "手动保存",
+    "objectDetected": "检测到物体",
+    "vehicleBump": "车辆碰撞",
+    "honk": "鸣笛",
+    "other": "其他",
+    "unknown": "未知",
+    "topLocations": "前10位置（所有事件）",
+    "sentryByTimeOfDay": "按时段哨兵事件",
+    "topSentryLocations": "哨兵事件主要位置",
+    "dateRange": "日期范围",
+    "eventTrends": "事件趋势",
+    "weekly": "周",
+    "monthly": "月",
+    "exportStatistics": "导出统计",
+    "exportJson": "导出 JSON",
+    "exportCsv": "导出 CSV",
+    "noEvents": "未加载事件。请先打开TeslaCam文件夹。",
+    "noStatsToExport": "无统计数据可导出",
+    "noTimelineData": "无时间线数据",
+    "noEventsLast14Days": "最近14天无事件",
+    "noSentryEvents": "无哨兵事件可分析",
+    "noTrendData": "无趋势数据",
+    "noLocationData": "无位置数据",
+    "noSentryLocationData": "无哨兵位置数据",
+    "events": "事件"
+  },
+
+  "errors": {
+    "folderNotFound": "文件夹未找到",
+    "noVideosFound": "此事件中未找到视频",
+    "loadFailed": "视频加载失败",
+    "exportFailed": "导出失败",
+    "browserNotSupported": "您的浏览器不支持此功能",
+    "permissionDenied": "权限被拒绝",
+    "fileAccessError": "文件访问错误"
+  },
+
+  "time": {
+    "hours": "时",
+    "minutes": "分",
+    "seconds": "秒",
+    "ago": "前",
+    "justNow": "刚刚"
+  },
+
+  "quickstart": {
+    "skip": "跳过",
+    "previous": "上一步",
+    "next": "下一步",
+    "getStarted": "开始使用",
+    "welcome": {
+      "title": "欢迎使用 TeslaCam Viewer",
+      "description": "直接在浏览器中查看和管理您的特斯拉行车记录仪录像。",
+      "noUpload": "无需上传",
+      "videosStay": "您的视频保留在您的电脑上。",
+      "language": "语言"
+    },
+    "step1": {
+      "title": "步骤 1：选择您的 TeslaCam 文件夹",
+      "description": "点击"选择 TeslaCam 文件夹"按钮，选择包含 TeslaCam 数据的 USB 驱动器或文件夹。",
+      "hint": "查找名为 TeslaCam、SavedClips、SentryClips 或 RecentClips 的文件夹。"
+    },
+    "step2": {
+      "title": "步骤 2：浏览事件",
+      "description": "事件显示在左侧边栏中，按日期排序。点击任意事件加载它。",
+      "saved": "行车记录仪手动保存",
+      "sentry": "运动触发录像",
+      "recent": "滚动缓冲录像"
+    },
+    "step3": {
+      "title": "步骤 3：查看 4 个摄像头",
+      "description": "同步观看所有 4 个摄像头角度：前、后、左、右。",
+      "tip": "提示",
+      "tipText": "拖动摄像头交换位置，或隐藏不需要的摄像头。"
+    },
+    "shortcuts": {
+      "title": "键盘快捷键",
+      "playPause": "播放 / 暂停",
+      "seek": "前进 5 秒",
+      "screenshot": "截图",
+      "markInOut": "标记入点 / 出点",
+      "export": "导出",
+      "showAll": "显示所有快捷键"
+    }
+  },
+
+  "driveManager": {
+    "title": "管理驱动器",
+    "noDrives": "尚未添加驱动器",
+    "events": "事件",
+    "removeDrive": "移除驱动器",
+    "addDrive": "添加驱动器",
+    "changeColor": "点击更改颜色"
+  },
+
+  "driveSync": {
+    "title": "驱动器同步",
+    "close": "关闭 (Esc)",
+    "settings": "设置",
+    "sourceDestination": "源和目标",
+    "selectSource": "选择源...",
+    "selectDestination": "选择目标...",
+    "compare": "比较",
+    "comparing": "比较中...",
+    "comparisonStats": "比较统计",
+    "selectDrivesToCompare": "选择驱动器并比较以查看统计信息",
+    "selectDrivesHint": "选择要比较的驱动器",
+    "quickLoad": "快速加载：",
+    "noPresets": "没有保存的预设",
+    "save": "保存",
+    "copy": "复制",
+    "move": "移动",
+    "cancel": "取消",
+    "pause": "暂停",
+    "resume": "继续",
+    "startSync": "开始同步",
+    "done": "完成",
+    "preparing": "准备中...",
+    "syncComplete": "同步完成",
+    "syncFailed": "同步失败",
+    "selected": "已选择：",
+    "events": "事件",
+    "missingOnDest": "目标缺失",
+    "newerOnSource": "源更新",
+    "differentSize": "大小不同",
+    "alreadySynced": "已同步",
+    "includeNotes": "包含备注和标签",
+    "eta": "预计时间：",
+    "sourceEvents": "源事件",
+    "destEvents": "目标事件",
+    "missing": "缺失",
+    "newerCount": "源更新",
+    "synced": "已同步",
+    "syncCoverage": "同步覆盖率",
+    "storageBreakdown": "存储详情",
+    "sourceTotal": "源总计",
+    "destTotal": "目标总计",
+    "toTransfer": "待传输",
+    "dateRange": "日期范围",
+    "source": "源：",
+    "destination": "目标：",
+    "eventsByType": "按类型分类事件",
+    "topLocations": "主要位置",
+    "noLocationData": "无位置数据",
+    "eventsByMonth": "按月分类事件",
+    "noMonthlyData": "无月度数据",
+    "detailedBreakdown": "详细事件分类",
+    "allEvents": "所有事件",
+    "missingOnly": "仅缺失",
+    "newerOnly": "仅更新",
+    "syncedOnly": "仅已同步",
+    "showingFirst": "显示前 {{count}} 个，共 {{total}} 个事件"
+  },
+
+  "syncSettings": {
+    "title": "同步设置",
+    "verifyAfterCopy": "复制后验证文件",
+    "syncNotes": "同步备注和标签",
+    "writeSyncFile": "将同步设置文件写入目标",
+    "confirmBeforeDelete": "删除源文件前确认",
+    "noteConflict": "备注冲突处理：",
+    "askEachTime": "每次询问",
+    "mergeAutomatically": "自动合并",
+    "saveSettings": "保存设置",
+    "close": "关闭"
+  },
+
+  "presets": {
+    "title": "管理预设",
+    "noPresets": "没有保存的预设。选择驱动器并点击"保存"创建。",
+    "importFromDrives": "从驱动器导入",
+    "close": "关闭",
+    "delete": "删除",
+    "importedFrom": "导入自",
+    "lastUsed": "上次使用：",
+    "deleteConfirm": "删除预设 \"{{name}}\"？",
+    "couldNotFind": "找不到此预设的驱动器。",
+    "lookingFor": "查找：",
+    "sourceLabel": "源：",
+    "destLabel": "目标：",
+    "makeSureLoaded": "请确保两个驱动器都已加载。",
+    "enterName": "输入此预设的名称：",
+    "savedSuccess": "预设保存成功！",
+    "imported": "已导入 {{count}} 个预设。",
+    "errors": "错误：",
+    "noNewPresets": "在驱动器上未找到新预设。"
+  },
+
+  "layoutEditor": {
+    "title": "布局编辑器",
+    "close": "关闭",
+    "new": "新建",
+    "newLayout": "新建布局",
+    "import": "导入",
+    "importLayout": "导入布局",
+    "export": "导出",
+    "exportLayout": "导出布局",
+    "snap": "吸附",
+    "aspect": "宽高比：",
+    "aspectWide": "宽屏",
+    "aspectUltraWide": "超宽",
+    "aspectTriple": "三联",
+    "aspectCinematic": "电影",
+    "selectedCamera": "选中的相机",
+    "futureCamera": "未来相机 - 尚不可用",
+    "position": "位置",
+    "size": "大小",
+    "layer": "图层",
+    "sendBackward": "后移",
+    "bringForward": "前移",
+    "fit": "适应：",
+    "contain": "包含",
+    "cover": "覆盖",
+    "cropEdges": "裁剪边缘",
+    "top": "上：",
+    "bottom": "下：",
+    "left": "左：",
+    "right": "右：",
+    "cameras": "相机",
+    "savedLayouts": "已保存的布局",
+    "noLayouts": "尚无自定义布局",
+    "cancel": "取消",
+    "saveLayout": "保存布局",
+    "layoutName": "布局名称",
+    "hint": "点击选择，拖动移动，角落调整大小",
+    "untitled": "未命名布局",
+    "invalidLayout": "无效布局：",
+    "deleteConfirm": "删除 \"{{name}}\"？",
+    "importFailed": "导入失败：",
+    "readFailed": "读取文件失败：",
+    "failedToSave": "保存布局失败",
+    "failedToUpdate": "更新布局失败",
+    "soon": "即将推出"
+  },
+
+  "common": {
+    "close": "关闭",
+    "cancel": "取消",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "add": "添加",
+    "remove": "移除",
+    "yes": "是",
+    "no": "否",
+    "ok": "确定",
+    "loading": "加载中...",
+    "error": "错误",
+    "success": "成功",
+    "warning": "警告"
+  },
+
+  "incidentDetection": {
+    "toggleSlowMo": "切换事故慢动作",
+    "slowMoEnabled": "事故慢动作：开启",
+    "slowMoDisabled": "事故慢动作：关闭",
+    "slowMoIndicator": "慢动作",
+    "slowMoScore": "评分：{{score}}/10",
+    "toggleBirdsEye": "切换鸟瞰视图",
+    "birdsEyeTitle": "鸟瞰视图",
+    "birdsEyeWaitingGps": "等待GPS数据...",
+    "birdsEyeRadius": "{{radius}}米半径",
+    "birdsEyeLowG": "低G",
+    "birdsEyeMedG": "中G",
+    "birdsEyeHighG": "高G"
+  }
+}

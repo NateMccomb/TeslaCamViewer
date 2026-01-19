@@ -1,5 +1,5 @@
 /**
- * QuickStartGuide - First-run tutorial overlay
+ * QuickStartGuide - First-run tutorial overlay with i18n support
  */
 
 class QuickStartGuide {
@@ -7,60 +7,93 @@ class QuickStartGuide {
         this.STORAGE_KEY = 'teslacamviewer_quickstart_shown';
         this.modal = null;
         this.currentStep = 0;
-        this.steps = [
+
+        // Listen for locale changes to re-render
+        window.addEventListener('localeChanged', () => {
+            if (this.modal) {
+                this.renderStep();
+            }
+        });
+    }
+
+    /**
+     * Get translation helper
+     */
+    t(key) {
+        return window.i18n ? window.i18n.t(key) : key.split('.').pop();
+    }
+
+    /**
+     * Get steps with translated content
+     */
+    getSteps() {
+        return [
             {
-                title: 'Welcome to TeslaCam Viewer',
+                title: this.t('quickstart.welcome.title'),
                 content: `
-                    <p>View and manage your Tesla dashcam footage directly in your browser.</p>
+                    <p>${this.t('quickstart.welcome.description')}</p>
                     <p style="color: var(--accent); margin-top: 1rem;">
-                        <strong>No upload required</strong> - your videos stay on your computer.
+                        <strong>${this.t('quickstart.welcome.noUpload')}</strong> - ${this.t('quickstart.welcome.videosStay')}
                     </p>
+                    <div class="quickstart-language-selector" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                        <label for="quickstartLanguage" style="color: var(--text-secondary); font-size: 0.9rem; margin-right: 0.5rem;">${this.t('quickstart.welcome.language')}:</label>
+                        <select id="quickstartLanguage" class="quickstart-language-select" style="background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.6rem; font-size: 0.9rem; cursor: pointer;">
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                            <option value="de">Deutsch</option>
+                            <option value="fr">Français</option>
+                            <option value="zh">中文</option>
+                            <option value="ja">日本語</option>
+                            <option value="ko">한국어</option>
+                            <option value="nl">Nederlands</option>
+                            <option value="no">Norsk</option>
+                        </select>
+                    </div>
                 `,
                 icon: '🚗'
             },
             {
-                title: 'Step 1: Select Your TeslaCam Folder',
+                title: this.t('quickstart.step1.title'),
                 content: `
-                    <p>Click the <strong>"Select TeslaCam Folder"</strong> button to choose your USB drive or folder containing TeslaCam data.</p>
+                    <p>${this.t('quickstart.step1.description')}</p>
                     <p style="margin-top: 0.5rem; color: var(--text-secondary);">
-                        Look for folders named <code>TeslaCam</code>, <code>SavedClips</code>, <code>SentryClips</code>, or <code>RecentClips</code>.
+                        ${this.t('quickstart.step1.hint')}
                     </p>
                 `,
                 icon: '📁'
             },
             {
-                title: 'Step 2: Browse Events',
+                title: this.t('quickstart.step2.title'),
                 content: `
-                    <p>Events appear in the left sidebar, sorted by date. Click any event to load it.</p>
+                    <p>${this.t('quickstart.step2.description')}</p>
                     <ul style="margin-top: 0.5rem; text-align: left; padding-left: 1.5rem;">
-                        <li><strong>SavedClips</strong> - Manual saves from dashcam</li>
-                        <li><strong>SentryClips</strong> - Motion-triggered recordings</li>
-                        <li><strong>RecentClips</strong> - Rolling buffer footage</li>
+                        <li><strong>SavedClips</strong> - ${this.t('quickstart.step2.saved')}</li>
+                        <li><strong>SentryClips</strong> - ${this.t('quickstart.step2.sentry')}</li>
+                        <li><strong>RecentClips</strong> - ${this.t('quickstart.step2.recent')}</li>
                     </ul>
                 `,
                 icon: '📋'
             },
             {
-                title: 'Step 3: View 4 Cameras',
+                title: this.t('quickstart.step3.title'),
                 content: `
-                    <p>Watch all 4 camera angles synchronized: Front, Back, Left, and Right.</p>
+                    <p>${this.t('quickstart.step3.description')}</p>
                     <p style="margin-top: 0.5rem; color: var(--text-secondary);">
-                        <strong>Tip:</strong> Drag cameras to swap positions, or hide cameras you don't need.
+                        <strong>${this.t('quickstart.step3.tip')}:</strong> ${this.t('quickstart.step3.tipText')}
                     </p>
                 `,
                 icon: '📹'
             },
             {
-                title: 'Keyboard Shortcuts',
+                title: this.t('quickstart.shortcuts.title'),
                 content: `
                     <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; text-align: left; max-width: 280px; margin: 0 auto;">
-                        <kbd>Space</kbd><span>Play / Pause</span>
-                        <kbd>← / →</kbd><span>Seek 5 seconds</span>
-                        <kbd>S</kbd><span>Screenshot</span>
-                        <kbd>P</kbd><span>Picture-in-Picture</span>
-                        <kbd>I / O</kbd><span>Mark In / Out</span>
-                        <kbd>E</kbd><span>Export</span>
-                        <kbd>?</kbd><span>Show all shortcuts</span>
+                        <kbd>Space</kbd><span>${this.t('quickstart.shortcuts.playPause')}</span>
+                        <kbd>← / →</kbd><span>${this.t('quickstart.shortcuts.seek')}</span>
+                        <kbd>S</kbd><span>${this.t('quickstart.shortcuts.screenshot')}</span>
+                        <kbd>I / O</kbd><span>${this.t('quickstart.shortcuts.markInOut')}</span>
+                        <kbd>E</kbd><span>${this.t('quickstart.shortcuts.export')}</span>
+                        <kbd>?</kbd><span>${this.t('quickstart.shortcuts.showAll')}</span>
                     </div>
                 `,
                 icon: '⌨️'
@@ -122,21 +155,23 @@ class QuickStartGuide {
             this.modal.remove();
         }
 
+        const steps = this.getSteps();
+
         this.modal = document.createElement('div');
         this.modal.className = 'quickstart-modal';
         this.modal.innerHTML = `
             <div class="quickstart-overlay"></div>
             <div class="quickstart-panel">
-                <button class="quickstart-skip" title="Skip tutorial">Skip</button>
+                <button class="quickstart-skip" title="${this.t('quickstart.skip')}">${this.t('quickstart.skip')}</button>
                 <div class="quickstart-icon"></div>
                 <h2 class="quickstart-title"></h2>
                 <div class="quickstart-content"></div>
                 <div class="quickstart-progress">
-                    ${this.steps.map((_, i) => `<div class="quickstart-dot" data-step="${i}"></div>`).join('')}
+                    ${steps.map((_, i) => `<div class="quickstart-dot" data-step="${i}"></div>`).join('')}
                 </div>
                 <div class="quickstart-buttons">
-                    <button class="quickstart-btn secondary" id="quickstartPrev">Previous</button>
-                    <button class="quickstart-btn primary" id="quickstartNext">Next</button>
+                    <button class="quickstart-btn secondary" id="quickstartPrev">${this.t('quickstart.previous')}</button>
+                    <button class="quickstart-btn primary" id="quickstartNext">${this.t('quickstart.next')}</button>
                 </div>
             </div>
         `;
@@ -157,6 +192,14 @@ class QuickStartGuide {
             });
         });
 
+        // Language selector - use event delegation on panel
+        const panel = this.modal.querySelector('.quickstart-panel');
+        panel.addEventListener('change', async (e) => {
+            if (e.target.id === 'quickstartLanguage' && window.i18n) {
+                await window.i18n.setLocale(e.target.value);
+            }
+        });
+
         // Fade in
         requestAnimationFrame(() => {
             this.modal.classList.add('visible');
@@ -167,12 +210,17 @@ class QuickStartGuide {
      * Render current step
      */
     renderStep() {
-        const step = this.steps[this.currentStep];
+        const steps = this.getSteps();
+        const step = steps[this.currentStep];
         const panel = this.modal.querySelector('.quickstart-panel');
 
         panel.querySelector('.quickstart-icon').textContent = step.icon;
         panel.querySelector('.quickstart-title').textContent = step.title;
         panel.querySelector('.quickstart-content').innerHTML = step.content;
+
+        // Update skip button text
+        panel.querySelector('.quickstart-skip').textContent = this.t('quickstart.skip');
+        panel.querySelector('.quickstart-skip').title = this.t('quickstart.skip');
 
         // Update progress dots
         this.modal.querySelectorAll('.quickstart-dot').forEach((dot, i) => {
@@ -183,8 +231,17 @@ class QuickStartGuide {
         const prevBtn = this.modal.querySelector('#quickstartPrev');
         const nextBtn = this.modal.querySelector('#quickstartNext');
 
+        prevBtn.textContent = this.t('quickstart.previous');
         prevBtn.style.visibility = this.currentStep === 0 ? 'hidden' : 'visible';
-        nextBtn.textContent = this.currentStep === this.steps.length - 1 ? 'Get Started' : 'Next';
+        nextBtn.textContent = this.currentStep === steps.length - 1 ? this.t('quickstart.getStarted') : this.t('quickstart.next');
+
+        // Set language selector value on first step
+        if (this.currentStep === 0) {
+            const langSelect = panel.querySelector('#quickstartLanguage');
+            if (langSelect && window.i18n) {
+                langSelect.value = window.i18n.getLocale();
+            }
+        }
     }
 
     /**
@@ -201,7 +258,8 @@ class QuickStartGuide {
      * Go to next step
      */
     nextStep() {
-        if (this.currentStep < this.steps.length - 1) {
+        const steps = this.getSteps();
+        if (this.currentStep < steps.length - 1) {
             this.currentStep++;
             this.renderStep();
         } else {

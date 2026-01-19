@@ -27,6 +27,13 @@ class LayoutEditor {
     }
 
     /**
+     * Get translation helper
+     */
+    t(key) {
+        return window.i18n ? window.i18n.t(key) : key.split('.').pop();
+    }
+
+    /**
      * Calculate snap points for the current drag operation
      * @returns {Object} Object with x and y snap point arrays
      */
@@ -126,7 +133,9 @@ class LayoutEditor {
             front: document.getElementById('videoFront'),
             back: document.getElementById('videoBack'),
             left_repeater: document.getElementById('videoLeft'),
-            right_repeater: document.getElementById('videoRight')
+            right_repeater: document.getElementById('videoRight'),
+            left_pillar: document.getElementById('videoLeftPillar'),
+            right_pillar: document.getElementById('videoRightPillar')
         };
 
         for (const [camName, video] of Object.entries(videos)) {
@@ -216,39 +225,39 @@ class LayoutEditor {
             <div class="layout-editor-overlay"></div>
             <div class="layout-editor-panel">
                 <div class="layout-editor-header">
-                    <h2>Layout Editor</h2>
-                    <button class="layout-editor-close" title="Close">
+                    <h2>${this.t('layoutEditor.title')}</h2>
+                    <button class="layout-editor-close" title="${this.t('layoutEditor.close')}">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                         </svg>
                     </button>
                 </div>
                 <div class="layout-editor-toolbar">
-                    <button class="layout-editor-btn" id="editorNewBtn" title="New Layout">
+                    <button class="layout-editor-btn" id="editorNewBtn" title="${this.t('layoutEditor.newLayout')}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                        New
+                        ${this.t('layoutEditor.new')}
                     </button>
-                    <button class="layout-editor-btn" id="editorImportBtn" title="Import Layout">
+                    <button class="layout-editor-btn" id="editorImportBtn" title="${this.t('layoutEditor.importLayout')}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
-                        Import
+                        ${this.t('layoutEditor.import')}
                     </button>
-                    <button class="layout-editor-btn" id="editorExportBtn" title="Export Layout">
+                    <button class="layout-editor-btn" id="editorExportBtn" title="${this.t('layoutEditor.exportLayout')}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                        Export
+                        ${this.t('layoutEditor.export')}
                     </button>
                     <div class="layout-editor-toolbar-spacer"></div>
                     <label class="layout-editor-snap-toggle">
                         <input type="checkbox" id="editorSnapToggle" checked>
-                        <span>Snap</span>
+                        <span>${this.t('layoutEditor.snap')}</span>
                     </label>
-                    <label>Aspect:</label>
+                    <label>${this.t('layoutEditor.aspect')}</label>
                     <select id="editorAspectRatio" class="layout-editor-select">
                         <option value="4:3">4:3</option>
                         <option value="16:9">16:9</option>
-                        <option value="6:3">6:3 (Wide)</option>
-                        <option value="8:3">8:3 (Ultra Wide)</option>
-                        <option value="12:3">12:3 (Triple)</option>
-                        <option value="21:9">21:9 (Cinematic)</option>
+                        <option value="6:3">6:3 (${this.t('layoutEditor.aspectWide')})</option>
+                        <option value="8:3">8:3 (${this.t('layoutEditor.aspectUltraWide')})</option>
+                        <option value="12:3">12:3 (${this.t('layoutEditor.aspectTriple')})</option>
+                        <option value="21:9">21:9 (${this.t('layoutEditor.aspectCinematic')})</option>
                     </select>
                 </div>
                 <div class="layout-editor-content">
@@ -256,16 +265,16 @@ class LayoutEditor {
                         <div class="layout-editor-preview" id="editorPreview">
                             <!-- Camera placeholders will be rendered here -->
                         </div>
-                        <p class="layout-editor-hint">Click to select, drag to move, corners to resize</p>
+                        <p class="layout-editor-hint">${this.t('layoutEditor.hint')}</p>
                     </div>
                     <div class="layout-editor-properties">
                         <div class="layout-editor-prop-section">
-                            <h3>Selected Camera</h3>
+                            <h3>${this.t('layoutEditor.selectedCamera')}</h3>
                             <div class="layout-editor-camera-select">
                                 ${LayoutConfig.CAMERAS.map(cam => `
                                     <button class="layout-editor-cam-btn ${cam === 'front' ? 'active' : ''}"
                                             data-camera="${cam}"
-                                            ${LayoutConfig.FUTURE_CAMERAS.includes(cam) ? 'disabled title="Future camera - not yet available"' : ''}>
+                                            ${LayoutConfig.FUTURE_CAMERAS.includes(cam) ? `disabled title="${this.t('layoutEditor.futureCamera')}"` : ''}>
                                         ${LayoutConfig.CAMERA_SHORT_NAMES[cam]}
                                     </button>
                                 `).join('')}
@@ -273,7 +282,7 @@ class LayoutEditor {
                         </div>
 
                         <div class="layout-editor-prop-section">
-                            <h3>Position</h3>
+                            <h3>${this.t('layoutEditor.position')}</h3>
                             <div class="layout-editor-prop-row">
                                 <label>X:</label>
                                 <input type="number" id="propX" min="0" max="100" step="1"> %
@@ -283,7 +292,7 @@ class LayoutEditor {
                         </div>
 
                         <div class="layout-editor-prop-section">
-                            <h3>Size</h3>
+                            <h3>${this.t('layoutEditor.size')}</h3>
                             <div class="layout-editor-prop-row">
                                 <label>W:</label>
                                 <input type="number" id="propW" min="1" max="100" step="1"> %
@@ -293,43 +302,43 @@ class LayoutEditor {
                         </div>
 
                         <div class="layout-editor-prop-section">
-                            <h3>Layer</h3>
+                            <h3>${this.t('layoutEditor.layer')}</h3>
                             <div class="layout-editor-prop-row">
-                                <button class="layout-editor-btn small" id="propZDown" title="Send backward">
+                                <button class="layout-editor-btn small" id="propZDown" title="${this.t('layoutEditor.sendBackward')}">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
                                 </button>
                                 <span id="propZ">1</span>
-                                <button class="layout-editor-btn small" id="propZUp" title="Bring forward">
+                                <button class="layout-editor-btn small" id="propZUp" title="${this.t('layoutEditor.bringForward')}">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
                                 </button>
-                                <label style="margin-left: 1rem;">Fit:</label>
+                                <label style="margin-left: 1rem;">${this.t('layoutEditor.fit')}</label>
                                 <select id="propFit" class="layout-editor-select small">
-                                    <option value="contain">Contain</option>
-                                    <option value="cover">Cover</option>
+                                    <option value="contain">${this.t('layoutEditor.contain')}</option>
+                                    <option value="cover">${this.t('layoutEditor.cover')}</option>
                                 </select>
                             </div>
                         </div>
 
                         <div class="layout-editor-prop-section">
-                            <h3>Crop Edges</h3>
+                            <h3>${this.t('layoutEditor.cropEdges')}</h3>
                             <div class="layout-editor-crop-grid">
                                 <div class="crop-row">
-                                    <label>Top:</label>
+                                    <label>${this.t('layoutEditor.top')}</label>
                                     <input type="range" id="cropTop" min="0" max="40" value="0">
                                     <span id="cropTopVal">0%</span>
                                 </div>
                                 <div class="crop-row">
-                                    <label>Bottom:</label>
+                                    <label>${this.t('layoutEditor.bottom')}</label>
                                     <input type="range" id="cropBottom" min="0" max="40" value="0">
                                     <span id="cropBottomVal">0%</span>
                                 </div>
                                 <div class="crop-row">
-                                    <label>Left:</label>
+                                    <label>${this.t('layoutEditor.left')}</label>
                                     <input type="range" id="cropLeft" min="0" max="40" value="0">
                                     <span id="cropLeftVal">0%</span>
                                 </div>
                                 <div class="crop-row">
-                                    <label>Right:</label>
+                                    <label>${this.t('layoutEditor.right')}</label>
                                     <input type="range" id="cropRight" min="0" max="40" value="0">
                                     <span id="cropRightVal">0%</span>
                                 </div>
@@ -337,21 +346,21 @@ class LayoutEditor {
                         </div>
 
                         <div class="layout-editor-prop-section">
-                            <h3>Cameras</h3>
+                            <h3>${this.t('layoutEditor.cameras')}</h3>
                             <div class="layout-editor-camera-list">
                                 ${LayoutConfig.CAMERAS.map(cam => `
                                     <label class="layout-editor-cam-toggle ${LayoutConfig.FUTURE_CAMERAS.includes(cam) ? 'future' : ''}">
                                         <input type="checkbox" data-camera="${cam}"
                                                ${LayoutConfig.FUTURE_CAMERAS.includes(cam) ? 'disabled' : ''}>
                                         ${LayoutConfig.CAMERA_NAMES[cam]}
-                                        ${LayoutConfig.FUTURE_CAMERAS.includes(cam) ? '<span class="future-badge">Soon</span>' : ''}
+                                        ${LayoutConfig.FUTURE_CAMERAS.includes(cam) ? `<span class="future-badge">${this.t('layoutEditor.soon')}</span>` : ''}
                                     </label>
                                 `).join('')}
                             </div>
                         </div>
 
                         <div class="layout-editor-prop-section">
-                            <h3>Saved Layouts</h3>
+                            <h3>${this.t('layoutEditor.savedLayouts')}</h3>
                             <div id="customLayoutsList" class="layout-editor-saved-list">
                                 <!-- Custom layouts will be rendered here -->
                             </div>
@@ -359,10 +368,10 @@ class LayoutEditor {
                     </div>
                 </div>
                 <div class="layout-editor-footer">
-                    <input type="text" id="editorLayoutName" placeholder="Layout name" class="layout-editor-name-input">
+                    <input type="text" id="editorLayoutName" placeholder="${this.t('layoutEditor.layoutName')}" class="layout-editor-name-input">
                     <div class="layout-editor-footer-buttons">
-                        <button class="layout-editor-btn secondary" id="editorCancelBtn">Cancel</button>
-                        <button class="layout-editor-btn primary" id="editorSaveBtn">Save Layout</button>
+                        <button class="layout-editor-btn secondary" id="editorCancelBtn">${this.t('layoutEditor.cancel')}</button>
+                        <button class="layout-editor-btn primary" id="editorSaveBtn">${this.t('layoutEditor.saveLayout')}</button>
                     </div>
                 </div>
             </div>
@@ -424,6 +433,10 @@ class LayoutEditor {
         this.modal.querySelectorAll('.layout-editor-cam-toggle input').forEach(checkbox => {
             checkbox.addEventListener('change', () => {
                 const cam = checkbox.dataset.camera;
+                // Ensure camera config exists (may be missing for pillar cameras in older layouts)
+                if (!this.currentConfig.cameras[cam]) {
+                    this.currentConfig.cameras[cam] = LayoutConfig.getDefaultCamera(false);
+                }
                 this.currentConfig.cameras[cam].enabled = checkbox.checked;
                 this.updatePreview();
             });
@@ -456,7 +469,7 @@ class LayoutEditor {
 
         // Layout name
         this.modal.querySelector('#editorLayoutName').addEventListener('input', (e) => {
-            this.currentConfig.name = e.target.value || 'Untitled Layout';
+            this.currentConfig.name = e.target.value || this.t('layoutEditor.untitled');
         });
 
         // Escape key
@@ -605,6 +618,9 @@ class LayoutEditor {
             const cam = checkbox.dataset.camera;
             if (this.currentConfig.cameras[cam]) {
                 checkbox.checked = this.currentConfig.cameras[cam].enabled;
+            } else {
+                // Camera doesn't exist in config yet - show as unchecked
+                checkbox.checked = false;
             }
         });
     }
@@ -1040,12 +1056,26 @@ class LayoutEditor {
                     this.updateCameraCheckboxes();
                     this.updatePreview();
                     this.updatePropertiesPanel();
-                    console.log('Layout imported:', this.currentConfig.name);
+
+                    // Save telemetry overlay position if included in import
+                    if (result.telemetryOverlay) {
+                        try {
+                            const telemetryPositions = JSON.parse(localStorage.getItem('teslacamviewer_telemetry_positions') || '{}');
+                            telemetryPositions[this.currentConfig.id] = result.telemetryOverlay;
+                            localStorage.setItem('teslacamviewer_telemetry_positions', JSON.stringify(telemetryPositions));
+                            console.log('Layout imported:', this.currentConfig.name, '(with telemetry overlay position)');
+                        } catch (err) {
+                            console.warn('Failed to save telemetry overlay position:', err);
+                            console.log('Layout imported:', this.currentConfig.name);
+                        }
+                    } else {
+                        console.log('Layout imported:', this.currentConfig.name);
+                    }
                 } else {
-                    alert(`Import failed: ${result.error}`);
+                    alert(`${this.t('layoutEditor.importFailed')} ${result.error}`);
                 }
             } catch (err) {
-                alert(`Failed to read file: ${err.message}`);
+                alert(`${this.t('layoutEditor.readFailed')} ${err.message}`);
             }
         };
 
@@ -1057,7 +1087,20 @@ class LayoutEditor {
      */
     exportLayout() {
         this.currentConfig.modified = new Date().toISOString();
-        const json = LayoutConfig.exportToJSON(this.currentConfig);
+
+        // Get telemetry overlay position for this layout if available
+        let telemetryOverlay = null;
+        try {
+            const telemetryPositions = JSON.parse(localStorage.getItem('teslacamviewer_telemetry_positions') || '{}');
+            const layoutId = this.currentConfig.id;
+            if (telemetryPositions[layoutId]) {
+                telemetryOverlay = telemetryPositions[layoutId];
+            }
+        } catch (e) {
+            console.warn('Failed to get telemetry overlay position for export:', e);
+        }
+
+        const json = LayoutConfig.exportToJSON(this.currentConfig, { telemetryOverlay });
 
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -1068,7 +1111,7 @@ class LayoutEditor {
         a.click();
 
         URL.revokeObjectURL(url);
-        console.log('Layout exported:', this.currentConfig.name);
+        console.log('Layout exported:', this.currentConfig.name, telemetryOverlay ? '(with telemetry overlay position)' : '');
     }
 
     /**
@@ -1076,13 +1119,13 @@ class LayoutEditor {
      */
     saveLayout() {
         // Update name from input
-        this.currentConfig.name = document.getElementById('editorLayoutName').value || 'Untitled Layout';
+        this.currentConfig.name = document.getElementById('editorLayoutName').value || this.t('layoutEditor.untitled');
         this.currentConfig.modified = new Date().toISOString();
 
         // Validate
         const validation = LayoutConfig.validate(this.currentConfig);
         if (!validation.valid) {
-            alert(`Invalid layout: ${validation.errors.join(', ')}`);
+            alert(`${this.t('layoutEditor.invalidLayout')} ${validation.errors.join(', ')}`);
             return;
         }
 
@@ -1099,7 +1142,7 @@ class LayoutEditor {
                 console.log('Layout updated:', this.currentConfig.name);
                 this.hide();
             } else {
-                alert('Failed to update layout');
+                alert(this.t('layoutEditor.failedToUpdate'));
             }
         } else {
             // Save new layout
@@ -1117,7 +1160,7 @@ class LayoutEditor {
                 console.log('Layout saved:', this.currentConfig.name);
                 this.hide();
             } else {
-                alert('Failed to save layout');
+                alert(this.t('layoutEditor.failedToSave'));
             }
         }
     }
@@ -1132,7 +1175,7 @@ class LayoutEditor {
         const customLayouts = this.layoutManager.customLayouts || [];
 
         if (customLayouts.length === 0) {
-            listContainer.innerHTML = '<p class="layout-editor-no-layouts">No custom layouts saved yet</p>';
+            listContainer.innerHTML = `<p class="layout-editor-no-layouts">${this.t('layoutEditor.noLayouts')}</p>`;
             return;
         }
 
@@ -1140,10 +1183,10 @@ class LayoutEditor {
             <div class="layout-editor-saved-item" data-id="${layout.id}">
                 <span class="layout-name">${layout.name}</span>
                 <div class="layout-actions">
-                    <button class="layout-editor-btn small edit-layout-btn" data-id="${layout.id}" title="Edit">
+                    <button class="layout-editor-btn small edit-layout-btn" data-id="${layout.id}" title="${this.t('common.edit')}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                     </button>
-                    <button class="layout-editor-btn small delete-layout-btn" data-id="${layout.id}" title="Delete">
+                    <button class="layout-editor-btn small delete-layout-btn" data-id="${layout.id}" title="${this.t('common.delete')}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                     </button>
                 </div>
@@ -1174,7 +1217,7 @@ class LayoutEditor {
                 e.stopPropagation();
                 const layoutId = btn.dataset.id;
                 const layout = this.layoutManager.getCustomLayout(layoutId);
-                if (layout && confirm(`Delete "${layout.name}"?`)) {
+                if (layout && confirm(this.t('layoutEditor.deleteConfirm').replace('{{name}}', layout.name))) {
                     this.layoutManager.deleteCustomLayout(layoutId);
                     this.updateCustomLayoutsList();
                 }

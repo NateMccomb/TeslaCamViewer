@@ -11,6 +11,13 @@ class DriveSyncUI {
         this.originalTitle = document.title;
         this.titleFlashInterval = null;
 
+        // Listen for locale changes to re-render modal
+        window.addEventListener('localeChanged', () => {
+            if (this.modal && !this.modal.classList.contains('hidden')) {
+                this.render();
+            }
+        });
+
         // UI state
         this.selectedItems = new Map(); // eventName -> boolean
         this.comparisonResults = null;
@@ -25,6 +32,13 @@ class DriveSyncUI {
         this.driveSync.onProgress((state) => this.onProgress(state));
         this.driveSync.onComplete((state) => this.onComplete(state));
         this.driveSync.onError((error) => this.onError(error));
+    }
+
+    /**
+     * Get translation helper
+     */
+    t(key) {
+        return window.i18n ? window.i18n.t(key) : key.split('.').pop();
     }
 
     show() {
@@ -48,7 +62,7 @@ class DriveSyncUI {
                 <!-- Top Toolbar -->
                 <div class="sync-toolbar">
                     <div class="sync-toolbar-left">
-                        <button class="sync-close-btn" id="syncCloseBtn" title="Close (Esc)">
+                        <button class="sync-close-btn" id="syncCloseBtn" title="${this.t('driveSync.close')}">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                             </svg>
@@ -57,7 +71,7 @@ class DriveSyncUI {
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
                             </svg>
-                            Drive Sync
+                            ${this.t('driveSync.title')}
                         </h1>
                     </div>
                     <div class="sync-toolbar-center">
@@ -66,7 +80,7 @@ class DriveSyncUI {
                         </div>
                     </div>
                     <div class="sync-toolbar-right">
-                        <button class="sync-toolbar-btn" id="syncSettingsBtn" title="Settings">
+                        <button class="sync-toolbar-btn" id="syncSettingsBtn" title="${this.t('driveSync.settings')}">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
                             </svg>
@@ -79,7 +93,7 @@ class DriveSyncUI {
                     <!-- LEFT PANEL: Drive Selection & Comparison -->
                     <div class="sync-panel sync-panel-left">
                         <div class="sync-panel-header">
-                            <span class="sync-panel-title">Source & Destination</span>
+                            <span class="sync-panel-title">${this.t('driveSync.sourceDestination')}</span>
                         </div>
 
                         <!-- Compact Drive Selectors -->
@@ -91,7 +105,7 @@ class DriveSyncUI {
                                     </svg>
                                 </div>
                                 <select id="sourceDriveSelect" class="sync-drive-select-compact">
-                                    <option value="">Select source...</option>
+                                    <option value="">${this.t('driveSync.selectSource')}</option>
                                     ${drives.map(d => `<option value="${d.id}">${d.label} (${d.events?.length || 0})</option>`).join('')}
                                 </select>
                                 <div id="sourceInfo" class="sync-drive-info-compact"></div>
@@ -110,7 +124,7 @@ class DriveSyncUI {
                                     </svg>
                                 </div>
                                 <select id="destDriveSelect" class="sync-drive-select-compact">
-                                    <option value="">Select destination...</option>
+                                    <option value="">${this.t('driveSync.selectDestination')}</option>
                                     ${drives.map(d => `<option value="${d.id}">${d.label} (${d.events?.length || 0})</option>`).join('')}
                                 </select>
                                 <div id="destInfo" class="sync-drive-info-compact"></div>
@@ -123,7 +137,7 @@ class DriveSyncUI {
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M10 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h5v-2H5V5h5V3zm4 18h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-5v2h5v14h-5v2zm-4-7l-3-3 3-3v2h6v-2l3 3-3 3v-2h-6v2z"/>
                                 </svg>
-                                Compare
+                                ${this.t('driveSync.compare')}
                             </button>
                         </div>
 
@@ -136,7 +150,7 @@ class DriveSyncUI {
                             <div id="notesComparisonSection" class="sync-notes-compact hidden">
                                 <label class="sync-checkbox-compact">
                                     <input type="checkbox" id="syncNotesCheckbox" checked>
-                                    <span>Include notes & tags</span>
+                                    <span>${this.t('driveSync.includeNotes')}</span>
                                     <span id="notesComparisonText" class="sync-notes-count">(0)</span>
                                 </label>
                             </div>
@@ -145,19 +159,19 @@ class DriveSyncUI {
                         <!-- Progress Section -->
                         <div id="progressSection" class="sync-progress-compact hidden">
                             <div class="sync-progress-header-compact">
-                                <span id="currentItemLabel">Preparing...</span>
+                                <span id="currentItemLabel">${this.t('driveSync.preparing')}</span>
                                 <span id="fileProgressText">0%</span>
                             </div>
                             <div class="sync-progress-bar-compact">
                                 <div id="fileProgressBar" class="sync-progress-fill"></div>
                             </div>
                             <div class="sync-progress-details">
-                                <span id="eventProgress">0 / 0 events</span>
+                                <span id="eventProgress">0 / 0 ${this.t('driveSync.events')}</span>
                                 <span id="bytesProgress">0 B / 0 B</span>
                             </div>
                             <div class="sync-progress-details">
                                 <span id="speedStat">-- MB/s</span>
-                                <span id="etaStat">ETA: --:--</span>
+                                <span id="etaStat">${this.t('driveSync.eta')} --:--</span>
                             </div>
                         </div>
 
@@ -169,7 +183,7 @@ class DriveSyncUI {
                                 </svg>
                             </div>
                             <div class="sync-complete-info">
-                                <span class="sync-complete-title">Sync Complete</span>
+                                <span class="sync-complete-title">${this.t('driveSync.syncComplete')}</span>
                                 <span id="completeSummary" class="sync-complete-summary-text"></span>
                             </div>
                             <div id="syncErrors" class="sync-errors-compact hidden"></div>
@@ -182,7 +196,7 @@ class DriveSyncUI {
                     <!-- RIGHT PANEL: Statistics -->
                     <div class="sync-panel sync-panel-right">
                         <div class="sync-panel-header">
-                            <span class="sync-panel-title">Comparison Statistics</span>
+                            <span class="sync-panel-title">${this.t('driveSync.comparisonStats')}</span>
                         </div>
 
                         <div id="statisticsSection" class="sync-stats-inline">
@@ -190,7 +204,7 @@ class DriveSyncUI {
                                 <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" opacity="0.3">
                                     <path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/>
                                 </svg>
-                                <span>Select drives and compare to see statistics</span>
+                                <span>${this.t('driveSync.selectDrivesToCompare')}</span>
                             </div>
                             <div id="statsContent" class="sync-stats-content-inline"></div>
                         </div>
@@ -200,7 +214,7 @@ class DriveSyncUI {
                 <!-- Bottom Action Bar -->
                 <div class="sync-action-bar">
                     <div class="sync-action-bar-left">
-                        <span id="selectionSummary" class="sync-selection-summary">Select drives to compare</span>
+                        <span id="selectionSummary" class="sync-selection-summary">${this.t('driveSync.selectDrivesHint')}</span>
                     </div>
                     <div class="sync-action-bar-center">
                         <div class="sync-mode-toggle">
@@ -210,7 +224,7 @@ class DriveSyncUI {
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                                     </svg>
-                                    Copy
+                                    ${this.t('driveSync.copy')}
                                 </span>
                             </label>
                             <label class="sync-mode-option">
@@ -219,26 +233,26 @@ class DriveSyncUI {
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
                                     </svg>
-                                    Move
+                                    ${this.t('driveSync.move')}
                                 </span>
                             </label>
                         </div>
                     </div>
                     <div class="sync-action-bar-right">
-                        <button id="cancelCompareBtn" class="sync-action-btn sync-btn-secondary">Cancel</button>
+                        <button id="cancelCompareBtn" class="sync-action-btn sync-btn-secondary">${this.t('driveSync.cancel')}</button>
                         <button id="pauseResumeBtn" class="sync-action-btn sync-btn-secondary hidden">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
                             </svg>
-                            Pause
+                            ${this.t('driveSync.pause')}
                         </button>
                         <button id="startSyncBtn" class="sync-action-btn sync-btn-primary" disabled>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
                             </svg>
-                            Start Sync
+                            ${this.t('driveSync.startSync')}
                         </button>
-                        <button id="doneBtn" class="sync-action-btn sync-btn-success hidden">Done</button>
+                        <button id="doneBtn" class="sync-action-btn sync-btn-success hidden">${this.t('driveSync.done')}</button>
                     </div>
                 </div>
             </div>
@@ -246,36 +260,36 @@ class DriveSyncUI {
             <!-- Settings Panel (hidden by default) -->
             <div id="syncSettingsPanel" class="sync-settings-panel hidden">
                 <div class="sync-settings-content">
-                    <h3>Sync Settings</h3>
+                    <h3>${this.t('syncSettings.title')}</h3>
                     <div class="sync-settings-form">
                         <label class="sync-checkbox-label">
                             <input type="checkbox" id="settingVerify" ${this.driveSync.settings.verifyAfterCopy ? 'checked' : ''}>
-                            <span>Verify files after copy</span>
+                            <span>${this.t('syncSettings.verifyAfterCopy')}</span>
                         </label>
                         <label class="sync-checkbox-label">
                             <input type="checkbox" id="settingSyncNotes" ${this.driveSync.settings.syncNotes ? 'checked' : ''}>
-                            <span>Sync notes and tags</span>
+                            <span>${this.t('syncSettings.syncNotes')}</span>
                         </label>
                         <label class="sync-checkbox-label">
                             <input type="checkbox" id="settingWriteSyncFile" ${this.driveSync.settings.writeSyncFile ? 'checked' : ''}>
-                            <span>Write sync settings file to destination</span>
+                            <span>${this.t('syncSettings.writeSyncFile')}</span>
                         </label>
                         <label class="sync-checkbox-label">
                             <input type="checkbox" id="settingConfirmDelete" ${this.driveSync.settings.confirmBeforeDelete ? 'checked' : ''}>
-                            <span>Confirm before deleting source files</span>
+                            <span>${this.t('syncSettings.confirmBeforeDelete')}</span>
                         </label>
 
                         <div class="sync-settings-group">
-                            <label>Note conflict resolution:</label>
+                            <label>${this.t('syncSettings.noteConflict')}</label>
                             <select id="settingNoteConflict" class="sync-settings-select">
-                                <option value="ask" ${this.driveSync.settings.noteConflictMode === 'ask' ? 'selected' : ''}>Ask each time</option>
-                                <option value="merge" ${this.driveSync.settings.noteConflictMode === 'merge' ? 'selected' : ''}>Merge automatically</option>
+                                <option value="ask" ${this.driveSync.settings.noteConflictMode === 'ask' ? 'selected' : ''}>${this.t('syncSettings.askEachTime')}</option>
+                                <option value="merge" ${this.driveSync.settings.noteConflictMode === 'merge' ? 'selected' : ''}>${this.t('syncSettings.mergeAutomatically')}</option>
                             </select>
                         </div>
                     </div>
                     <div class="sync-settings-actions">
-                        <button id="saveSettingsBtn" class="sync-save-btn">Save Settings</button>
-                        <button id="closeSettingsBtn" class="sync-cancel-btn">Close</button>
+                        <button id="saveSettingsBtn" class="sync-save-btn">${this.t('syncSettings.saveSettings')}</button>
+                        <button id="closeSettingsBtn" class="sync-cancel-btn">${this.t('syncSettings.close')}</button>
                     </div>
                 </div>
             </div>
@@ -283,13 +297,13 @@ class DriveSyncUI {
             <!-- Manage Presets Panel (hidden by default) -->
             <div id="managePresetsPanel" class="sync-settings-panel hidden">
                 <div class="sync-settings-content sync-presets-manage">
-                    <h3>Manage Presets</h3>
+                    <h3>${this.t('presets.title')}</h3>
                     <div id="presetsList" class="sync-presets-list">
                         ${this.renderPresetsList()}
                     </div>
                     <div class="sync-settings-actions">
-                        <button id="importPresetsBtn" class="sync-import-btn">Import from Drives</button>
-                        <button id="closeManagePresetsBtn" class="sync-cancel-btn">Close</button>
+                        <button id="importPresetsBtn" class="sync-import-btn">${this.t('presets.importFromDrives')}</button>
+                        <button id="closeManagePresetsBtn" class="sync-cancel-btn">${this.t('presets.close')}</button>
                     </div>
                 </div>
             </div>
@@ -303,13 +317,13 @@ class DriveSyncUI {
 
         // Always show Save and Manage buttons
         const buttons = `
-            <button id="savePresetBtn" class="sync-preset-chip sync-preset-save" disabled title="Save current selection as preset">
+            <button id="savePresetBtn" class="sync-preset-chip sync-preset-save" disabled title="${this.t('driveSync.save')}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
                 </svg>
-                Save
+                ${this.t('driveSync.save')}
             </button>
-            <button id="managePresetsBtn" class="sync-preset-chip sync-preset-manage" title="Manage saved presets">
+            <button id="managePresetsBtn" class="sync-preset-chip sync-preset-manage" title="${this.t('presets.title')}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
                 </svg>
@@ -318,8 +332,8 @@ class DriveSyncUI {
 
         if (presets.length === 0) {
             return `
-                <span class="sync-presets-label">Quick Load:</span>
-                <span class="sync-no-presets-hint">No saved presets</span>
+                <span class="sync-presets-label">${this.t('driveSync.quickLoad')}</span>
+                <span class="sync-no-presets-hint">${this.t('driveSync.noPresets')}</span>
                 ${buttons}
             `;
         }
@@ -327,13 +341,13 @@ class DriveSyncUI {
         const chips = presets.map(p => `
             <button class="sync-preset-chip sync-preset-load"
                     data-preset-id="${p.id}"
-                    title="${p.sourceLabel} → ${p.destLabel}${p.lastUsed ? '\nLast used: ' + new Date(p.lastUsed).toLocaleDateString() : ''}">
+                    title="${p.sourceLabel} → ${p.destLabel}${p.lastUsed ? '\n' + this.t('presets.lastUsed') + ' ' + new Date(p.lastUsed).toLocaleDateString() : ''}">
                 ${p.name}
             </button>
         `).join('');
 
         return `
-            <span class="sync-presets-label">Quick Load:</span>
+            <span class="sync-presets-label">${this.t('driveSync.quickLoad')}</span>
             ${chips}
             ${buttons}
         `;
@@ -352,7 +366,7 @@ class DriveSyncUI {
     renderPresetsList() {
         const presets = this.driveSync.getAllPresets();
         if (presets.length === 0) {
-            return '<p class="sync-no-presets">No saved presets. Select drives and click "Save" to create one.</p>';
+            return `<p class="sync-no-presets">${this.t('presets.noPresets')}</p>`;
         }
 
         return presets.map(p => `
@@ -360,10 +374,10 @@ class DriveSyncUI {
                 <div class="sync-preset-info">
                     <span class="sync-preset-name">${p.name}</span>
                     <span class="sync-preset-path">${p.sourceLabel} → ${p.destLabel}</span>
-                    ${p.importedFrom ? `<span class="sync-preset-imported">Imported from ${p.importedFrom}</span>` : ''}
+                    ${p.importedFrom ? `<span class="sync-preset-imported">${this.t('presets.importedFrom')} ${p.importedFrom}</span>` : ''}
                 </div>
                 <div class="sync-preset-actions">
-                    <button class="sync-preset-delete-btn" data-preset-id="${p.id}" title="Delete">
+                    <button class="sync-preset-delete-btn" data-preset-id="${p.id}" title="${this.t('presets.delete')}">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                         </svg>

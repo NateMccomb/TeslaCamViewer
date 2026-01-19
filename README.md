@@ -1,94 +1,113 @@
 # TeslaCam Viewer
 
-A browser-based Tesla dashcam viewer that plays synchronized multi-angle video footage from your local files without uploading data anywhere.
+A powerful browser-based Tesla dashcam viewer with synchronized multi-angle playback, telemetry visualization, and comprehensive incident analysis tools. All processing happens locally - your video files never leave your computer.
 
-## Features
+**Live Site: [teslacamviewer.com](https://teslacamviewer.com)**
 
-- **4-Panel Synchronized Playback** - View front, back, left, and right cameras simultaneously
-- **Auto-play** - Events start playing automatically when selected
-- **No File Uploads** - All processing happens locally in your browser
-- **Timeline Scrubbing** - Smoothly navigate through clips with visual timeline
-- **Playback Speed Control** - Slow down (0.25x) or speed up (2x) for detailed review
-- **Frame Stepping** - Step forward/backward one frame at a time, hold for slow-motion
-- **Event Navigation** - Previous/Next buttons to quickly browse between events
-- **Event Filtering** - Filter by type, date range, location, or search terms
-- **Interactive Map** - See events plotted on a map with GPS coordinates
-- **Tab Navigation** - Switch between event list and map view
-- **Screenshot Capture** - Save current frame from all 4 cameras as PNG
-- **Clip Marking** - Mark in/out points on timeline for export
-- **Video Export** - Export clips or marked sections as WebM video
-- **Fullscreen Mode** - Double-click any camera to view in fullscreen
-- **Loop Mode** - Toggle to continuously loop current event
-- **Sentry Event Features** - Auto-seek to trigger point (1:04 from end) with visual timeline marker
-- **Event Browser** - Browse SavedClips, SentryClips, and RecentClips with thumbnails
-- **Dark Theme** - Easy on the eyes during long review sessions
-- **Keyboard Shortcuts** - Quick navigation and playback control
+## Key Features
+
+### Video Playback
+- **Synchronized Multi-Camera Playback** - View front, back, left, right (and pillar cameras on newer vehicles) simultaneously
+- **Multiple Layout Presets** - Grid, Picture-in-Picture, Focus views, and more
+- **Custom Layout Editor** - Design your own camera arrangements with drag-and-drop
+- **Playback Speed Control** - 0.25x to 2x speed with frame-by-frame stepping
+- **Fullscreen Mode** - Double-click any camera for fullscreen view
+
+### Event Management
+- **Multi-Drive Support** - Add multiple TeslaCam folders and switch between them
+- **Event Filtering** - Filter by type (Saved/Sentry/Recent), date range, location, or search
+- **Interactive Map** - View all events on a map with location markers and heatmap
+- **Bookmarks and Notes** - Add notes and tags to events, backed up to event folders
+- **Statistics Dashboard** - Analytics on event types, locations, recording time, and trends
+
+### Telemetry and Analysis
+- **Live Telemetry Overlay** - Speed, G-force, turn signals, brake/throttle from embedded video data
+- **Telemetry Graphs** - Interactive speed, G-force, and steering graphs with speed limit reference
+- **GPS Mini-Map** - Real-time vehicle position overlay
+- **Elevation Profile** - Route elevation visualization
+- **Weather Display** - Historical weather conditions for each event
+- **Street View Integration** - Compare dashcam view with Google Street View
+
+### Incident Documentation
+- **Insurance Report Generator** - PDF reports with frames, telemetry data, and maps
+- **Near-Miss Detection** - Automatic incident scoring with timeline markers
+- **Hard Braking Detection** - Identifies sudden acceleration/deceleration events
+- **Driving Smoothness Score** - Safety scoring based on driving behavior
+- **Autopilot Analysis** - Phantom braking detection and AP struggle zone mapping
+
+### Export and Sharing
+- **Screenshot Capture** - Save current frame from all cameras
+- **Video Export** - Export clips as WebM or MP4 with overlays
+- **Clip Marking** - Set IN/OUT points for precise export ranges
+- **Privacy Mode** - Export with GPS and timestamp data stripped
+- **License Plate Blur** - AI-powered automatic plate detection and blurring
+- **Telemetry CSV Export** - Download telemetry data for external analysis
+
+### Customization
+- **Theme System** - Dark, Light, Midnight, and Tesla Red themes
+- **Multi-Language Support** - Interface available in multiple languages
+- **Offline Package** - Download for fully offline use
+- **Automatic Updates** - Notifications when new versions are available
 
 ## Browser Requirements
 
-**Chrome, Edge, or Chromium-based browser required** - This app uses the File System Access API which is currently only supported in Chromium browsers.
+**Chrome, Edge, or Chromium-based browser required** - This app uses the File System Access API which is only supported in Chromium browsers.
 
-Firefox and Safari do not yet support this API.
+Firefox and Safari are not supported.
 
 ## Getting Started
 
-### Option 1: Open Directly (Simple)
+### Option 1: Use the Live Site (Recommended)
 
-1. Simply open `index.html` in Chrome or Edge
-2. Click "Select TeslaCam Folder"
-3. Navigate to and select your TeslaCam folder (or its parent directory)
-4. Browse and play events!
+Visit [teslacamviewer.com](https://teslacamviewer.com) - no installation required.
 
-### Option 2: Local Web Server (Recommended)
+### Option 2: Run Locally
 
-For better performance, run a local web server:
+1. Clone or download this repository
+2. Open `index.html` in Chrome or Edge, or run a local server:
 
 ```bash
 # Using Python
 python -m http.server 8000
 
-# Or using Node.js
+# Using Node.js
 npx http-server -p 8000
 ```
 
-Then open http://localhost:8000 in your browser.
+3. Open http://localhost:8000 in your browser
 
-## Using the App
+### Option 3: Offline Package
 
-1. **Select Folder**: Click "Select TeslaCam Folder" and choose your TeslaCam directory
-2. **Browse Events**: Events appear in the left sidebar with thumbnails and metadata
-3. **Filter Events**: Use the filter panel to narrow down events by type, date, or location
-4. **View Map**: Switch to the Map tab to see all events plotted on an interactive map
-5. **Select Event**: Click an event to auto-play its videos
-6. **Playback Controls**:
-   - Play/Pause buttons or **Spacebar**
-   - Timeline click or drag to seek
-   - **Frame Forward/Backward** buttons - click to step one frame, hold for slow-motion
-   - Previous/Next clip buttons or **Shift + Arrow Keys**
-   - Previous/Next event buttons to navigate between events
-   - Speed dropdown to adjust playback (0.25x - 2x)
-   - Loop checkbox to repeat current event
-7. **Export & Capture**:
-   - **Screenshot** - Click camera button to save current frame (all 4 cameras)
-   - **Mark IN/OUT** - Set start/end points for export (green/red buttons)
-   - **Export** - Download marked section or current clip as WebM video
-   - **Clear Marks** - Remove IN/OUT markers
-8. **Fullscreen**: Double-click any camera view to enter fullscreen mode
-9. **Sync Status**: Hover over the green/yellow indicator to see video sync status
+Use the "Download Offline Version" option in settings to create a portable copy that works without internet.
+
+## Quick Start
+
+1. Click "Select TeslaCam Folder" and choose your TeslaCam directory
+2. Browse events in the sidebar - they load with thumbnails and metadata
+3. Click an event to start playback
+4. Use the timeline to scrub through footage
+5. Press `L` to cycle through layout presets
+6. Press `T` for telemetry overlay, `G` for graphs, `M` for mini-map
 
 ## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
 | `Space` | Play/Pause |
-| `←` | Seek back 5 seconds |
-| `→` | Seek forward 5 seconds |
-| `Shift + ←` | Previous clip |
-| `Shift + →` | Next clip |
+| `Left/Right Arrow` | Seek 5 seconds |
+| `Shift + Left/Right` | Previous/Next clip |
+| `Up/Down Arrow` | Previous/Next event |
+| `L` | Cycle layouts |
+| `T` | Toggle telemetry overlay |
+| `G` | Toggle telemetry graphs |
+| `M` | Toggle GPS mini-map |
+| `F` | Toggle fullscreen |
+| `S` | Take screenshot |
+| `?` | Show all shortcuts |
 
 ## Tesla Dashcam Folder Structure
 
-The app expects the standard Tesla TeslaCam folder structure:
+The app reads the standard Tesla TeslaCam folder structure:
 
 ```
 TeslaCam/
@@ -96,44 +115,49 @@ TeslaCam/
 │   └── YYYY-MM-DD_HH-MM-SS/
 │       ├── event.json
 │       ├── thumb.png
-│       └── *.mp4 (4 cameras × multiple clips)
+│       └── *.mp4 (4-6 cameras x multiple clips)
 ├── SentryClips/
 │   └── YYYY-MM-DD_HH-MM-SS/
 │       ├── event.json
 │       ├── thumb.png
-│       └── *.mp4 (4 cameras × multiple clips)
+│       └── *.mp4
 └── RecentClips/
     └── *.mp4 (rolling buffer)
 ```
 
-## Known Limitations
+## Privacy and Security
 
-- Only works in Chrome/Edge (File System Access API limitation)
-- Large folders with 100+ events may take time to parse
-- Video sync can drift slightly on long clips (auto-corrects)
-- RecentClips support is limited (no metadata available)
+- **No data uploads** - All video processing happens in your browser
+- **No server backend** - The entire app runs client-side
+- **No tracking** - No analytics or telemetry collection
+- **Local storage only** - Settings and bookmarks stored in your browser
 
-## Privacy & Security
-
-- **No data ever leaves your computer**
-- Videos are read directly from your local filesystem
-- No network requests are made
-- No tracking or analytics
-
-## Contributing
-
-Contributions welcome! Feel free to open issues or pull requests.
-
-## License
-
-MIT License - see LICENSE file for details
+The only network request is an optional version check to notify you of updates.
 
 ## Troubleshooting
 
-**"Browser not supported" error**: You must use Chrome or Edge browser.
+**"Browser not supported"**: Use Chrome or Edge browser.
 
-**No events showing**: Make sure you selected the TeslaCam folder (or its parent).
+**No events showing**: Ensure you selected the TeslaCam folder or its parent directory.
 
-**Videos won't play**: Check that the .mp4 files aren't corrupted. Try another event.
+**Videos won't play**: Check that .mp4 files aren't corrupted. Try another event.
 
-**Sync issues**: Videos automatically resync when drift is detected. If issues persist, reload the event.
+**Telemetry not showing**: Not all Tesla firmware versions embed telemetry data. Older recordings may not have this data.
+
+**Buffering issues with multiple windows**: Use tabs in the same window rather than separate browser windows.
+
+## Contributing
+
+Contributions welcome! Feel free to open issues or pull requests on GitHub.
+
+## License
+
+**Free for personal use.** Commercial use requires a separate license.
+
+See LICENSE file for details, or contact TeslaCamViewer@Gmail.com for commercial inquiries.
+
+## Version
+
+Current version: 2026.3.6.1
+
+Click the version number in the app to view the full changelog.

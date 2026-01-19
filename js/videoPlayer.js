@@ -1,5 +1,6 @@
 /**
- * VideoPlayer - Manages 4-panel synchronized video playback
+ * VideoPlayer - Manages 4-6 panel synchronized video playback
+ * Supports both 4-camera (Model 3/Y) and 6-camera (Cybertruck/refresh) systems
  * Sync threshold: 78.77ms
  */
 
@@ -10,7 +11,9 @@ class VideoPlayer {
             front: document.getElementById('videoFront'),
             back: document.getElementById('videoBack'),
             left_repeater: document.getElementById('videoLeft'),
-            right_repeater: document.getElementById('videoRight')
+            right_repeater: document.getElementById('videoRight'),
+            left_pillar: document.getElementById('videoLeftPillar'),
+            right_pillar: document.getElementById('videoRightPillar')
         };
 
         this.currentEvent = null;
@@ -19,11 +22,15 @@ class VideoPlayer {
         this.shouldAutoContinue = false;
         this.loopEnabled = false;
         this.disableAutoAdvance = false; // Can be set to prevent auto-advance during export
+        this.hasPillarCameras = false; // Set when loading event with pillar cameras
+        this.cachedClipDurations = []; // Cached durations from getTotalDuration for consistent seeking
         this.videoURLs = {
             front: null,
             back: null,
             left_repeater: null,
-            right_repeater: null
+            right_repeater: null,
+            left_pillar: null,
+            right_pillar: null
         };
 
         // Callbacks
@@ -44,10 +51,12 @@ class VideoPlayer {
 
         // Video labels for ended state tracking
         this.videoLabels = {
-            front: document.querySelector('#videoFront').parentElement.querySelector('.video-label'),
-            back: document.querySelector('#videoBack').parentElement.querySelector('.video-label'),
-            left_repeater: document.querySelector('#videoLeft').parentElement.querySelector('.video-label'),
-            right_repeater: document.querySelector('#videoRight').parentElement.querySelector('.video-label')
+            front: document.querySelector('#videoFront')?.parentElement?.querySelector('.video-label'),
+            back: document.querySelector('#videoBack')?.parentElement?.querySelector('.video-label'),
+            left_repeater: document.querySelector('#videoLeft')?.parentElement?.querySelector('.video-label'),
+            right_repeater: document.querySelector('#videoRight')?.parentElement?.querySelector('.video-label'),
+            left_pillar: document.querySelector('#videoLeftPillar')?.parentElement?.querySelector('.video-label'),
+            right_pillar: document.querySelector('#videoRightPillar')?.parentElement?.querySelector('.video-label')
         };
 
         this.setupEventListeners();
@@ -93,6 +102,17 @@ class VideoPlayer {
             // Track buffer progress for read speed estimation
             video.addEventListener('progress', () => {
                 this.updateBufferHealth(camera, video);
+            });
+
+            // Handle runtime errors during playback (not initial load)
+            // The loadVideoForCamera method handles errors during load
+            video.addEventListener('error', () => {
+                // Only handle if video was actually playing (has currentTime > 0)
+                // This avoids double-handling errors that loadVideoForCamera already caught
+                if (video.currentTime > 0) {
+                    console.warn(`Runtime playback error for ${camera} video`);
+                    this.updateVideoLabelState(camera, true);
+                }
             });
         }
 
@@ -159,6 +179,7 @@ class VideoPlayer {
     async loadEvent(event) {
         this.currentEvent = event;
         this.currentClipIndex = -1;
+        this.hasPillarCameras = event.hasPillarCameras || false;
         await this.loadClip(0);
     }
 
@@ -186,9 +207,15 @@ class VideoPlayer {
         this.currentClipIndex = clipIndex;
         const clipGroup = this.currentEvent.clipGroups[clipIndex];
 
+        // Determine which cameras to load (4 or 6 based on event)
+        const cameras = ['front', 'back', 'left_repeater', 'right_repeater'];
+        if (this.hasPillarCameras) {
+            cameras.push('left_pillar', 'right_pillar');
+        }
+
         // Load each camera
         const loadPromises = [];
-        for (const camera of ['front', 'back', 'left_repeater', 'right_repeater']) {
+        for (const camera of cameras) {
             const promise = this.loadVideoForCamera(camera, clipGroup);
             loadPromises.push(promise);
         }
@@ -224,24 +251,54 @@ class VideoPlayer {
         }
 
         if (!clip || !clip.fileHandle) {
-            console.warn(`No clip for camera ${camera}`);
             video.src = '';
             return;
         }
 
         try {
             const file = await clip.fileHandle.getFile();
+            console.log(`[LoadVideo] ${camera}: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
+
+            // Skip empty or very small files (likely corrupted)
+            if (file.size < 1024) {
+                console.warn(`[LoadVideo] Skipping corrupted file for ${camera}: ${file.name} (${file.size} bytes)`);
+                video.src = '';
+                return;
+            }
+
             const url = URL.createObjectURL(file);
             this.videoURLs[camera] = url;
             video.src = url;
 
             // Wait for video to be ready
-            await new Promise((resolve, reject) => {
-                video.onloadeddata = resolve;
-                video.onerror = reject;
+            await new Promise((resolve) => {
+                const timeout = setTimeout(() => {
+                    console.warn(`[LoadVideo] TIMEOUT for ${camera}: ${file.name}`);
+                    // Clear source to abort the load
+                    video.src = '';
+                    this.videoURLs[camera] = null;
+                    URL.revokeObjectURL(url);
+                    resolve();
+                }, 10000); // 10 second timeout
+
+                video.onloadeddata = () => {
+                    clearTimeout(timeout);
+                    console.log(`[LoadVideo] Loaded ${camera}: ${file.name}`);
+                    resolve();
+                };
+                video.onerror = (e) => {
+                    clearTimeout(timeout);
+                    console.error(`[LoadVideo] ERROR for ${camera}: ${file.name}`, e);
+                    // Clear the source on error so it doesn't block playback
+                    video.src = '';
+                    this.videoURLs[camera] = null;
+                    URL.revokeObjectURL(url);
+                    resolve(); // Don't reject, let other cameras continue
+                };
             });
         } catch (error) {
-            console.error(`Error loading video for ${camera}:`, error);
+            console.error(`[LoadVideo] Exception for ${camera}:`, error);
+            video.src = '';
         }
     }
 
@@ -250,7 +307,26 @@ class VideoPlayer {
      */
     async play() {
         try {
-            const playPromises = Object.values(this.videos).map(v => v.play());
+            // Only play videos that have a source loaded
+            const activeVideos = Object.values(this.videos).filter(v => v.src && v.src !== '');
+
+            // If no videos have sources (all failed to load), skip to next clip
+            if (activeVideos.length === 0) {
+                console.warn('No playable videos in current clip, advancing to next');
+                if (this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
+                    await this.loadClip(this.currentClipIndex + 1);
+                    return this.play(); // Try playing next clip
+                } else {
+                    console.log('No more clips to play');
+                    this.isPlaying = false;
+                    if (this.onPlayStateChange) {
+                        this.onPlayStateChange(false);
+                    }
+                    return;
+                }
+            }
+
+            const playPromises = activeVideos.map(v => v.play());
             await Promise.all(playPromises);
             this.isPlaying = true;
 
@@ -323,8 +399,11 @@ class VideoPlayer {
      * @param {string} camera
      */
     handleVideoEnded(camera) {
-        // Check if ALL videos have actually ended (not just paused)
-        const allEnded = Object.values(this.videos).every(v => v.ended);
+        // Check if ALL active videos have actually ended (not just paused)
+        // Only check videos that have a source loaded (src is set and not empty)
+        const activeVideos = Object.values(this.videos).filter(v => v.src && v.src !== '');
+        // Consider a video "done" if it ended OR errored (don't block on corrupted files)
+        const allEnded = activeVideos.length > 0 && activeVideos.every(v => v.ended || v.error);
 
         if (!allEnded) {
             // Not all videos finished yet, keep waiting
@@ -440,40 +519,67 @@ class VideoPlayer {
     async getTotalDuration() {
         if (!this.currentEvent) return 0;
 
+        // Clear and rebuild the duration cache
+        this.cachedClipDurations = [];
         let total = 0;
-        for (const clipGroup of this.currentEvent.clipGroups) {
+
+        for (let i = 0; i < this.currentEvent.clipGroups.length; i++) {
+            const clipGroup = this.currentEvent.clipGroups[i];
             // Use front camera as reference
             const clip = clipGroup.clips.front;
+            let duration = 0;
+
             if (clip && clip.fileHandle) {
                 try {
                     const file = await clip.fileHandle.getFile();
-                    const video = document.createElement('video');
-                    const url = URL.createObjectURL(file);
-                    video.src = url;
 
-                    const duration = await new Promise((resolve) => {
-                        video.onloadedmetadata = () => {
-                            resolve(video.duration || 60); // Default to 60s
-                        };
-                    });
+                    // Skip empty/corrupted files
+                    if (file.size < 1024) {
+                        console.warn(`Skipping empty file for duration: ${file.name}`);
+                        duration = 60; // Default
+                    } else {
+                        const video = document.createElement('video');
+                        const url = URL.createObjectURL(file);
+                        video.src = url;
 
-                    // Clean up: clear src before revoking URL
-                    video.src = '';
-                    URL.revokeObjectURL(url);
+                        duration = await new Promise((resolve) => {
+                            const timeout = setTimeout(() => {
+                                console.warn(`Timeout getting duration for ${file.name}`);
+                                resolve(60); // Default on timeout
+                            }, 5000);
 
-                    total += duration;
+                            video.onloadedmetadata = () => {
+                                clearTimeout(timeout);
+                                resolve(video.duration || 60);
+                            };
+                            video.onerror = () => {
+                                clearTimeout(timeout);
+                                console.warn(`Error loading metadata for ${file.name}`);
+                                resolve(60); // Default on error
+                            };
+                        });
+
+                        // Clean up: clear src before revoking URL
+                        video.src = '';
+                        URL.revokeObjectURL(url);
+                    }
                 } catch (error) {
                     console.error('Error getting clip duration:', error);
-                    total += 60; // Default
+                    duration = 60; // Default
                 }
             }
+
+            this.cachedClipDurations.push(duration);
+            total += duration;
         }
 
+        console.log(`[VideoPlayer] Cached ${this.cachedClipDurations.length} clip durations, total: ${total.toFixed(1)}s`);
         return total;
     }
 
     /**
      * Seek to absolute time in event (across all clips)
+     * Uses cached clip durations from getTotalDuration() for consistent timing
      * @param {number} eventTime Time in seconds from start of event
      */
     async seekToEventTime(eventTime) {
@@ -483,39 +589,61 @@ class VideoPlayer {
         let targetClipIndex = 0;
         let timeInClip = 0;
 
-        // Find which clip and offset
-        for (let i = 0; i < this.currentEvent.clipGroups.length; i++) {
-            const clipGroup = this.currentEvent.clipGroups[i];
-            const clip = clipGroup.clips.front;
-
-            if (!clip || !clip.fileHandle) continue;
-
-            try {
-                const file = await clip.fileHandle.getFile();
-                const video = document.createElement('video');
-                const url = URL.createObjectURL(file);
-                video.src = url;
-
-                const duration = await new Promise((resolve) => {
-                    video.onloadedmetadata = () => {
-                        resolve(video.duration || 60);
-                    };
-                });
-
-                // Clean up: clear src before revoking URL
-                video.src = '';
-                URL.revokeObjectURL(url);
+        // Use cached durations for consistent seeking (populated by getTotalDuration)
+        if (this.cachedClipDurations.length === this.currentEvent.clipGroups.length) {
+            // Use cached durations - fast and consistent
+            for (let i = 0; i < this.cachedClipDurations.length; i++) {
+                const duration = this.cachedClipDurations[i];
+                if (duration === 0) continue; // Skip clips without front camera
 
                 if (accumulatedTime + duration >= eventTime) {
-                    // Target is in this clip
                     targetClipIndex = i;
                     timeInClip = eventTime - accumulatedTime;
                     break;
-                } else {
-                    accumulatedTime += duration;
                 }
-            } catch (error) {
-                console.error('Error during seek:', error);
+                accumulatedTime += duration;
+            }
+        } else {
+            // Fallback: calculate durations (slower, but works if cache not available)
+            console.warn('[VideoPlayer] seekToEventTime: Using fallback duration calculation');
+            for (let i = 0; i < this.currentEvent.clipGroups.length; i++) {
+                const clipGroup = this.currentEvent.clipGroups[i];
+                const clip = clipGroup.clips.front;
+
+                if (!clip || !clip.fileHandle) continue;
+
+                try {
+                    const file = await clip.fileHandle.getFile();
+                    const video = document.createElement('video');
+                    const url = URL.createObjectURL(file);
+                    video.src = url;
+
+                    const duration = await new Promise((resolve) => {
+                        const timeout = setTimeout(() => resolve(60), 3000);
+                        video.onloadedmetadata = () => {
+                            clearTimeout(timeout);
+                            resolve(video.duration || 60);
+                        };
+                        video.onerror = () => {
+                            clearTimeout(timeout);
+                            resolve(60);
+                        };
+                    });
+
+                    // Clean up
+                    video.src = '';
+                    URL.revokeObjectURL(url);
+
+                    if (accumulatedTime + duration >= eventTime) {
+                        targetClipIndex = i;
+                        timeInClip = eventTime - accumulatedTime;
+                        break;
+                    }
+                    accumulatedTime += duration;
+                } catch (error) {
+                    console.error('Error during seek:', error);
+                    accumulatedTime += 60; // Default on error to prevent drift
+                }
             }
         }
 
@@ -548,6 +676,7 @@ class VideoPlayer {
 
         this.currentEvent = null;
         this.currentClipIndex = -1;
+        this.cachedClipDurations = []; // Clear duration cache
     }
 
     /**
@@ -556,6 +685,32 @@ class VideoPlayer {
      */
     getIsPlaying() {
         return this.isPlaying;
+    }
+
+    /**
+     * Get current absolute time in event (across all clips) using cached durations
+     * This is the inverse of seekToEventTime - converts current position to absolute time
+     * @returns {number} Absolute time in seconds from start of event
+     */
+    getCurrentAbsoluteTime() {
+        if (!this.currentEvent) return 0;
+
+        let absoluteTime = 0;
+
+        // Add duration of all previous clips using cached durations for accuracy
+        if (this.cachedClipDurations.length > 0) {
+            for (let i = 0; i < this.currentClipIndex && i < this.cachedClipDurations.length; i++) {
+                absoluteTime += this.cachedClipDurations[i];
+            }
+        } else {
+            // Fallback to 60-second estimate if cache not populated
+            absoluteTime = this.currentClipIndex * 60;
+        }
+
+        // Add current time within clip
+        absoluteTime += this.getCurrentTime();
+
+        return absoluteTime;
     }
 
     /**

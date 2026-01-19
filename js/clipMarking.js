@@ -88,14 +88,27 @@ class ClipMarking {
      * @returns {number}
      */
     getAbsoluteTime() {
-        // Calculate absolute time based on current clip and position within clip
+        // Use videoPlayer's getCurrentAbsoluteTime for accurate timing using cached durations
+        // This ensures consistency with seekToEventTime which uses the same cached durations
+        if (this.videoPlayer.getCurrentAbsoluteTime) {
+            return this.videoPlayer.getCurrentAbsoluteTime();
+        }
+
+        // Fallback: Calculate absolute time based on current clip and position within clip
         let totalTime = 0;
         const currentClipIndex = this.videoPlayer.currentClipIndex;
         const currentTimeInClip = this.videoPlayer.getCurrentTime();
 
-        // Add duration of all previous clips (simplified - using estimate)
-        for (let i = 0; i < currentClipIndex; i++) {
-            totalTime += 60; // Approximate clip duration
+        // Add duration of all previous clips using cached durations if available
+        if (this.videoPlayer.cachedClipDurations && this.videoPlayer.cachedClipDurations.length > 0) {
+            for (let i = 0; i < currentClipIndex && i < this.videoPlayer.cachedClipDurations.length; i++) {
+                totalTime += this.videoPlayer.cachedClipDurations[i];
+            }
+        } else {
+            // Last resort: use 60-second estimate
+            for (let i = 0; i < currentClipIndex; i++) {
+                totalTime += 60; // Approximate clip duration
+            }
         }
 
         totalTime += currentTimeInClip;
