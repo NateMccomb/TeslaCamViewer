@@ -36,8 +36,8 @@ class MapView {
         this.isDarkMode = false;
         this.TILE_LAYERS = {
             light: {
-                url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
                 name: 'Light'
             },
             dark: {
@@ -386,8 +386,8 @@ class MapView {
         }
 
         try {
-            // Try to fetch a small resource to verify connection
-            const response = await fetch('https://tile.openstreetmap.org/0/0/0.png', {
+            // Try to fetch a small resource to verify connection (use CARTO since that's our tile provider)
+            const response = await fetch('https://a.basemaps.cartocdn.com/light_all/0/0/0.png', {
                 method: 'HEAD',
                 mode: 'no-cors',
                 cache: 'no-store'
@@ -976,33 +976,40 @@ class MapView {
 
     /**
      * Create or update the heatmap layer
-     * Uses telemetry GPS data for dense, accurate visualization when available
+     * Combines telemetry GPS data (dense coverage) with event metadata GPS (ensures all events shown)
      */
     createHeatmap() {
         if (!this.map) return;
 
         let heatData = [];
+        let telemetryCount = 0;
+        let metadataCount = 0;
 
-        // Try to use telemetry GPS data first (much denser coverage)
+        // Add telemetry GPS points (dense coverage from SEI data)
         if (this.telemetryGpsPoints.length > 0) {
-            heatData = this.telemetryGpsPoints.map(point => {
+            this.telemetryGpsPoints.forEach(point => {
                 // Each point has [lat, lng] or [lat, lng, intensity]
-                return point.length === 3 ? point : [point[0], point[1], 1];
+                heatData.push(point.length === 3 ? point : [point[0], point[1], 1]);
             });
-            console.log(`[MapView] Using ${heatData.length} telemetry GPS points for heatmap`);
-        } else if (this.events.length > 0) {
-            // Fall back to event metadata GPS (single point per event)
-            heatData = this.events
+            telemetryCount = this.telemetryGpsPoints.length;
+        }
+
+        // Also add event metadata GPS to ensure all events are represented
+        // This covers events that don't have SEI telemetry data
+        if (this.events.length > 0) {
+            this.events
                 .filter(event => this.hasValidGPS(event))
-                .map(event => {
+                .forEach(event => {
                     const lat = parseFloat(event.metadata.est_lat);
                     const lon = parseFloat(event.metadata.est_lon);
                     // Weight sentry events more heavily
                     const weight = event.type === 'SentryClips' ? 1.5 : 1;
-                    return [lat, lon, weight];
+                    heatData.push([lat, lon, weight]);
+                    metadataCount++;
                 });
-            console.log(`[MapView] Using ${heatData.length} event GPS points for heatmap (fallback)`);
         }
+
+        console.log(`[MapView] Heatmap using ${telemetryCount} telemetry points + ${metadataCount} event metadata points = ${heatData.length} total`)
 
         if (heatData.length === 0) {
             console.log('[MapView] No GPS data for heatmap');

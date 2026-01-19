@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="styles/main.css?v=4">
+    <link rel="stylesheet" href="styles/main.css?v=19">
     <link rel="stylesheet" href="styles/plate-enhancer.css">
 </head>
 <body>
@@ -531,7 +531,7 @@
                         </div>
                     </div>
 
-                    <!-- Overlay Controls Group -->
+                    <!-- Overlay Controls Group (hidden on mobile, accessible via More menu) -->
                     <div class="control-group control-group-overlays">
                         <button id="toggleHudBtn" class="control-btn overlay-toggle-btn" disabled title="Toggle HUD Overlay (T)">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -550,6 +550,82 @@
                                 <path d="M11.5 6c0-1.08.27-2.1.74-3H5c-1.1 0-2 .9-2 2v14c0 .55.23 1.05.59 1.41l9.82-9.82C12.23 9.42 11.5 7.8 11.5 6z"/>
                             </svg>
                         </button>
+                    </div>
+
+                    <!-- Mobile More Menu -->
+                    <div class="control-group control-group-mobile-more">
+                        <div class="mobile-more-container">
+                            <button id="mobileMoreBtn" class="control-btn" title="More Options">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="12" cy="5" r="2"/>
+                                    <circle cx="12" cy="12" r="2"/>
+                                    <circle cx="12" cy="19" r="2"/>
+                                </svg>
+                            </button>
+                            <div id="mobileMoreMenu" class="mobile-more-menu hidden">
+                                <div class="mobile-more-section">
+                                    <div class="mobile-more-label">Overlays</div>
+                                    <button class="mobile-more-option" data-action="toggle-hud">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9 8h2v8H9zm4 0h2v8h-2z"/>
+                                        </svg>
+                                        <span>HUD Overlay</span>
+                                        <span class="mobile-more-status" id="mobileHudStatus">OFF</span>
+                                    </button>
+                                    <button class="mobile-more-option" data-action="toggle-minimap">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+                                        </svg>
+                                        <span>Mini-Map</span>
+                                        <span class="mobile-more-status" id="mobileMiniMapStatus">OFF</span>
+                                    </button>
+                                </div>
+                                <div class="mobile-more-divider"></div>
+                                <div class="mobile-more-section">
+                                    <div class="mobile-more-label">View</div>
+                                    <button class="mobile-more-option" data-action="enhance">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1z"/>
+                                        </svg>
+                                        <span>Enhancement</span>
+                                    </button>
+                                    <div class="mobile-more-option mobile-layout-selector">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M3 3h8v8H3V3zm0 10h8v8H3v-8zm10-10h8v8h-8V3zm0 10h8v8h-8v-8z"/>
+                                        </svg>
+                                        <span>Layout</span>
+                                        <select id="mobileLayoutSelect" class="mobile-layout-select">
+                                            <option value="grid-2x2">2x2 Grid</option>
+                                            <option value="layout-6-3">6:3 Centered</option>
+                                            <option value="layout-4-3">4:3 Main</option>
+                                            <option value="layout-focus">Focus</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mobile-more-divider"></div>
+                                <div class="mobile-more-section">
+                                    <div class="mobile-more-label">Export</div>
+                                    <button class="mobile-more-option" data-action="screenshot">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
+                                        </svg>
+                                        <span>Screenshot</span>
+                                    </button>
+                                    <button class="mobile-more-option" data-action="export-video">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"/>
+                                        </svg>
+                                        <span>Export Video</span>
+                                    </button>
+                                    <button class="mobile-more-option" data-action="insurance-report">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+                                        </svg>
+                                        <span>Insurance Report</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Hidden buttons kept for keyboard shortcuts / compatibility -->
@@ -626,17 +702,15 @@
                         <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
                     </svg>
                 </button>
-                <button id="bsScreenshotBtn" class="control-btn" title="Screenshot">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
-                    </svg>
-                </button>
-                <button id="bsFullscreenBtn" class="control-btn" title="Fullscreen">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                    </svg>
-                </button>
+                <div class="bs-more-container">
+                    <button id="bsMoreBtn" class="control-btn" title="More Options">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="5" r="2"/>
+                            <circle cx="12" cy="12" r="2"/>
+                            <circle cx="12" cy="19" r="2"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -686,7 +760,7 @@
     <script src="js/sidebarResize.js"></script>
     <script src="js/eventFilter.js"></script>
     <script src="js/filterPanel.js"></script>
-    <script src="js/mapView.js?v=6"></script>
+    <script src="js/mapView.js?v=8"></script>
     <script src="js/folderManager.js"></script>
     <script src="js/folderParser.js?v=2"></script>
     <script src="js/eventBrowser.js?v=2"></script>
@@ -706,7 +780,7 @@
     <script src="js/elevationService.js?v=2"></script>
     <script src="js/speedLimitService.js?v=3"></script>
     <script src="js/elevationOverlay.js?v=4"></script>
-    <script src="js/telemetryGraphs.js?v=8"></script>
+    <script src="js/telemetryGraphs.js?v=9"></script>
     <script src="js/incidentSlowMo.js?v=1"></script>
     <script src="js/collisionReconstruction.js?v=1"></script>
     <script src="js/streetViewOverlay.js?v=2"></script>
@@ -714,8 +788,8 @@
     <script src="js/notesManager.js"></script>
     <script src="js/videoExport.js?v=2"></script>
     <script src="js/clipMarking.js"></script>
-    <script src="js/insuranceReport.js"></script>
-    <script src="js/settingsManager.js"></script>
+    <script src="js/insuranceReport.js?v=2"></script>
+    <script src="js/settingsManager.js?v=2"></script>
     <script src="js/versionManager.js?v=3"></script>
     <script src="js/statisticsManager.js"></script>
     <script src="js/helpModal.js?v=2"></script>
@@ -727,6 +801,6 @@
     <script src="js/frameStacker.js?v=2"></script>
     <script src="js/plateEnhancer.js?v=2"></script>
     <script src="js/plateBlur.js?v=1"></script>
-    <script src="js/app.js?v=15"></script>
+    <script src="js/app.js?v=17"></script>
 </body>
 </html>
