@@ -26,6 +26,38 @@ class VersionManager {
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
             {
+                version: '2026.3.7.1',
+                date: '2026-01-19',
+                title: 'Map & Mobile Fixes',
+                features: [
+                    {
+                        id: 'map-light-tiles',
+                        text: 'Fixed map light mode tiles not loading (switched to CARTO)',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'heatmap-all-events',
+                        text: 'Heatmap now shows all events (telemetry + metadata GPS combined)',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'mobile-telemetry-panel',
+                        text: 'Fixed mobile telemetry panel display and elevation graph alignment',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'mobile-filter-panel',
+                        text: 'Fixed mobile filter panel not loading correctly',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'hard-brake-accel-fix',
+                        text: 'Fixed hard brake/acceleration detection showing inverted values',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
                 version: '2026.3.6.1',
                 date: '2026-01-18',
                 title: 'Update Notifications & Loading Progress',
