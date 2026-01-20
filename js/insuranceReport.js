@@ -38,6 +38,37 @@ class InsuranceReport {
     }
 
     /**
+     * Get a direct tile image URL for the current map provider
+     * Uses mapView's provider if available, otherwise falls back to OSM
+     * @param {number} x - Tile X coordinate
+     * @param {number} y - Tile Y coordinate
+     * @param {number} zoom - Zoom level
+     * @returns {string} Direct tile URL
+     */
+    _getMapTileUrl(x, y, zoom) {
+        // Try to get from mapView's shared provider config
+        if (window.app?.mapView?.TILE_PROVIDERS) {
+            const providerId = window.app.mapView.getCurrentProvider();
+            const provider = window.app.mapView.TILE_PROVIDERS[providerId];
+            // Use light mode for insurance reports (better for printing)
+            if (provider?.light?.url) {
+                let url = provider.light.url;
+                // Replace Leaflet placeholders
+                const servers = ['a', 'b', 'c'];
+                const server = servers[Math.floor(Math.random() * servers.length)];
+                url = url.replace('{s}', server);
+                url = url.replace('{z}', zoom.toString());
+                url = url.replace('{x}', x.toString());
+                url = url.replace('{y}', y.toString());
+                url = url.replace('{r}', '');
+                return url;
+            }
+        }
+        // Fallback to OSM
+        return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+    }
+
+    /**
      * Generate insurance report PDF for current event
      * @param {Object} options - Generation options
      * @returns {Promise<void>}
@@ -1230,9 +1261,47 @@ class InsuranceReport {
         const mapWidth = width - padding.left - padding.right;
         const mapHeight = height - padding.top - padding.bottom;
 
+        // Calculate geographic aspect ratio (accounting for latitude)
+        // At the equator, 1 degree lat ≈ 1 degree lon, but at higher latitudes lon degrees are shorter
+        const centerLat = (minLat + maxLat) / 2;
+        const latCorrectionFactor = Math.cos(centerLat * Math.PI / 180);
+
+        // Calculate the real-world dimensions of the bounds
+        const latRange = maxLat - minLat;
+        const lonRange = maxLon - minLon;
+        const geoWidth = lonRange * latCorrectionFactor; // Adjusted for latitude
+        const geoHeight = latRange;
+        const geoAspectRatio = geoWidth / geoHeight; // width/height of the route
+        const canvasAspectRatio = mapWidth / mapHeight; // width/height of available canvas
+
+        // Adjust bounds to match canvas aspect ratio while preserving geographic proportions
+        let adjustedMinLat = minLat, adjustedMaxLat = maxLat;
+        let adjustedMinLon = minLon, adjustedMaxLon = maxLon;
+
+        if (geoAspectRatio < canvasAspectRatio) {
+            // Route is taller than canvas - expand longitude bounds to match
+            const targetGeoWidth = geoHeight * canvasAspectRatio;
+            const targetLonRange = targetGeoWidth / latCorrectionFactor;
+            const lonExpansion = (targetLonRange - lonRange) / 2;
+            adjustedMinLon -= lonExpansion;
+            adjustedMaxLon += lonExpansion;
+        } else {
+            // Route is wider than canvas - expand latitude bounds to match
+            const targetGeoHeight = geoWidth / canvasAspectRatio;
+            const latExpansion = (targetGeoHeight - latRange) / 2;
+            adjustedMinLat -= latExpansion;
+            adjustedMaxLat += latExpansion;
+        }
+
+        // Use adjusted bounds for rendering
+        minLat = adjustedMinLat;
+        maxLat = adjustedMaxLat;
+        minLon = adjustedMinLon;
+        maxLon = adjustedMaxLon;
+
         // Calculate appropriate zoom level for the bounds
         const zoom = this._calculateZoomLevel(minLat, maxLat, minLon, maxLon, mapWidth, mapHeight);
-        console.log(`[InsuranceReport] Route map zoom level: ${zoom}`);
+        console.log(`[InsuranceReport] Route map zoom level: ${zoom}, geoAspect: ${geoAspectRatio.toFixed(2)}, canvasAspect: ${canvasAspectRatio.toFixed(2)}`);
 
         // Try to load OSM tiles for background
         try {
@@ -1473,7 +1542,7 @@ class InsuranceReport {
             for (let y = 0; y < tilesY; y++) {
                 const tileX = startTileX + x;
                 const tileY = startTileY + y;
-                const url = `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`;
+                const url = this._getMapTileUrl(tileX, tileY, zoom);
 
                 tilePromises.push(
                     new Promise((resolve) => {
@@ -1672,8 +1741,8 @@ class InsuranceReport {
                 console.warn(`[InsuranceReport] Tile failed: ${zoom}/${x}/${y}`);
                 resolve(null);
             };
-            // Use OSM tile server
-            img.src = `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
+            // Use map tile from shared provider config
+            img.src = this._getMapTileUrl(x, y, zoom);
         });
     }
 
@@ -3664,8 +3733,10 @@ class InsuranceReport {
             canvas.height = height;
             const ctx = canvas.getContext('2d');
 
-            // Load map tile
-            const tileUrl = `https://tile.openstreetmap.org/${zoom}/${this._lonToTile(lon, zoom)}/${this._latToTile(lat, zoom)}.png`;
+            // Load map tile using shared provider config
+            const tileX = this._lonToTile(lon, zoom);
+            const tileY = this._latToTile(lat, zoom);
+            const tileUrl = this._getMapTileUrl(tileX, tileY, zoom);
 
             const img = new Image();
             img.crossOrigin = 'anonymous';

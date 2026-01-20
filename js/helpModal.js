@@ -259,6 +259,11 @@ class HelpModal {
             </div>
             <div class="help-footer">
                 <span class="help-tip">${this.t('help.tip')}</span>
+                <div class="help-footer-actions">
+                    <button class="help-report-btn" title="Copy diagnostic info for bug reports">
+                        🐛 Report Bug
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -282,7 +287,35 @@ class HelpModal {
             if (e.target.closest('.help-close-btn')) {
                 this.hide();
             }
+            if (e.target.closest('.help-report-btn')) {
+                this.copyDiagnostics();
+            }
         });
+    }
+
+    /**
+     * Copy diagnostic report for bug reporting
+     */
+    async copyDiagnostics() {
+        if (window.app?.copyDiagnosticReport) {
+            await window.app.copyDiagnosticReport();
+        } else {
+            // Fallback if app method not available
+            const info = {
+                version: window.app?.versionManager?.currentVersion || 'Unknown',
+                userAgent: navigator.userAgent,
+                platform: navigator.platform,
+                timestamp: new Date().toISOString()
+            };
+            const report = `TeslaCamViewer Bug Report\n${JSON.stringify(info, null, 2)}`;
+            try {
+                await navigator.clipboard.writeText(report);
+                alert('Basic diagnostic info copied to clipboard!');
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                alert('Could not copy to clipboard. Please manually describe your issue.');
+            }
+        }
     }
 
     /**

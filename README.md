@@ -150,14 +150,25 @@ The only network request is an optional version check to notify you of updates.
 
 Contributions welcome! Feel free to open issues or pull requests on GitHub.
 
+## Community
+
+Have questions, ideas, or want to share how you use TeslaCam Viewer?
+
+**[Join the Discussion](https://github.com/NateMccomb/TeslaCamViewer/discussions)**
+
+- **Q&A** - Get help with setup or usage questions
+- **Ideas** - Suggest new features or improvements
+- **Show and Tell** - Share interesting clips or use cases
+- **General** - Chat with other Tesla owners
+
 ## License
 
 **Free for personal use.** Commercial use requires a separate license.
 
-See LICENSE file for details, or contact TeslaCamViewer@Gmail.com for commercial inquiries.
+See LICENSE file for details, or contact License@TeslaCamViewer.com for commercial inquiries.
 
 ## Version
 
-Current version: 2026.3.6.1
+Current version: 2026.4.1.2
 
 Click the version number in the app to view the full changelog.

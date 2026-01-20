@@ -182,6 +182,15 @@ class TeslaCamViewerApp {
         this.sidebar = document.getElementById('sidebar');
         this.sidebarOverlay = document.getElementById('sidebarOverlay');
 
+        // Mobile more menu elements
+        this.mobileMoreBtn = document.getElementById('mobileMoreBtn');
+        this.mobileMoreMenu = document.getElementById('mobileMoreMenu');
+        this.mobileHudStatus = document.getElementById('mobileHudStatus');
+        this.mobileMiniMapStatus = document.getElementById('mobileMiniMapStatus');
+        this.mobileLayoutSelect = document.getElementById('mobileLayoutSelect');
+        this.bsMoreBtn = document.getElementById('bsMoreBtn');
+        this.bsMoreContainer = document.querySelector('.bs-more-container');
+
         // Drive selector elements (multi-drive support)
         this.driveSelector = document.getElementById('driveSelector');
         this.driveSelect = document.getElementById('driveSelect');
@@ -341,6 +350,9 @@ class TeslaCamViewerApp {
                 this.updateDriveSelector(this.folderManager.getDrives());
                 this.selectFolderBtn.classList.add('hidden');
                 console.log(`Restored ${allEvents.length} total events from ${successCount} drives`);
+
+                // Show diagnostic notification if there were issues
+                this.showParseDiagnostics();
             }
         } catch (error) {
             console.warn('Failed to restore drives:', error);
@@ -424,6 +436,8 @@ class TeslaCamViewerApp {
                 } else if (!settings.miniMapEnabled && this.miniMapOverlay.isVisible) {
                     this.miniMapOverlay.hide();
                 }
+                // Apply dark mode setting
+                this.miniMapOverlay.setDarkMode(settings.miniMapDarkMode);
             }
         });
     }
@@ -682,6 +696,58 @@ class TeslaCamViewerApp {
         this.menuToggleBtn.addEventListener('click', () => this.toggleSidebar());
         this.sidebarOverlay.addEventListener('click', () => this.closeSidebar());
 
+        // Mobile more menu (controls area)
+        this.mobileMoreBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Move menu to controls container if needed
+            if (this.mobileMoreMenu && this.mobileMoreBtn.parentElement) {
+                this.mobileMoreBtn.parentElement.appendChild(this.mobileMoreMenu);
+            }
+            this.mobileMoreMenu?.classList.toggle('hidden');
+            this._updateMobileMoreMenuStatus();
+        });
+
+        // Bottom sheet more button (use event delegation for reliability)
+        document.addEventListener('click', (e) => {
+            const bsMoreBtn = e.target.closest('#bsMoreBtn');
+            if (bsMoreBtn) {
+                e.stopPropagation();
+                const menu = document.getElementById('mobileMoreMenu');
+                const container = document.querySelector('.bs-more-container');
+                if (menu && container) {
+                    container.appendChild(menu);
+                    menu.classList.toggle('hidden');
+                    this._updateMobileMoreMenuStatus();
+                }
+                return;
+            }
+
+            // Close mobile more menu when clicking outside
+            const menu = document.getElementById('mobileMoreMenu');
+            if (menu && !menu.classList.contains('hidden')) {
+                const isMoreBtn = e.target.closest('#mobileMoreBtn') || e.target.closest('#bsMoreBtn');
+                if (!menu.contains(e.target) && !isMoreBtn) {
+                    menu.classList.add('hidden');
+                }
+            }
+        });
+
+        // Mobile more menu options
+        this.mobileMoreMenu?.querySelectorAll('.mobile-more-option[data-action]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = btn.dataset.action;
+                this._handleMobileMoreAction(action);
+            });
+        });
+
+        // Mobile layout select
+        this.mobileLayoutSelect?.addEventListener('change', (e) => {
+            const layout = e.target.value;
+            this.layoutSelect.value = layout;
+            this.layoutSelect.dispatchEvent(new Event('change'));
+            this.mobileMoreMenu?.classList.add('hidden');
+        });
+
         // Speed control
         this.speedSelect.addEventListener('change', (e) => {
             const speed = parseFloat(e.target.value);
@@ -793,11 +859,25 @@ class TeslaCamViewerApp {
         this.bottomSheetProgress = document.getElementById('bottomSheetProgress');
 
         // Enable bottom sheet on portrait mobile
+        const telemetryPanel = document.getElementById('telemetryPanel');
+        const telemetryOriginalParent = telemetryPanel?.parentElement;
+        const playerArea = document.querySelector('.player-area');
+
         const checkOrientation = () => {
-            if (window.innerWidth <= 768 && window.innerHeight > window.innerWidth) {
+            const isMobilePortrait = window.innerWidth <= 768 && window.innerHeight > window.innerWidth;
+
+            if (isMobilePortrait) {
                 document.body.classList.add('bottom-sheet-enabled');
+                // Move telemetry panel to player area for proper fixed positioning
+                if (telemetryPanel && playerArea && telemetryPanel.parentElement !== playerArea) {
+                    playerArea.insertBefore(telemetryPanel, playerArea.firstChild);
+                }
             } else {
                 document.body.classList.remove('bottom-sheet-enabled');
+                // Move telemetry panel back to sidebar
+                if (telemetryPanel && telemetryOriginalParent && telemetryPanel.parentElement !== telemetryOriginalParent) {
+                    telemetryOriginalParent.appendChild(telemetryPanel);
+                }
             }
         };
 
@@ -2567,6 +2647,61 @@ class TeslaCamViewerApp {
         if (this.toggleBirdsEyeBtn) {
             this.toggleBirdsEyeBtn.classList.toggle('active', this.collisionReconstruction?.isVisible || false);
         }
+
+        // Also update mobile more menu status
+        this._updateMobileMoreMenuStatus();
+    }
+
+    /**
+     * Update mobile more menu status indicators
+     */
+    _updateMobileMoreMenuStatus() {
+        if (this.mobileHudStatus) {
+            const isHudOn = this.telemetryOverlay?.isVisible || false;
+            this.mobileHudStatus.textContent = isHudOn ? 'ON' : 'OFF';
+            this.mobileHudStatus.closest('.mobile-more-option')?.classList.toggle('active', isHudOn);
+        }
+        if (this.mobileMiniMapStatus) {
+            const isMapOn = this.miniMapOverlay?.isVisible || false;
+            this.mobileMiniMapStatus.textContent = isMapOn ? 'ON' : 'OFF';
+            this.mobileMiniMapStatus.closest('.mobile-more-option')?.classList.toggle('active', isMapOn);
+        }
+        // Sync mobile layout select with main layout select
+        if (this.mobileLayoutSelect && this.layoutSelect) {
+            this.mobileLayoutSelect.value = this.layoutSelect.value;
+        }
+    }
+
+    /**
+     * Handle mobile more menu actions
+     */
+    _handleMobileMoreAction(action) {
+        switch (action) {
+            case 'toggle-hud':
+                this.toggleHudBtn?.click();
+                break;
+            case 'toggle-minimap':
+                this.toggleMiniMapBtn?.click();
+                break;
+            case 'enhance':
+                this.enhanceBtn?.click();
+                this.mobileMoreMenu?.classList.add('hidden');
+                break;
+            case 'screenshot':
+                this.screenshotBtn?.click();
+                this.mobileMoreMenu?.classList.add('hidden');
+                break;
+            case 'export-video':
+                this.exportBtn?.click();
+                this.mobileMoreMenu?.classList.add('hidden');
+                break;
+            case 'insurance-report':
+                document.getElementById('insuranceReportBtn')?.click();
+                this.mobileMoreMenu?.classList.add('hidden');
+                break;
+        }
+        // Update status after action
+        setTimeout(() => this._updateMobileMoreMenuStatus(), 100);
     }
 
     /**
@@ -4463,6 +4598,166 @@ class TeslaCamViewerApp {
         if (cycleBtn) {
             cycleBtn.addEventListener('click', () => this.cyclePillarMode());
         }
+    }
+
+    /**
+     * Show diagnostic results after folder parsing
+     * @param {boolean} forceShow - Show even if no errors
+     */
+    showParseDiagnostics(forceShow = false) {
+        const summary = this.folderParser?.getDiagnosticSummary();
+        if (!summary) return;
+
+        const stats = summary.stats;
+        const hasErrors = stats.errors.length > 0;
+        const hasFailedReads = stats.eventJsonFailed > 0;
+
+        // Only show automatically if there are issues
+        if (!forceShow && !hasErrors && !hasFailedReads) {
+            return;
+        }
+
+        // Create diagnostic toast
+        const toast = document.createElement('div');
+        toast.className = 'diagnostic-toast' + (hasErrors ? ' has-errors' : '');
+
+        let message = '';
+        if (hasErrors || hasFailedReads) {
+            message = `⚠️ Parse completed with issues: ${stats.eventsCreated} events found`;
+            if (hasFailedReads) {
+                message += `, ${stats.eventJsonFailed} metadata read failures`;
+            }
+            if (hasErrors) {
+                message += `, ${stats.errors.length} errors`;
+            }
+        } else {
+            message = `✓ Loaded ${stats.eventsCreated} events (${stats.videoFilesFound} videos)`;
+        }
+
+        toast.innerHTML = `
+            <div class="diagnostic-toast-content">
+                <span class="diagnostic-message">${message}</span>
+                <div class="diagnostic-actions">
+                    <button class="diagnostic-btn copy-btn" title="Copy diagnostic report">📋 Copy Report</button>
+                    <button class="diagnostic-btn close-btn" title="Dismiss">✕</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(toast);
+
+        // Handle copy button
+        toast.querySelector('.copy-btn').addEventListener('click', () => {
+            this.copyDiagnosticReport();
+        });
+
+        // Handle close button
+        toast.querySelector('.close-btn').addEventListener('click', () => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        });
+
+        // Animate in
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        // Auto-dismiss after delay (longer if errors)
+        const dismissDelay = hasErrors ? 15000 : 8000;
+        setTimeout(() => {
+            if (toast.isConnected) {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }
+        }, dismissDelay);
+    }
+
+    /**
+     * Copy diagnostic report to clipboard
+     */
+    async copyDiagnosticReport() {
+        const report = this.folderParser?.getDiagnosticReport();
+        if (!report) {
+            this.showSimpleToast('No diagnostic data available');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(report);
+            this.showSimpleToast('📋 Diagnostic report copied to clipboard!');
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            // Fallback: show in a modal for manual copy
+            this.showDiagnosticModal(report);
+        }
+    }
+
+    /**
+     * Show diagnostic report in a modal (fallback for clipboard failure)
+     */
+    showDiagnosticModal(report) {
+        const modal = document.createElement('div');
+        modal.className = 'diagnostic-modal-overlay';
+        modal.innerHTML = `
+            <div class="diagnostic-modal">
+                <div class="diagnostic-modal-header">
+                    <h3>📋 Diagnostic Report</h3>
+                    <button class="diagnostic-modal-close">✕</button>
+                </div>
+                <div class="diagnostic-modal-body">
+                    <p>Copy the text below and include it in your bug report:</p>
+                    <textarea readonly class="diagnostic-textarea">${report}</textarea>
+                </div>
+                <div class="diagnostic-modal-footer">
+                    <a href="https://github.com/teslacamviewer/teslacamviewer.github.io/issues/new"
+                       target="_blank" class="diagnostic-btn primary">
+                        🐛 Open GitHub Issue
+                    </a>
+                    <button class="diagnostic-btn select-all">Select All</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Handle close
+        modal.querySelector('.diagnostic-modal-close').addEventListener('click', () => {
+            modal.remove();
+        });
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
+
+        // Handle select all
+        modal.querySelector('.select-all').addEventListener('click', () => {
+            const textarea = modal.querySelector('.diagnostic-textarea');
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length);
+        });
+
+        // Animate in
+        requestAnimationFrame(() => {
+            modal.classList.add('show');
+        });
+    }
+
+    /**
+     * Show a simple toast notification
+     */
+    showSimpleToast(message, duration = 3000) {
+        const toast = document.createElement('div');
+        toast.className = 'simple-toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 300);
+        }, duration);
     }
 
 }

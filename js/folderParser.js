@@ -188,13 +188,126 @@ class FolderParser {
 
         this.events = [];
 
+        // Debug stats
+        this._debugStats = {
+            directoriesScanned: 0,
+            filesFound: 0,
+            videoFilesFound: 0,
+            eventJsonRead: 0,
+            eventJsonFailed: 0,
+            thumbnailsFound: 0,
+            eventsCreated: 0,
+            emptyEvents: 0,
+            errors: []
+        };
+
+        console.log('[FolderParser] Starting parse of:', this.rootHandle.name);
+        const startTime = performance.now();
+
         // Recursively search for TeslaCam event folders
         await this.searchDirectory(this.rootHandle, 0);
 
         // Sort events by timestamp (newest first)
         this.events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+
+        // Log summary
+        console.log('[FolderParser] === Parse Summary ===');
+        console.log(`[FolderParser] Root folder: ${this.rootHandle.name}`);
+        console.log(`[FolderParser] Time elapsed: ${elapsed}s`);
+        console.log(`[FolderParser] Directories scanned: ${this._debugStats.directoriesScanned}`);
+        console.log(`[FolderParser] Total files found: ${this._debugStats.filesFound}`);
+        console.log(`[FolderParser] Video files (.mp4): ${this._debugStats.videoFilesFound}`);
+        console.log(`[FolderParser] Events created: ${this._debugStats.eventsCreated}`);
+        console.log(`[FolderParser] - With metadata (event.json): ${this._debugStats.eventJsonRead}`);
+        console.log(`[FolderParser] - Metadata read failed: ${this._debugStats.eventJsonFailed}`);
+        console.log(`[FolderParser] - With thumbnails: ${this._debugStats.thumbnailsFound}`);
+        console.log(`[FolderParser] - Empty (no clips): ${this._debugStats.emptyEvents}`);
+
+        if (this._debugStats.errors.length > 0) {
+            console.warn(`[FolderParser] Errors encountered (${this._debugStats.errors.length}):`);
+            this._debugStats.errors.slice(0, 10).forEach(err => console.warn(`  - ${err}`));
+            if (this._debugStats.errors.length > 10) {
+                console.warn(`  ... and ${this._debugStats.errors.length - 10} more`);
+            }
+        }
+        console.log('[FolderParser] === End Summary ===');
+
+        // Store last diagnostic info for user access
+        this._lastDiagnostics = {
+            timestamp: new Date().toISOString(),
+            rootFolder: this.rootHandle.name,
+            elapsedSeconds: elapsed,
+            stats: { ...this._debugStats },
+            hasErrors: this._debugStats.errors.length > 0,
+            userAgent: navigator.userAgent,
+            platform: navigator.platform
+        };
+
         return this.events;
+    }
+
+    /**
+     * Get formatted diagnostic report for bug reporting
+     * @returns {string} Formatted diagnostic text
+     */
+    getDiagnosticReport() {
+        if (!this._lastDiagnostics) {
+            return 'No parse data available. Please load a TeslaCam folder first.';
+        }
+
+        const d = this._lastDiagnostics;
+        const s = d.stats;
+
+        let report = `=== TeslaCamViewer Diagnostic Report ===
+Generated: ${d.timestamp}
+App Version: ${window.app?.versionManager?.currentVersion || 'Unknown'}
+
+--- Environment ---
+Platform: ${d.platform}
+User Agent: ${d.userAgent}
+
+--- Parse Results ---
+Root Folder: ${d.rootFolder}
+Parse Time: ${d.elapsedSeconds}s
+Directories Scanned: ${s.directoriesScanned}
+Total Files Found: ${s.filesFound}
+Video Files (.mp4): ${s.videoFilesFound}
+
+--- Events ---
+Events Created: ${s.eventsCreated}
+With Metadata: ${s.eventJsonRead}
+Metadata Failed: ${s.eventJsonFailed}
+With Thumbnails: ${s.thumbnailsFound}
+Empty Events: ${s.emptyEvents}
+`;
+
+        if (s.errors.length > 0) {
+            report += `
+--- Errors (${s.errors.length}) ---
+${s.errors.slice(0, 20).join('\n')}`;
+            if (s.errors.length > 20) {
+                report += `\n... and ${s.errors.length - 20} more errors`;
+            }
+        } else {
+            report += `
+--- Errors ---
+None`;
+        }
+
+        report += `
+========================================`;
+
+        return report;
+    }
+
+    /**
+     * Get diagnostic summary object for UI display
+     * @returns {Object|null} Summary object or null if no data
+     */
+    getDiagnosticSummary() {
+        return this._lastDiagnostics || null;
     }
 
     /**
@@ -204,16 +317,32 @@ class FolderParser {
      */
     async searchDirectory(dirHandle, depth) {
         // Limit recursion depth to prevent infinite loops
-        if (depth > 10) return;
+        if (depth > 10) {
+            console.warn(`[FolderParser] Max depth reached at: ${dirHandle.name}`);
+            return;
+        }
+
+        if (this._debugStats) {
+            this._debugStats.directoriesScanned++;
+        }
 
         // Check if this directory contains video clips (is an event folder)
         let hasVideoClips = false;
         let videoClips = [];
-        for await (const entry of dirHandle.values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.mp4')) {
-                hasVideoClips = true;
-                videoClips.push(entry);
+        try {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'file' && entry.name.endsWith('.mp4')) {
+                    hasVideoClips = true;
+                    videoClips.push(entry);
+                }
             }
+        } catch (iterError) {
+            const errMsg = `Failed to iterate directory "${dirHandle.name}": ${iterError.message}`;
+            console.error('[FolderParser]', errMsg);
+            if (this._debugStats) {
+                this._debugStats.errors.push(errMsg);
+            }
+            return;
         }
 
         // If this folder has video clips, try to parse it as an event
@@ -239,17 +368,26 @@ class FolderParser {
         }
 
         // Otherwise, look for subdirectories
-        for await (const entry of dirHandle.values()) {
-            if (entry.kind === 'directory') {
-                const folderName = entry.name;
+        try {
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'directory') {
+                    const folderName = entry.name;
 
-                // Check if this is an event folder type
-                if (['SavedClips', 'SentryClips', 'RecentClips'].includes(folderName)) {
-                    await this.parseEventFolder(entry, folderName);
-                } else {
-                    // Recursively search subdirectories
-                    await this.searchDirectory(entry, depth + 1);
+                    // Check if this is an event folder type
+                    if (['SavedClips', 'SentryClips', 'RecentClips'].includes(folderName)) {
+                        console.log(`[FolderParser] Found ${folderName} folder`);
+                        await this.parseEventFolder(entry, folderName);
+                    } else {
+                        // Recursively search subdirectories
+                        await this.searchDirectory(entry, depth + 1);
+                    }
                 }
+            }
+        } catch (iterError) {
+            const errMsg = `Failed to iterate subdirectories in "${dirHandle.name}": ${iterError.message}`;
+            console.error('[FolderParser]', errMsg);
+            if (this._debugStats) {
+                this._debugStats.errors.push(errMsg);
             }
         }
     }
@@ -294,20 +432,35 @@ class FolderParser {
         const clips = [];
 
         // Collect all video files
-        for await (const entry of folderHandle.values()) {
-            if (entry.kind === 'file' && entry.name.endsWith('.mp4')) {
-                const clipMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater|left_pillar|right_pillar)\.mp4$/);
-                if (clipMatch) {
-                    const [_, clipTimestamp, camera] = clipMatch;
-                    clips.push({
-                        timestamp: clipTimestamp,
-                        camera: camera,
-                        fileName: entry.name,
-                        fileHandle: entry
-                    });
+        try {
+            for await (const entry of folderHandle.values()) {
+                if (entry.kind === 'file' && entry.name.endsWith('.mp4')) {
+                    if (this._debugStats) {
+                        this._debugStats.filesFound++;
+                        this._debugStats.videoFilesFound++;
+                    }
+                    const clipMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater|left_pillar|right_pillar)\.mp4$/);
+                    if (clipMatch) {
+                        const [_, clipTimestamp, camera] = clipMatch;
+                        clips.push({
+                            timestamp: clipTimestamp,
+                            camera: camera,
+                            fileName: entry.name,
+                            fileHandle: entry
+                        });
+                    }
                 }
             }
+        } catch (iterError) {
+            const errMsg = `Failed to iterate RecentClips: ${iterError.message}`;
+            console.error('[FolderParser]', errMsg);
+            if (this._debugStats) {
+                this._debugStats.errors.push(errMsg);
+            }
+            return;
         }
+
+        console.log(`[FolderParser] RecentClips: found ${clips.length} video files`);
 
         if (clips.length === 0) {
             return;
@@ -390,7 +543,14 @@ class FolderParser {
             };
 
             this.events.push(event);
+
+            // Track stats
+            if (this._debugStats) {
+                this._debugStats.eventsCreated++;
+            }
         }
+
+        console.log(`[FolderParser] RecentClips: created ${hourlyGroups.size} hourly event groups`);
     }
 
     /**
@@ -429,10 +589,22 @@ class FolderParser {
 
         // Collect all files
         const files = [];
-        for await (const entry of eventHandle.values()) {
-            if (entry.kind === 'file') {
-                files.push(entry);
+        try {
+            for await (const entry of eventHandle.values()) {
+                if (entry.kind === 'file') {
+                    files.push(entry);
+                    if (this._debugStats) {
+                        this._debugStats.filesFound++;
+                    }
+                }
             }
+        } catch (iterError) {
+            const errMsg = `Failed to list files in event "${eventName}": ${iterError.message}`;
+            console.error('[FolderParser]', errMsg);
+            if (this._debugStats) {
+                this._debugStats.errors.push(errMsg);
+            }
+            return null;
         }
 
         // Parse files
@@ -445,16 +617,28 @@ class FolderParser {
                     const file = await fileHandle.getFile();
                     const text = await file.text();
                     event.metadata = JSON.parse(text);
+                    if (this._debugStats) {
+                        this._debugStats.eventJsonRead++;
+                    }
                 } catch (error) {
-                    console.error(`Error reading ${fileName}:`, error);
+                    const errMsg = `Failed to read event.json in "${eventName}": ${error.message}`;
+                    console.error('[FolderParser]', errMsg);
+                    if (this._debugStats) {
+                        this._debugStats.eventJsonFailed++;
+                        this._debugStats.errors.push(errMsg);
+                    }
                 }
             } else if (fileName === 'thumb.png') {
                 event.thumbnailFile = fileHandle;
-                console.log(`[Parser] Found thumb.png for ${event.name}`);
+                if (this._debugStats) {
+                    this._debugStats.thumbnailsFound++;
+                }
             } else if (fileName === 'event.mp4') {
                 event.eventVideoFile = fileHandle;
-                console.log(`[Parser] Found event.mp4 for ${event.name}`);
             } else if (fileName.endsWith('.mp4')) {
+                if (this._debugStats) {
+                    this._debugStats.videoFilesFound++;
+                }
                 // Parse video clip filename
                 const clipMatch = fileName.match(/^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})-(front|back|left_repeater|right_repeater|left_pillar|right_pillar)\.mp4$/);
                 if (clipMatch) {
@@ -482,6 +666,14 @@ class FolderParser {
 
         // Mark events with no usable video clips
         event.isEmpty = event.clipGroups.length === 0;
+
+        // Track stats
+        if (this._debugStats) {
+            this._debugStats.eventsCreated++;
+            if (event.isEmpty) {
+                this._debugStats.emptyEvents++;
+            }
+        }
 
         return event;
     }

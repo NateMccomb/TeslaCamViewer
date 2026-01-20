@@ -27,7 +27,9 @@ class MiniMapOverlay {
         // Tile layer configuration (dark mode is default)
         this.isDarkMode = localStorage.getItem(this.DARK_MODE_KEY) !== 'false';
         this.tileLayer = null;
-        this.TILE_LAYERS = {
+
+        // Fallback tile layers if mapView is not available
+        this._fallbackTileLayers = {
             light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
             dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
         };
@@ -52,6 +54,50 @@ class MiniMapOverlay {
     _init() {
         this._createContainer();
         this._loadPositions();
+    }
+
+    /**
+     * Get the tile URL for the current provider and mode
+     * Uses mapView's provider if available, otherwise falls back to default
+     * @param {string} mode - 'light' or 'dark'
+     * @returns {string} Tile URL template
+     */
+    _getTileUrl(mode = 'dark') {
+        // Try to get from mapView's shared provider config
+        if (window.app?.mapView?.TILE_PROVIDERS) {
+            const providerId = window.app.mapView.getCurrentProvider();
+            const provider = window.app.mapView.TILE_PROVIDERS[providerId];
+            if (provider && provider[mode]) {
+                return provider[mode].url;
+            }
+        }
+        // Fallback
+        return this._fallbackTileLayers[mode];
+    }
+
+    /**
+     * Get a direct tile image URL for canvas rendering
+     * Replaces Leaflet placeholders with actual values
+     * @param {number} x - Tile X coordinate
+     * @param {number} y - Tile Y coordinate
+     * @param {number} zoom - Zoom level
+     * @returns {string} Direct tile URL
+     */
+    _getDirectTileUrl(x, y, zoom) {
+        const mode = this.isDarkMode ? 'dark' : 'light';
+        let url = this._getTileUrl(mode);
+
+        // Replace Leaflet placeholders
+        const servers = ['a', 'b', 'c'];
+        const server = servers[Math.floor(Math.random() * servers.length)];
+
+        url = url.replace('{s}', server);
+        url = url.replace('{z}', zoom.toString());
+        url = url.replace('{x}', x.toString());
+        url = url.replace('{y}', y.toString());
+        url = url.replace('{r}', ''); // Retina suffix, leave empty
+
+        return url;
     }
 
     /**
@@ -348,7 +394,7 @@ class MiniMapOverlay {
         }).setView([0, 0], 16);
 
         // Add tile layer based on dark mode preference
-        const baseUrl = this.isDarkMode ? this.TILE_LAYERS.dark : this.TILE_LAYERS.light;
+        const baseUrl = this._getTileUrl(this.isDarkMode ? 'dark' : 'light');
         const tileUrl = forceRefresh ? `${baseUrl}?_=${Date.now()}` : baseUrl;
 
         this.tileLayer = L.tileLayer(tileUrl, {
@@ -548,7 +594,17 @@ class MiniMapOverlay {
      * Toggle between light and dark map tiles
      */
     toggleDarkMode() {
-        this.isDarkMode = !this.isDarkMode;
+        this.setDarkMode(!this.isDarkMode);
+    }
+
+    /**
+     * Set dark mode explicitly (called from Settings)
+     * @param {boolean} darkMode - true for dark tiles, false for light
+     */
+    setDarkMode(darkMode) {
+        if (this.isDarkMode === darkMode) return; // No change needed
+
+        this.isDarkMode = darkMode;
         localStorage.setItem(this.DARK_MODE_KEY, this.isDarkMode.toString());
 
         // Update button icon
@@ -560,7 +616,7 @@ class MiniMapOverlay {
         // Update tile layer if map exists
         if (this.map && this.tileLayer) {
             this.map.removeLayer(this.tileLayer);
-            const tileUrl = this.isDarkMode ? this.TILE_LAYERS.dark : this.TILE_LAYERS.light;
+            const tileUrl = this._getTileUrl(this.isDarkMode ? 'dark' : 'light');
             this.tileLayer = L.tileLayer(tileUrl, {
                 maxZoom: 19
             }).addTo(this.map);
@@ -956,16 +1012,8 @@ class MiniMapOverlay {
                 resolve(img);
             };
             img.onerror = () => reject(new Error(`Failed to load tile ${cacheKey}`));
-            // Use tile server based on dark mode preference
-            const servers = ['a', 'b', 'c'];
-            const server = servers[Math.floor(Math.random() * servers.length)];
-            if (this.isDarkMode) {
-                // CartoDB Dark Matter tiles
-                img.src = `https://${server}.basemaps.cartocdn.com/dark_all/${zoom}/${x}/${y}.png`;
-            } else {
-                // OpenStreetMap tiles
-                img.src = `https://${server}.tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
-            }
+            // Use tile URL from shared provider config
+            img.src = this._getDirectTileUrl(x, y, zoom);
         });
     }
 

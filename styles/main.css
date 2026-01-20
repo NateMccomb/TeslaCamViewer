@@ -4655,13 +4655,36 @@ body.sidebar-resizing * {
 }
 
 .help-footer {
-    justify-content: center;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .help-tip {
     font-size: 0.8rem;
     color: var(--text-muted);
     font-style: italic;
+}
+
+.help-footer-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.help-report-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.help-report-btn:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 .settings-btn {
@@ -4859,9 +4882,10 @@ body.sidebar-resizing * {
         padding: 0.5rem;
     }
 
-    .camera-label {
-        font-size: 0.65rem;
-        padding: 0.25rem 0.5rem;
+    .camera-label,
+    .video-label {
+        font-size: 0.35rem;
+        padding: 0.1rem 0.25rem;
     }
 
     /* Modals full-width on mobile */
@@ -4882,7 +4906,13 @@ body.sidebar-resizing * {
 
     /* Filter panel in sidebar */
     .filter-panel {
-        max-height: 200px;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .filter-panel .filter-content.expanded {
+        max-height: 350px;
+        overflow-y: auto;
     }
 
     /* Dropdowns */
@@ -4926,15 +4956,18 @@ body.sidebar-resizing * {
     }
 }
 
-/* Narrow mobile landscape - hide non-essential header buttons */
+/* Narrow mobile landscape - compact header buttons */
 @media (max-width: 600px) {
+    .brand-icon {
+        display: none;
+    }
+
     .header-actions {
         gap: 0.25rem;
     }
 
-    .header-actions .github-btn,
-    .header-actions .donate-btn {
-        display: none; /* Move to settings menu on very narrow screens */
+    .header-actions .github-btn {
+        display: none; /* GitHub link available in Settings */
     }
 
     .header-btn {
@@ -4945,6 +4978,291 @@ body.sidebar-resizing * {
         width: 18px;
         height: 18px;
     }
+
+    /* Keep donate button but make it compact */
+    .donate-btn {
+        padding: 0.375rem 0.5rem !important;
+    }
+
+    .donate-btn span {
+        display: none;
+    }
+
+    /* Hide overlay controls on mobile - accessible via More menu */
+    .control-group-overlays {
+        display: none !important;
+    }
+
+    /* Show mobile more button */
+    .control-group-mobile-more {
+        display: flex !important;
+    }
+
+    /* Hide notes, street view, bookmarks, zoom on mobile */
+    .event-info-notes-btn,
+    .street-view-btn,
+    .timeline-bookmark-controls,
+    .timeline-zoom-controls {
+        display: none !important;
+    }
+
+    /* Fix info bar layout - single line with wrapping */
+    .event-info {
+        padding: 0.5rem;
+    }
+
+    .event-info-content {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.25rem 0.75rem;
+        font-size: 0.75rem;
+    }
+
+    .event-date {
+        font-size: 0.7rem;
+    }
+
+    .event-location {
+        font-size: 0.7rem;
+    }
+
+    /* Compact weather display */
+    .weather-display {
+        font-size: 0.7rem;
+        gap: 0.25rem;
+    }
+
+    .weather-display .weather-temp {
+        font-size: 0.8rem;
+    }
+
+    .weather-display .weather-details {
+        display: none; /* Hide detailed weather on very small screens */
+    }
+
+    /* Force Bird's Eye View panel to stay hidden on mobile */
+    #birdsEyePanel.sidebar-panel {
+        display: none !important;
+    }
+
+    /* Show Telemetry panel above video on mobile */
+    #telemetryPanel.sidebar-panel {
+        display: block !important;
+        position: fixed !important;
+        top: 56px !important; /* Below header */
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        max-height: 240px !important;
+        z-index: 100 !important;
+        background: var(--bg-secondary) !important;
+        border-bottom: 1px solid var(--border) !important;
+        border-radius: 0 !important;
+        overflow-y: auto !important;
+        transform: none !important; /* Override sidebar transform */
+    }
+
+    /* Collapsed state - hide graphs on mobile */
+    #telemetryPanel.sidebar-panel.collapsed .sidebar-panel-content {
+        display: none !important;
+        height: 0 !important;
+        max-height: 0 !important;
+        opacity: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Expanded state - show graphs on mobile */
+    #telemetryPanel.sidebar-panel:not(.collapsed) .sidebar-panel-content {
+        display: flex !important;
+        height: auto !important;
+        max-height: 200px !important;
+        opacity: 1 !important;
+        padding: 0.25rem !important;
+    }
+
+    #telemetryPanel .sidebar-panel-header {
+        padding: 0.25rem 0.5rem !important;
+        min-height: auto !important;
+    }
+
+    #telemetryPanel .panel-title {
+        font-size: 0.7rem !important;
+    }
+
+    #telemetryPanel .sidebar-panel-content {
+        padding: 0.25rem !important;
+        max-height: 200px !important;
+        overflow-y: auto !important;
+    }
+
+    /* Compact telemetry graphs for mobile */
+    #telemetryPanel .telemetry-graphs-sidebar {
+        height: auto !important;
+        min-height: 100px !important;
+        max-height: 200px !important;
+    }
+
+    #telemetryPanel .telemetry-graphs-content {
+        height: auto !important;
+        min-height: 80px !important;
+        flex-direction: column !important;
+    }
+
+    /* Adjust video grid to fit between telemetry panel and info bar */
+    .video-grid-container {
+        margin-top: 120px !important;
+        margin-bottom: 90px !important;
+    }
+
+    /* Mini-map mobile fixes - ONLY vehicle marker */
+    /* Smaller SVG with margin to center within 24px container, preserves rotation transform */
+    .minimap-vehicle-marker svg {
+        width: 14px !important;
+        height: 14px !important;
+        margin: 5px !important;
+    }
+
+    /* Hide close, dark mode buttons, and weather badge on mobile */
+    .minimap-overlay .minimap-close-btn,
+    .minimap-overlay .minimap-darkmode-btn,
+    .minimap-overlay .minimap-weather-badge {
+        display: none !important;
+    }
+
+    /* Smaller camera labels on mobile */
+    .camera-label,
+    .video-label {
+        font-size: 0.35rem !important;
+        padding: 0.1rem 0.25rem !important;
+    }
+}
+
+/* Mobile More Menu - hidden by default on desktop */
+.control-group-mobile-more {
+    display: none;
+}
+
+.mobile-more-container {
+    position: relative;
+}
+
+.mobile-more-menu {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    min-width: 200px;
+    max-height: 70vh;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.mobile-more-menu.hidden {
+    display: none;
+}
+
+.mobile-more-section {
+    padding: 8px;
+}
+
+.mobile-more-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 4px 8px;
+    font-weight: 600;
+}
+
+.mobile-more-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    text-align: left;
+}
+
+.mobile-more-option:hover,
+.mobile-more-option:active {
+    background: var(--bg-tertiary);
+}
+
+.mobile-more-option.active {
+    background: var(--accent-transparent);
+    color: var(--accent);
+}
+
+.mobile-more-option svg {
+    flex-shrink: 0;
+    color: var(--text-secondary);
+}
+
+.mobile-more-option.active svg {
+    color: var(--accent);
+}
+
+.mobile-more-status {
+    margin-left: auto;
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+}
+
+.mobile-more-option.active .mobile-more-status {
+    background: var(--accent);
+    color: white;
+}
+
+.mobile-more-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 8px;
+}
+
+.mobile-layout-selector {
+    position: relative;
+}
+
+.mobile-layout-select {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    padding: 4px 6px;
+    cursor: pointer;
+}
+
+/* Bottom Sheet More Button */
+.bs-more-container {
+    position: relative;
+}
+
+.bs-more-container .mobile-more-menu {
+    position: fixed;
+    bottom: auto;
+    top: auto;
+    right: 10px;
+    bottom: 180px;
+    max-height: 60vh;
 }
 
 /* Touch device optimizations */
@@ -5230,7 +5548,27 @@ body.mobile-fullscreen .camera-hide-btn {
     }
 
     body.bottom-sheet-enabled .viewer-area {
-        padding-bottom: 90px;
+        padding-bottom: 120px;
+    }
+
+    /* Position event info bar above bottom sheet */
+    body.bottom-sheet-enabled .event-info {
+        position: fixed;
+        bottom: 80px;
+        left: 0;
+        right: 0;
+        z-index: 999;
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border);
+        padding: 0.35rem 0.5rem;
+        font-size: 0.7rem;
+    }
+
+    body.bottom-sheet-enabled .event-info-content {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.15rem 0.5rem;
+        justify-content: center;
     }
 }
 
@@ -10509,4 +10847,239 @@ body.theme-light .collision-overlay .collision-close-btn {
 
 body.theme-light .collision-overlay .collision-close-btn:hover {
     background: rgba(0, 0, 0, 0.2);
+}
+
+/* =============================================
+   DIAGNOSTIC TOAST & MODAL
+   ============================================= */
+
+/* Simple Toast */
+.simple-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    padding: 12px 24px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+    font-size: 14px;
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.simple-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+/* Diagnostic Toast */
+.diagnostic-toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0, 212, 255, 0.2);
+    z-index: 10000;
+    opacity: 0;
+    transition: all 0.3s ease;
+    max-width: 90vw;
+}
+
+.diagnostic-toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+
+.diagnostic-toast.has-errors {
+    border-color: var(--warning);
+    box-shadow: 0 4px 24px rgba(255, 184, 0, 0.2);
+}
+
+.diagnostic-toast-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+}
+
+.diagnostic-message {
+    color: var(--text-primary);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.diagnostic-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.diagnostic-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.diagnostic-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--accent);
+}
+
+.diagnostic-btn.copy-btn:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.diagnostic-btn.close-btn {
+    padding: 6px 10px;
+    font-size: 14px;
+}
+
+/* Diagnostic Modal */
+.diagnostic-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.diagnostic-modal-overlay.show {
+    opacity: 1;
+}
+
+.diagnostic-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.diagnostic-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.diagnostic-modal-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.diagnostic-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+}
+
+.diagnostic-modal-close:hover {
+    color: var(--text-primary);
+}
+
+.diagnostic-modal-body {
+    padding: 20px;
+    overflow: auto;
+    flex: 1;
+}
+
+.diagnostic-modal-body p {
+    margin: 0 0 12px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.diagnostic-textarea {
+    width: 100%;
+    height: 300px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 12px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+.diagnostic-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.diagnostic-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+}
+
+.diagnostic-btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg-primary);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.diagnostic-btn.primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+/* Light theme */
+body.theme-light .simple-toast {
+    background: white;
+    border-color: var(--border);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+body.theme-light .diagnostic-toast {
+    background: white;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+}
+
+body.theme-light .diagnostic-modal {
+    background: white;
+}
+
+body.theme-light .diagnostic-textarea {
+    background: #f5f5f5;
 }

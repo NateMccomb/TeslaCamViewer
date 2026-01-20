@@ -34,18 +34,54 @@ class MapView {
         // Tile layer management
         this.currentTileLayer = null;
         this.isDarkMode = false;
-        this.TILE_LAYERS = {
-            light: {
-                url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                name: 'Light'
+        this.tileProvider = localStorage.getItem('teslacam_map_provider') || 'carto';
+
+        // Tile provider configurations
+        this.TILE_PROVIDERS = {
+            carto: {
+                name: 'Carto (Default)',
+                light: {
+                    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    subdomains: 'abcd'
+                },
+                dark: {
+                    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    subdomains: 'abcd'
+                }
             },
-            dark: {
-                url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                name: 'Dark'
+            osm: {
+                name: 'OpenStreetMap',
+                light: {
+                    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    subdomains: ''
+                },
+                dark: {
+                    // OSM doesn't have dark mode, use Stadia dark
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                    subdomains: ''
+                }
+            },
+            stadia: {
+                name: 'Stadia Maps',
+                light: {
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                    subdomains: ''
+                },
+                dark: {
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+                    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                    subdomains: ''
+                }
             }
         };
+
+        // Legacy TILE_LAYERS for backward compatibility
+        this.TILE_LAYERS = this.TILE_PROVIDERS[this.tileProvider] || this.TILE_PROVIDERS.carto;
         this.DARK_MODE_KEY = 'teslacam_map_dark_mode';
 
         // Cache keys for localStorage persistence
@@ -386,8 +422,12 @@ class MapView {
         }
 
         try {
-            // Try to fetch a small resource to verify connection (use CARTO since that's our tile provider)
-            const response = await fetch('https://a.basemaps.cartocdn.com/light_all/0/0/0.png', {
+            // Try to fetch a small resource to verify connection (use current tile provider)
+            const provider = this.TILE_PROVIDERS[this.tileProvider];
+            let testUrl = provider?.light?.url || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+            // Replace placeholders with test tile coordinates
+            testUrl = testUrl.replace('{s}', 'a').replace('{z}', '0').replace('{x}', '0').replace('{y}', '0').replace('{r}', '');
+            const response = await fetch(testUrl, {
                 method: 'HEAD',
                 mode: 'no-cors',
                 cache: 'no-store'
@@ -1101,7 +1141,10 @@ class MapView {
     setTileLayer(mode) {
         if (!this.map) return;
 
-        const layerConfig = this.TILE_LAYERS[mode];
+        // Get the current provider's config
+        const provider = this.TILE_PROVIDERS[this.tileProvider] || this.TILE_PROVIDERS.carto;
+        const layerConfig = provider[mode];
+
         if (!layerConfig) {
             console.warn(`[MapView] Unknown tile layer mode: ${mode}`);
             return;
@@ -1112,15 +1155,76 @@ class MapView {
             this.map.removeLayer(this.currentTileLayer);
         }
 
-        // Add new tile layer
-        this.currentTileLayer = L.tileLayer(layerConfig.url, {
+        // Add new tile layer with error handling
+        const tileOptions = {
             attribution: layerConfig.attribution,
             maxZoom: 19
+        };
+
+        // Add subdomains if specified
+        if (layerConfig.subdomains) {
+            tileOptions.subdomains = layerConfig.subdomains;
+        }
+
+        this.currentTileLayer = L.tileLayer(layerConfig.url, tileOptions);
+
+        // Add tile error handling
+        this.currentTileLayer.on('tileerror', (e) => {
+            console.warn('[MapView] Tile load error:', e.tile?.src);
+            // Could trigger a fallback here in the future
         });
+
         this.currentTileLayer.addTo(this.map);
 
         this.isDarkMode = mode === 'dark';
-        console.log(`[MapView] Tile layer set to: ${layerConfig.name}`);
+        console.log(`[MapView] Tile layer set to: ${provider.name} (${mode})`);
+    }
+
+    /**
+     * Set the tile provider
+     * @param {string} providerId - Provider ID ('carto', 'osm', 'stadia')
+     */
+    setTileProvider(providerId) {
+        if (!this.TILE_PROVIDERS[providerId]) {
+            console.warn(`[MapView] Unknown tile provider: ${providerId}`);
+            return;
+        }
+
+        this.tileProvider = providerId;
+        this.TILE_LAYERS = this.TILE_PROVIDERS[providerId];
+
+        // Save preference
+        try {
+            localStorage.setItem('teslacam_map_provider', providerId);
+        } catch (e) {
+            console.warn('[MapView] Failed to save provider preference:', e);
+        }
+
+        // Refresh the tile layer
+        const mode = this.isDarkMode ? 'dark' : 'light';
+        this.setTileLayer(mode);
+
+        console.log(`[MapView] Tile provider changed to: ${this.TILE_PROVIDERS[providerId].name}`);
+    }
+
+    /**
+     * Get available tile providers
+     * @returns {Object} Provider ID to name mapping
+     */
+    getAvailableProviders() {
+        const providers = {};
+        for (const [id, config] of Object.entries(this.TILE_PROVIDERS)) {
+            providers[id] = config.name;
+        }
+        return providers;
+    }
+
+    /**
+     * Get current tile provider ID
+     * @returns {string}
+     */
+    getCurrentProvider() {
+        return this.tileProvider;
     }
 
     /**

@@ -19,14 +19,36 @@ class VersionManager {
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.3.7.1';
+        this.currentVersion = '2026.4.1.2';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
             {
-                version: '2026.3.7.1',
+                version: '2026.4.1.2',
+                date: '2026-01-19',
+                title: 'Map Provider Options & Bug Reporting',
+                features: [
+                    {
+                        id: 'map-tile-provider',
+                        text: 'New map tile provider setting: switch between Carto, OpenStreetMap, or Stadia Maps (fixes maps not loading in China)',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'bug-report-button',
+                        text: 'Report Bug button in Help modal copies diagnostic info to clipboard for easier bug reports',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'parse-diagnostics',
+                        text: 'Enhanced diagnostic logging helps debug folder parsing issues (e.g., OneDrive)',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
+                version: '2026.4.1.1',
                 date: '2026-01-19',
                 title: 'Map & Mobile Fixes',
                 features: [

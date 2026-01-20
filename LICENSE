@@ -1,43 +1,16 @@
-TeslaCamViewer - Dual License
+MIT License
 
-Copyright (c) 2025-2026 Nate McComb. All rights reserved.
+Copyright (c) 2025-2026 Nate McComb <license@teslacamviewer.com>
 
-This software is dual-licensed:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-================================================================================
-1. FREE PERSONAL LICENSE
-================================================================================
-
-You may use, copy, and modify this software for personal, non-commercial 
-purposes free of charge, subject to the following conditions:
-
-- You may not sell or redistribute this software
-- You may not use this software in any commercial product or service
-- You must retain this copyright notice in any copies
-
-Personal use includes:
-- Viewing your own Tesla dashcam footage
-- Running the software on your own devices
-- Modifying the code for your own personal use
-
-================================================================================
-2. COMMERCIAL LICENSE
-================================================================================
-
-Commercial use of this software requires a separate license agreement.
-
-Commercial use includes, but is not limited to:
-- Incorporating this software into commercial products or services
-- Using this software to provide services to third parties
-- Distributing this software as part of a commercial offering
-- Using this software within a business or organization
-
-For commercial licensing inquiries, please contact:
-TeslaCamViewer@Gmail.com
-
-================================================================================
-DISCLAIMER
-================================================================================
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

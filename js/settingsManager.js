@@ -40,6 +40,7 @@ class SettingsManager {
             // Mini-Map Overlay (requires GPS telemetry)
             miniMapEnabled: false,
             miniMapInExport: true,  // Include mini-map in video exports
+            miniMapDarkMode: true,  // Dark/light map tiles
 
             // Elevation Profile (requires GPS telemetry)
             elevationEnabled: false,
@@ -87,9 +88,15 @@ class SettingsManager {
     loadSettings() {
         try {
             const stored = localStorage.getItem(this.STORAGE_KEY);
-            if (stored) {
-                return { ...this.defaults, ...JSON.parse(stored) };
+            let settings = stored ? { ...this.defaults, ...JSON.parse(stored) } : { ...this.defaults };
+
+            // Sync mini-map dark mode from mini-map's own localStorage (for backwards compatibility)
+            const miniMapDarkMode = localStorage.getItem('teslacamviewer_minimap_dark_mode');
+            if (miniMapDarkMode !== null) {
+                settings.miniMapDarkMode = miniMapDarkMode !== 'false';
             }
+
+            return settings;
         } catch (e) {
             console.warn('Failed to load settings:', e);
         }
@@ -359,6 +366,20 @@ class SettingsManager {
                         <input type="checkbox" id="setting-miniMapInExport" class="setting-checkbox">
                         <span class="setting-hint">Add mini-map overlay to exported videos</span>
                     </div>
+                    <div class="setting-row">
+                        <label for="setting-miniMapDarkMode">Dark Mode Map</label>
+                        <input type="checkbox" id="setting-miniMapDarkMode" class="setting-checkbox">
+                        <span class="setting-hint">Use dark map tiles (recommended for dashcam viewing)</span>
+                    </div>
+                    <div class="setting-row">
+                        <label for="setting-mapTileProvider">Map Tile Provider</label>
+                        <select id="setting-mapTileProvider" class="setting-select">
+                            <option value="carto">Carto (Default)</option>
+                            <option value="osm">OpenStreetMap</option>
+                            <option value="stadia">Stadia Maps</option>
+                        </select>
+                        <span class="setting-hint">Try OpenStreetMap if maps don't load (e.g., in China)</span>
+                    </div>
                 </div>
 
                 <div class="settings-section">
@@ -509,6 +530,11 @@ class SettingsManager {
                 if (key === 'language' && window.i18n) {
                     window.i18n.setLocale(e.target.value);
                 }
+
+                // Special handling for map tile provider changes
+                if (key === 'mapTileProvider' && window.app?.mapView) {
+                    window.app.mapView.setTileProvider(e.target.value);
+                }
             });
         });
 
@@ -539,6 +565,12 @@ class SettingsManager {
         const langElement = this.modal.querySelector('#setting-language');
         if (langElement && window.i18n) {
             langElement.value = window.i18n.getLocale();
+        }
+
+        // Set map tile provider dropdown to current value
+        const mapProviderElement = this.modal.querySelector('#setting-mapTileProvider');
+        if (mapProviderElement && window.app?.mapView) {
+            mapProviderElement.value = window.app.mapView.getCurrentProvider();
         }
     }
 
