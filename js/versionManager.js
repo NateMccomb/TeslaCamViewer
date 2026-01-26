@@ -19,15 +19,15 @@ class VersionManager {
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.5.1.1';
+        this.currentVersion = '2026.5.1.2';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
             {
-                version: '2026.5.1.1',
-                date: '2026-01-27',
+                version: '2026.5.1.2',
+                date: '2026-01-26',
                 title: 'AI License Plate Detection & Incident Markers',
                 features: [
                     {
@@ -53,6 +53,11 @@ class VersionManager {
                     {
                         id: 'region-tracking-improvements',
                         text: 'Improved plate tracking with Siamese network for better accuracy across frames',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'incident-slowmo-fix',
+                        text: 'Fixed Incident Slow-Mo detection and added time offset display in Incident Hotspot popup',
                         elementSelector: null
                     }
                 ]
@@ -676,16 +681,19 @@ class VersionManager {
 
     /**
      * Add blue dot indicator to an element
+     * @param {HTMLElement} element - Element to add indicator to
+     * @param {string} featureId - Feature ID for tracking
+     * @param {string} featureText - Feature description for tooltip
      */
-    addIndicator(element, featureId) {
+    addIndicator(element, featureId, featureText = 'New feature!') {
         if (!element || !this.isFeatureNew(featureId)) return;
         if (this.indicators.has(featureId)) return; // Already added
 
-        // Create indicator dot
+        // Create indicator dot with tooltip
         const dot = document.createElement('span');
         dot.className = 'whats-new-dot';
         dot.dataset.featureId = featureId;
-        dot.title = 'New feature!';
+        dot.dataset.tooltip = featureText;
 
         // Position relative to the element itself (not parent)
         if (getComputedStyle(element).position === 'static') {
@@ -694,6 +702,21 @@ class VersionManager {
 
         // Insert dot directly into the element
         element.appendChild(dot);
+
+        // Adaptive tooltip positioning
+        const rect = element.getBoundingClientRect();
+        // Show tooltip on right for left-edge elements
+        if (rect.left < 350) {
+            dot.classList.add('tooltip-right');
+        }
+        // Show tooltip below for top-edge elements
+        if (rect.top < 120) {
+            dot.classList.add('tooltip-below');
+        }
+        // Show tooltip above for bottom-edge elements
+        else if (rect.bottom > window.innerHeight - 150) {
+            dot.classList.add('tooltip-above');
+        }
         this.indicators.set(featureId, dot);
 
         // Add click listener to element to mark as seen
@@ -738,7 +761,7 @@ class VersionManager {
             if (feature.elementSelector) {
                 const element = document.querySelector(feature.elementSelector);
                 if (element) {
-                    this.addIndicator(element, feature.id);
+                    this.addIndicator(element, feature.id, feature.text);
                 }
             }
         }

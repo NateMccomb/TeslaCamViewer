@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="styles/main.css?v=27">
+    <link rel="stylesheet" href="styles/main.css?v=38">
     <link rel="stylesheet" href="styles/plate-enhancer.css?v=8">
 </head>
 <body>
@@ -489,6 +489,10 @@
                                         <option value="gif">GIF</option>
                                     </select>
                                 </div>
+                                <div id="gifWarning" class="gif-warning hidden">
+                                    <span class="gif-warning-icon">⏱️</span>
+                                    <span>GIF export takes ~10x clip length</span>
+                                </div>
 
                                 <!-- Insurance Report -->
                                 <button class="export-option export-action-btn" data-action="insurance-report" id="insuranceReportBtn">
@@ -792,7 +796,7 @@
     <script src="js/sidebarResize.js"></script>
     <script src="js/eventFilter.js"></script>
     <script src="js/filterPanel.js"></script>
-    <script src="js/mapView.js?v=9"></script>
+    <script src="js/mapView.js?v=10"></script>
     <script src="js/folderManager.js"></script>
     <script src="js/folderParser.js?v=3"></script>
     <script src="js/eventBrowser.js?v=2"></script>
@@ -812,17 +816,17 @@
     <script src="js/elevationService.js?v=2"></script>
     <script src="js/speedLimitService.js?v=7"></script>
     <script src="js/elevationOverlay.js?v=4"></script>
-    <script src="js/telemetryGraphs.js?v=12"></script>
+    <script src="js/telemetryGraphs.js?v=13"></script>
     <script src="js/incidentSlowMo.js?v=1"></script>
     <script src="js/collisionReconstruction.js?v=3"></script>
     <script src="js/streetViewOverlay.js?v=2"></script>
     <script src="js/eventDataBackup.js"></script>
     <script src="js/notesManager.js?v=1"></script>
-    <script src="js/videoExport.js?v=14"></script>
+    <script src="js/videoExport.js?v=17"></script>
     <script src="js/clipMarking.js"></script>
-    <script src="js/insuranceReport.js?v=10"></script>
+    <script src="js/insuranceReport.js?v=11"></script>
     <script src="js/settingsManager.js?v=11"></script>
-    <script src="js/versionManager.js?v=10"></script>
+    <script src="js/versionManager.js?v=15"></script>
     <script src="js/statisticsManager.js?v=1"></script>
     <script src="js/helpModal.js?v=6"></script>
     <script src="js/quickStartGuide.js?v=3"></script>
@@ -835,6 +839,6 @@
     <script src="js/plateEnhancer.js?v=90"></script>
     <script src="js/plateDetector.js?v=13"></script>
     <script src="js/plateBlur.js?v=17"></script>
-    <script src="js/app.js?v=29"></script>
+    <script src="js/app.js?v=31"></script>
 </body>
 </html>

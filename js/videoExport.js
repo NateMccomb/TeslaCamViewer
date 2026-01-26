@@ -2265,11 +2265,28 @@ class VideoExport {
      * Cancel ongoing export
      */
     cancelExport() {
-        if (this.isExporting && this.mediaRecorder) {
-            console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            console.log('EXPORT CANCELLED BY USER');
-            console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        if (!this.isExporting) return;
 
+        console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('EXPORT CANCELLED BY USER');
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        // Mark as not exporting first to stop any loops
+        this.isExporting = false;
+
+        // Abort GIF encoder if active
+        if (this.gifEncoder) {
+            console.log('Aborting GIF encoder...');
+            try {
+                this.gifEncoder.abort();
+            } catch (e) {
+                console.log('GIF abort error (may already be finished):', e.message);
+            }
+            this.gifEncoder = null;
+        }
+
+        // Handle video/webm export cancellation
+        if (this.mediaRecorder) {
             const videos = this.videoPlayer.videos;
             console.log('Current State at Cancel:');
             console.log('  - MediaRecorder state:', this.mediaRecorder.state);
@@ -2282,8 +2299,6 @@ class VideoExport {
                 console.log('    ' + name + ':', video.readyState, '| paused:', video.paused, '| time:', video.currentTime.toFixed(2) + 's');
             });
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-            this.isExporting = false;
 
             // Stop the render interval
             if (this.renderIntervalId) {
@@ -2308,9 +2323,14 @@ class VideoExport {
             if (this.mediaRecorder.state === 'recording') {
                 this.mediaRecorder.stop();
             }
+        }
 
-            // Stop playback
-            this.videoPlayer.pause();
+        // Stop playback
+        this.videoPlayer.pause();
+
+        // Reject export promise if exists
+        if (this.exportReject) {
+            this.exportReject(new Error('Export cancelled by user'));
         }
     }
 
@@ -2500,6 +2520,38 @@ class VideoExport {
             // Get camera mapping
             const cameraMapping = this.buildCameraMapping();
 
+            // Pre-cache mini-map tiles if mini-map export is enabled
+            const settings = window.app?.settingsManager;
+            const miniMapInExport = settings && settings.get('miniMapInExport') !== false;
+            if (window.app?.miniMapOverlay && miniMapInExport && window.app.telemetryOverlay?.hasTelemetryData()) {
+                console.log('[GIF Export] Pre-caching mini-map tiles...');
+                // Clear trail before export to start fresh
+                window.app.miniMapOverlay.clearTrail();
+                try {
+                    // Gather GPS positions from telemetry for the export range
+                    const positions = [];
+                    const sampleInterval = 1; // Sample every 1 second
+                    for (let t = exportStart; t <= exportEnd; t += sampleInterval) {
+                        await this.videoPlayer.seekToEventTime(t);
+                        const clipIndex = this.videoPlayer.currentClipIndex || 0;
+                        const timeInClip = this.videoPlayer.getCurrentTime() || 0;
+                        const videoDuration = this.videoPlayer.getCurrentDuration() || 60;
+                        window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+                        const data = window.app.telemetryOverlay.currentData;
+                        if (data?.latitude_deg && data?.longitude_deg) {
+                            positions.push({ lat: data.latitude_deg, lng: data.longitude_deg });
+                        }
+                    }
+                    // Pre-cache tiles for all positions
+                    await window.app.miniMapOverlay.preCacheTilesForExport(positions);
+                    // Seek back to export start
+                    await this.videoPlayer.seekToEventTime(exportStart);
+                    console.log(`[GIF Export] Pre-cached tiles for ${positions.length} positions`);
+                } catch (e) {
+                    console.warn('[GIF Export] Failed to pre-cache mini-map tiles:', e);
+                }
+            }
+
             // Check watermark once
             await this._checkWatermark();
 
@@ -2512,6 +2564,9 @@ class VideoExport {
                 workerScript: 'vendor/gif.worker.js'
             });
 
+            // Store reference for cancellation
+            this.gifEncoder = gif;
+
             // Report initial progress (use same format as video export)
             if (this.onProgress) {
                 this.onProgress(0, 0, exportDuration, 0);
@@ -2521,7 +2576,7 @@ class VideoExport {
             for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
                 if (!this.isExporting) {
                     console.log('GIF export cancelled');
-                    return;
+                    throw new Error('Export cancelled by user');
                 }
 
                 const frameTime = exportStart + (frameIndex * frameInterval);
@@ -2587,10 +2642,12 @@ class VideoExport {
                 ctx.fillStyle = '#000000';
                 ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-                // Draw all cameras (only those with actual video sources)
-                for (const [camName, camConfig] of Object.entries(layoutConfig.cameras)) {
-                    if (!camConfig.visible) continue;
+                // Draw all cameras sorted by z-index (lower z-index first, so higher ones are on top)
+                const sortedCameras = Object.entries(layoutConfig.cameras)
+                    .filter(([name, cam]) => cam.visible && cam.w > 0 && cam.h > 0)
+                    .sort((a, b) => (a[1].zIndex || 1) - (b[1].zIndex || 1));
 
+                for (const [camName, camConfig] of sortedCameras) {
                     const videoSource = cameraMapping[camName] || camName;
                     const video = videos[videoSource];
 
@@ -2611,8 +2668,7 @@ class VideoExport {
                     try {
                         // Build camera info for multi-camera processing
                         const cameraInfos = {};
-                        for (const [camName, camConfig] of Object.entries(layoutConfig.cameras)) {
-                            if (!camConfig.visible) continue;
+                        for (const [camName, camConfig] of sortedCameras) {
                             const videoSource = cameraMapping[camName] || camName;
                             const video = videos[videoSource];
                             if (video && video.src && video.readyState >= 2) {
@@ -2637,15 +2693,49 @@ class VideoExport {
                     }
                 }
 
+                // Check settings for overlays
+                const settings = window.app?.settingsManager;
+                const privacyMode = settings && settings.get('privacyModeExport') === true;
+
                 // Add overlays if enabled
-                if (includeOverlay) {
+                if (includeOverlay && !privacyMode) {
                     // Add banner overlay using the existing addOverlay method
                     this.addOverlay(ctx, canvasWidth, canvasHeight, frameTime);
+                }
 
-                    // Add watermarks for free tier
-                    if (this._shouldWatermark) {
-                        this.addWatermarksToFrame(ctx, layoutConfig);
+                // Add telemetry HUD overlay (skipped in privacy mode)
+                const telemetryEnabled = !settings || settings.get('telemetryOverlayInExport') !== false;
+                if (!privacyMode && window.app?.telemetryOverlay && telemetryEnabled && window.app.telemetryOverlay.hasTelemetryData()) {
+                    const clipIndex = this.videoPlayer.currentClipIndex || 0;
+                    const timeInClip = frameTime % 60; // Approximate time in clip
+                    const videoDuration = 60;
+                    window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
+                    const telemetryData = window.app.telemetryOverlay.getCurrentTelemetry();
+                    if (telemetryData) {
+                        const blinkState = Math.floor(frameTime * 2) % 2 === 0; // 1 second blink cycle
+                        // HUD scale uses smaller reference (1000px) to appear larger/closer to live view
+                        const hudScale = canvasWidth / 1000;
+                        window.app.telemetryOverlay.renderToCanvas(ctx, canvasWidth, canvasHeight, telemetryData, {
+                            blinkState,
+                            scale: hudScale
+                        });
+
+                        // Add mini-map overlay if export setting is enabled (skipped in privacy mode)
+                        const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
+                        if (window.app?.miniMapOverlay && miniMapInExport && telemetryData.latitude_deg && telemetryData.longitude_deg) {
+                            window.app.miniMapOverlay.updatePositionForExport(
+                                telemetryData.latitude_deg,
+                                telemetryData.longitude_deg,
+                                telemetryData.heading_deg || 0
+                            );
+                            window.app.miniMapOverlay.drawToCanvas(ctx, canvasWidth, canvasHeight);
+                        }
                     }
+                }
+
+                // Add watermarks for free tier
+                if (this._shouldWatermark) {
+                    this.addWatermarksToFrame(ctx, layoutConfig);
                 }
 
                 // Scale down to GIF canvas
@@ -2678,6 +2768,13 @@ class VideoExport {
                 });
 
                 gif.on('finished', (blob) => {
+                    // Check if export was cancelled - don't show completion
+                    if (!this.isExporting && this.gifEncoder === null) {
+                        console.log('GIF export was cancelled, ignoring finished event');
+                        reject(new Error('Export cancelled by user'));
+                        return;
+                    }
+
                     console.log('GIF export complete, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
 
                     // Download the GIF
@@ -2689,6 +2786,7 @@ class VideoExport {
                     URL.revokeObjectURL(url);
 
                     this.isExporting = false;
+                    this.gifEncoder = null;
 
                     if (this.onProgress) {
                         this.onProgress(100, exportDuration, exportDuration, 0);

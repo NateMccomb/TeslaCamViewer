@@ -2599,6 +2599,11 @@ class MapView {
                 const date = new Date(point.timestamp);
                 const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                // Format eventTime as MM:SS offset within the clip
+                const eventTimeSec = point.eventTime || 0;
+                const mins = Math.floor(eventTimeSec / 60);
+                const secs = Math.floor(eventTimeSec % 60);
+                const offsetStr = `@ ${mins}:${secs.toString().padStart(2, '0')}`;
                 const speed = Math.round(point.speed || 0);
                 const gForce = (point.gForce || 0).toFixed(2);
                 const lateralG = point.lateralG ? (point.lateralG).toFixed(2) : null;
@@ -2609,7 +2614,7 @@ class MapView {
                     point.type === 'combined' ? `${gForce}g / ${lateralG}g` : `${gForce}g`;
                 return `
                     <div class="incident-event clickable" data-event-idx="${idx}" title="Click to view this event">
-                        <span class="event-date">${dateStr} ${timeStr}</span>
+                        <span class="event-date">${dateStr} ${timeStr} <span class="event-offset">${offsetStr}</span></span>
                         <span class="event-type">${typeLabel}</span>
                         <span class="event-severity ${severityClass}">${point.severity}</span>
                         <span class="event-speed">${speed} mph</span>

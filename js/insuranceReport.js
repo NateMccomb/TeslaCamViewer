@@ -3031,8 +3031,9 @@ class InsuranceReport {
             y += 5;
         }
 
-        // === VIDEO FILES ===
-        y += 5;
+        // === VIDEO FILES === (new page to avoid cutoff)
+        doc.addPage();
+        y = this.margin;
         doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(50, 50, 50);

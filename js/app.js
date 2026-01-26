@@ -676,16 +676,27 @@ class TeslaCamViewerApp {
 
         // Export format dropdown - syncs with settings
         const exportFormatSelect = document.getElementById('exportFormatSelect');
+        const gifWarning = document.getElementById('gifWarning');
         if (exportFormatSelect) {
             // Initialize from settings
             const savedFormat = this.settingsManager.get('exportFormat') || 'webm';
             exportFormatSelect.value = savedFormat;
+
+            // Show/hide GIF warning based on initial format
+            if (gifWarning) {
+                gifWarning.classList.toggle('hidden', savedFormat !== 'gif');
+            }
 
             // Update settings when format changes
             exportFormatSelect.addEventListener('change', (e) => {
                 e.stopPropagation();
                 this.settingsManager.set('exportFormat', e.target.value);
                 console.log('Export format:', e.target.value);
+
+                // Show/hide GIF warning
+                if (gifWarning) {
+                    gifWarning.classList.toggle('hidden', e.target.value !== 'gif');
+                }
             });
 
             // Prevent clicks on video group from closing dropdown

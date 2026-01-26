@@ -2460,9 +2460,9 @@ class TelemetryGraphs {
         for (let i = 1; i < allPoints.length; i++) {
             const point = allPoints[i];
 
-            // Check longitudinal G-force (Y-axis is typically forward/backward)
-            // Negative Y indicates deceleration (braking)
-            const brakeG = Math.abs(Math.min(0, point.g_force_y));
+            // Check longitudinal G-force (Y-axis is forward/backward)
+            // Positive Y indicates deceleration (braking) in Tesla coordinate system
+            const brakeG = Math.max(0, point.g_force_y);
 
             if (brakeG >= HARD_BRAKE_THRESHOLD && point.speed_mph >= SPEED_THRESHOLD) {
                 hardBrakeEvents.push({
