@@ -43,7 +43,7 @@ class VersionManager {
                     {
                         id: 'incident-markers',
                         text: 'Incident Markers detect hard braking (>0.35g) and lateral g-force events in your telemetry',
-                        elementSelector: '#telemetryHeader'
+                        elementSelector: '#statsBtn'
                     },
                     {
                         id: 'map-theme-sync',

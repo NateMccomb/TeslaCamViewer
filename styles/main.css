@@ -9261,6 +9261,8 @@ body.theme-light .tag-chip {
     cursor: pointer;
     transition: color 0.2s ease;
     position: relative;
+    display: inline-block;
+    width: fit-content;
 }
 
 .brand-tagline.version-tag:hover {
