@@ -687,14 +687,13 @@ class VersionManager {
         dot.dataset.featureId = featureId;
         dot.title = 'New feature!';
 
-        // Position relative to parent
-        const parent = element.parentElement || element;
-        if (getComputedStyle(parent).position === 'static') {
-            parent.style.position = 'relative';
+        // Position relative to the element itself (not parent)
+        if (getComputedStyle(element).position === 'static') {
+            element.style.position = 'relative';
         }
 
-        // Insert dot
-        parent.appendChild(dot);
+        // Insert dot directly into the element
+        element.appendChild(dot);
         this.indicators.set(featureId, dot);
 
         // Add click listener to element to mark as seen

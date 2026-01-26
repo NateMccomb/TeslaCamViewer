@@ -9283,13 +9283,13 @@ body.theme-light .tag-chip {
 /* Blue dot indicator for new features */
 .whats-new-dot {
     position: absolute;
-    top: -4px;
-    right: -4px;
+    top: 2px;
+    right: 2px;
     width: 10px;
     height: 10px;
     background: var(--accent);
     border-radius: 50%;
-    box-shadow: 0 0 8px var(--accent-glow);
+    box-shadow: 0 0 8px var(--accent-glow), 0 0 12px var(--accent);
     z-index: 100;
     pointer-events: none;
     animation: pulse-dot 2s ease-in-out infinite;
