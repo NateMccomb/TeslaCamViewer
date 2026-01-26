@@ -33,7 +33,7 @@ class VersionManager {
                     {
                         id: 'ai-plate-detection',
                         text: 'AI-powered license plate detection - automatically finds plates across all cameras (press D)',
-                        elementSelector: null
+                        elementSelector: '#enhanceBtn'
                     },
                     {
                         id: 'plate-size-warnings',
@@ -43,12 +43,12 @@ class VersionManager {
                     {
                         id: 'incident-markers',
                         text: 'Incident Markers detect hard braking (>0.35g) and lateral g-force events in your telemetry',
-                        elementSelector: null
+                        elementSelector: '#telemetryHeader'
                     },
                     {
                         id: 'map-theme-sync',
                         text: 'Map now syncs with app theme and has improved styled controls',
-                        elementSelector: null
+                        elementSelector: '.tab-btn[data-tab="map"]'
                     },
                     {
                         id: 'region-tracking-improvements',
