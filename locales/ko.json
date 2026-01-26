@@ -196,12 +196,65 @@
       "accessibility": "접근성",
       "mobile": "모바일",
       "export": "내보내기",
-      "language": "언어"
+      "language": "언어",
+      "telemetry": "Telemetry Overlay",
+      "miniMap": "Mini-Map"
+    },
+
+    "tabs": {
+      "general": "General",
+      "playback": "Playback",
+      "overlays": "Overlays",
+      "export": "Export",
+      "advanced": "Advanced"
     },
 
     "language": {
       "selectLanguage": "언어",
       "languageHint": "선호하는 언어를 선택하세요"
+    },
+
+    "export": {
+      "videoFormat": "비디오 형식",
+      "webm": "WebM (VP9) - 작은 파일",
+      "mp4": "MP4 (H.264) - 더 나은 호환성",
+      "formatHint": "비디오 내보내기 시 사용되는 형식",
+      "privacyMode": "Privacy Mode Export",
+      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
+      "blurPlates": "Blur License Plates",
+      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
+      "branding": "Show TeslaCamViewer.com branding",
+      "brandingHint": "Display branding in the bottom banner of exported videos"
+    },
+
+    "telemetry": {
+      "enabled": "Enable Telemetry Overlay",
+      "enabledHint": "Press T to toggle during playback",
+      "style": "Display Style",
+      "styleCockpit": "Cockpit HUD",
+      "styleTesla": "Tesla-Native Pill",
+      "styleMinimal": "Minimal Corner",
+      "units": "Speed Units",
+      "unitsMph": "MPH",
+      "unitsKph": "KPH",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add telemetry overlay to exported videos",
+      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+    },
+
+    "miniMap": {
+      "enabled": "Enable Mini-Map",
+      "enabledHint": "Press M to toggle, right-click for options",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add mini-map overlay to exported videos",
+      "darkMode": "Dark Mode Map",
+      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
+      "tileProvider": "Map Tile Provider",
+      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
+      "providerCarto": "Carto (Default)",
+      "providerOsm": "OpenStreetMap",
+      "providerStadia": "Stadia Maps",
+      "description": "GPS map overlay showing vehicle position synced with video playback"
     }
   },
 
@@ -243,6 +296,14 @@
   "statistics": {
     "title": "통계",
     "close": "닫기",
+    "tabs": {
+      "overview": "Overview",
+      "timeline": "Timeline",
+      "locations": "Locations",
+      "sentry": "Sentry Analysis",
+      "quality": "Data Quality",
+      "export": "Export"
+    },
     "recordingOverview": "녹화 개요",
     "totalEvents": "총 이벤트",
     "totalClips": "총 클립",
@@ -278,7 +339,16 @@
     "noTrendData": "추세 데이터가 없습니다",
     "noLocationData": "위치 데이터가 없습니다",
     "noSentryLocationData": "센트리 위치 데이터가 없습니다",
-    "events": "이벤트"
+    "events": "이벤트",
+    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
+    "triggeringCamera": "Triggering Camera Distribution",
+    "sentryByDayOfWeek": "Sentry Events by Day of Week",
+    "dayVsNight": "Day vs Night Events",
+    "dataQuality": "Data Quality",
+    "eventsWithTelemetry": "Events with Telemetry",
+    "eventsWithoutTelemetry": "Events without Telemetry",
+    "noTriggeringCameraData": "No triggering camera data available",
+    "noEventData": "No event data available"
   },
 
   "errors": {

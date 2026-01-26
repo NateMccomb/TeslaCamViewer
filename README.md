@@ -132,7 +132,76 @@ TeslaCam/
 - **No tracking** - No analytics or telemetry collection
 - **Local storage only** - Settings and bookmarks stored in your browser
 
-The only network request is an optional version check to notify you of updates.
+## External Services
+
+TeslaCamViewer connects to the following external services for enhanced functionality. **No personal information is transmitted** - only GPS coordinates when specific features are used.
+
+### Data APIs
+
+| Service | Data Sent | Purpose |
+|---------|-----------|---------|
+| [Open-Meteo](https://open-meteo.com) | GPS coordinates, date | Weather conditions for events |
+| [Overpass API](https://overpass-api.de) | GPS coordinates | Speed limit data from OpenStreetMap |
+| [Nominatim](https://nominatim.openstreetmap.org) | GPS coordinates | Address lookup for insurance reports |
+| [TeslaCamViewer.com](https://teslacamviewer.com) | None | Version update check only |
+
+### Map Tile Providers (Images Only)
+
+| Provider | Attribution |
+|----------|-------------|
+| [OpenStreetMap](https://www.openstreetmap.org) | © OpenStreetMap contributors |
+| [Carto](https://carto.com) | © OpenStreetMap © CARTO |
+| [Stadia Maps](https://stadiamaps.com) | © Stadia Maps © OpenStreetMap |
+
+### User-Initiated Links
+
+Links to Google Maps and Google Street View open in new tabs when you click GPS coordinates or the Street View button. No data is sent automatically.
+
+**All video files remain on your computer and are never uploaded.**
+
+## AI Models
+
+TeslaCamViewer uses several AI/ML models for advanced features. All models run locally in your browser using WebAssembly - no cloud processing.
+
+### License Plate Detection
+
+| Model | Size | Purpose |
+|-------|------|---------|
+| **YOLOv11n** | 5.4 MB | Primary plate detector - fast and accurate for most regions |
+| **YOLOv8** | 6.2 MB | Alternative detector with different detection characteristics |
+| **LPDNet USA** | 3.1 MB | Optimized for North American plate formats |
+| **UK Plate Model** | 2.8 MB | Specialized for UK/EU plate styles |
+
+### License Plate Recognition (OCR)
+
+| Model | Size | Purpose |
+|-------|------|---------|
+| **CCT-XS** | 2.1 MB | Primary OCR - trained on 220k+ plates from 65+ countries |
+| **Tesseract.js** | ~15 MB | General-purpose OCR fallback |
+| **PaddleOCR** | ~10 MB | Alternative OCR with PP-OCRv3 architecture |
+
+### Image Enhancement
+
+| Model | Size | Purpose |
+|-------|------|---------|
+| **ESRGAN 4x** | ~5 MB | Super-resolution upscaling for plate enhancement |
+| **Super Resolution** | 5 MB | ONNX-based image upscaling |
+
+### Object Tracking
+
+| Model | Size | Purpose |
+|-------|------|---------|
+| **NanoTrack** | 1.2 MB | Tracks detected plates across video frames for multi-frame enhancement |
+
+### How Models Are Used
+
+1. **License Plate Blur** - Automatically detects and blurs plates in exports for privacy
+2. **Plate Enhancement** - Captures multiple frames, aligns them, and uses super-resolution to improve readability
+3. **OCR Reading** - Extracts text from enhanced plate images with confidence scoring
+
+### Model Loading
+
+Models are downloaded on-demand when you first use a feature requiring them. They're cached in your browser's IndexedDB for future use. You can pre-download models in Settings → Advanced.
 
 ## Troubleshooting
 
@@ -163,12 +232,10 @@ Have questions, ideas, or want to share how you use TeslaCam Viewer?
 
 ## License
 
-**Free for personal use.** Commercial use requires a separate license.
-
-See LICENSE file for details, or contact License@TeslaCamViewer.com for commercial inquiries.
+MIT License - see LICENSE file for details.
 
 ## Version
 
-Current version: 2026.4.1.2
+Current version: 2026.5.1.1
 
 Click the version number in the app to view the full changelog.

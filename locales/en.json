@@ -64,7 +64,7 @@
     "markIn": "Mark In Point",
     "markOut": "Mark Out Point",
     "clearMarks": "Clear Marks",
-    "export": "Export All Cameras",
+    "export": "Export Current Layout",
     "exportOptions": "Export Options",
     "zoomOut": "Zoom Out Timeline",
     "zoomIn": "Zoom In Timeline",
@@ -93,12 +93,9 @@
   },
 
   "export": {
-    "header": "Export Camera",
-    "allCameras": "All Cameras (Grid)",
-    "frontOnly": "Front Only",
-    "rearOnly": "Rear Only",
-    "leftOnly": "Left Only",
-    "rightOnly": "Right Only",
+    "header": "Export Options",
+    "exportVideo": "Export Video",
+    "allCameras": "Current Layout",
     "leftPillarOnly": "Left Pillar Only",
     "rightPillarOnly": "Right Pillar Only",
     "privacyMode": "Privacy mode (strip metadata)",
@@ -209,7 +206,17 @@
       "accessibility": "Accessibility",
       "mobile": "Mobile",
       "export": "Export",
-      "language": "Language"
+      "language": "Language",
+      "telemetry": "Telemetry Overlay",
+      "miniMap": "Mini-Map"
+    },
+
+    "tabs": {
+      "general": "General",
+      "playback": "Playback",
+      "overlays": "Overlays",
+      "export": "Export",
+      "advanced": "Advanced"
     },
 
     "playback": {
@@ -275,7 +282,43 @@
       "videoFormat": "Video Format",
       "webm": "WebM (VP9) - Smaller files",
       "mp4": "MP4 (H.264) - Better compatibility",
-      "formatHint": "Format used when exporting videos"
+      "formatHint": "Format used when exporting videos",
+      "privacyMode": "Privacy Mode Export",
+      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
+      "blurPlates": "Blur License Plates",
+      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
+      "branding": "Show TeslaCamViewer.com branding",
+      "brandingHint": "Display branding in the bottom banner of exported videos"
+    },
+
+    "telemetry": {
+      "enabled": "Enable Telemetry Overlay",
+      "enabledHint": "Press T to toggle during playback",
+      "style": "Display Style",
+      "styleCockpit": "Cockpit HUD",
+      "styleTesla": "Tesla-Native Pill",
+      "styleMinimal": "Minimal Corner",
+      "units": "Speed Units",
+      "unitsMph": "MPH",
+      "unitsKph": "KPH",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add telemetry overlay to exported videos",
+      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+    },
+
+    "miniMap": {
+      "enabled": "Enable Mini-Map",
+      "enabledHint": "Press M to toggle, right-click for options",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add mini-map overlay to exported videos",
+      "darkMode": "Dark Mode Map",
+      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
+      "tileProvider": "Map Tile Provider",
+      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
+      "providerCarto": "Carto (Default)",
+      "providerOsm": "OpenStreetMap",
+      "providerStadia": "Stadia Maps",
+      "description": "GPS map overlay showing vehicle position synced with video playback"
     },
 
     "language": {
@@ -338,18 +381,30 @@
     "toggleStruggleZones": "Toggle Autopilot Struggle Zones",
     "loadingStruggleZones": "Loading AP disengagement data...",
     "struggleZonesLoaded": "{{count}} AP disengagements found",
-    "togglePhantomBrakes": "Toggle Phantom Brake Hotspots",
-    "loadingPhantomBrakes": "Loading phantom brake data...",
-    "phantomBrakesLoaded": "{{count}} phantom brakes found",
-    "phantomBrakeHotspot": "Phantom Brake Hotspot",
-    "phantomBrakesAtLocation": "{{count}} Phantom Brake(s) at this location",
-    "phantomBrakeTip": "This location has repeated phantom braking - consider reporting to Tesla if it's a false positive.",
-    "toggleDarkMode": "Toggle Dark Mode Map"
+    "toggleIncidents": "Toggle Incident Markers",
+    "loadingIncidents": "Loading incident data...",
+    "incidentsLoaded": "{{count}} incidents found",
+    "incidentHotspot": "Incident Hotspot",
+    "incidentsAtLocation": "{{count}} Incident(s) at this location",
+    "incidentTip": "This location has repeated incidents - consider investigating the footage to understand what happened.",
+    "toggleDarkMode": "Toggle Dark Mode Map",
+    "scanAllEvents": "Scan All Events for Map Data",
+    "scanningEvents": "Scanning events for incidents and AP disengagements...",
+    "scanComplete": "Scan complete: {{incidents}} incidents, {{apDisengagements}} AP disengagements found",
+    "scanCancelled": "Scan cancelled"
   },
 
   "statistics": {
     "title": "Statistics",
     "close": "Close",
+    "tabs": {
+      "overview": "Overview",
+      "timeline": "Timeline",
+      "locations": "Locations",
+      "sentry": "Sentry Analysis",
+      "quality": "Data Quality",
+      "export": "Export"
+    },
     "recordingOverview": "Recording Overview",
     "totalEvents": "Total Events",
     "totalClips": "Total Clips",
@@ -375,6 +430,7 @@
     "weekly": "Weekly",
     "monthly": "Monthly",
     "exportStatistics": "Export Statistics",
+    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
     "exportJson": "Export JSON",
     "exportCsv": "Export CSV",
     "noEvents": "No events loaded. Open a TeslaCam folder first.",
@@ -662,5 +718,50 @@
     "birdsEyeLowG": "Low G",
     "birdsEyeMedG": "Med G",
     "birdsEyeHighG": "High G"
+  },
+
+  "license": {
+    "activated": "License Activated!",
+    "howItWorks": "Here's how your TeslaCamViewer Pro license works:",
+    "privacyFirst": "Privacy First",
+    "privacyFirstDesc": "Your email is only used to verify your license locally on this device. It's never sent to any server.",
+    "savedInTwoPlaces": "Saved in Two Places",
+    "savedInTwoPlacesDesc": "Your license is saved in your browser's storage and on your TeslaCam drive. This lets you use it across different drives.",
+    "easyRecovery": "Easy Recovery",
+    "easyRecoveryDesc": "If you use a different browser or computer, just open any drive with your license saved on it. You'll be asked to re-enter your email to verify it's you.",
+    "multipleDevices": "Multiple Devices",
+    "multipleDevicesDesc": "Use your license on any device. Each new browser will ask for your email once to verify, then you're all set.",
+    "gotIt": "Got It"
+  },
+
+  "telemetry": {
+    "title": "Telemetry",
+    "toggleAnomalyMarkers": "Toggle anomaly markers",
+    "hideAnomalyMarkers": "Hide anomaly markers",
+    "showAnomalyMarkers": "Show anomaly markers",
+    "exportCsv": "Export telemetry data as CSV",
+    "noData": "No data",
+    "incident": "Incident",
+    "incidentBraking": "Hard Braking",
+    "incidentSwerve": "Sudden Swerve",
+    "incidentCombined": "Combined Incident",
+    "hardBrake": "Hard Brake",
+    "hardAccel": "Hard Accel",
+    "suddenAcceleration": "Sudden acceleration at {{speed}} mph",
+    "suddenDeceleration": "Sudden deceleration at {{speed}} mph",
+    "rapidSteering": "Rapid steering ({{degrees}}° change)",
+    "gForce": "G-Force: {{value}}g",
+    "lateralG": "Lateral G: {{value}}g",
+    "speed": "Speed: {{speed}} mph",
+    "dropped": "Dropped: {{dropped}} mph",
+    "gForceValue": "G-Force: {{value}}g",
+    "previousApEvent": "Previous AP event",
+    "nextApEvent": "Next AP event",
+    "cycleApEvents": "Click arrows to cycle through {{count}} AP events",
+    "nearMissDetected": "Near-miss incidents detected",
+    "incidentTooltip": "Incident marker: significant braking or swerving event worth reviewing",
+    "hardBrakingEvents": "Hard braking events",
+    "hardAccelEvents": "Hard acceleration events",
+    "hardBrakingAccelEvents": "Hard braking/acceleration events"
   }
 }

@@ -196,12 +196,65 @@
       "accessibility": "Toegankelijkheid",
       "mobile": "Mobiel",
       "export": "Exporteren",
-      "language": "Taal"
+      "language": "Taal",
+      "telemetry": "Telemetry Overlay",
+      "miniMap": "Mini-Map"
+    },
+
+    "tabs": {
+      "general": "General",
+      "playback": "Playback",
+      "overlays": "Overlays",
+      "export": "Export",
+      "advanced": "Advanced"
     },
 
     "language": {
       "selectLanguage": "Taal",
       "languageHint": "Selecteer uw voorkeurstaal"
+    },
+
+    "export": {
+      "videoFormat": "Videoformaat",
+      "webm": "WebM (VP9) - Kleinere bestanden",
+      "mp4": "MP4 (H.264) - Betere compatibiliteit",
+      "formatHint": "Formaat gebruikt bij video-export",
+      "privacyMode": "Privacy Mode Export",
+      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
+      "blurPlates": "Blur License Plates",
+      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
+      "branding": "Show TeslaCamViewer.com branding",
+      "brandingHint": "Display branding in the bottom banner of exported videos"
+    },
+
+    "telemetry": {
+      "enabled": "Enable Telemetry Overlay",
+      "enabledHint": "Press T to toggle during playback",
+      "style": "Display Style",
+      "styleCockpit": "Cockpit HUD",
+      "styleTesla": "Tesla-Native Pill",
+      "styleMinimal": "Minimal Corner",
+      "units": "Speed Units",
+      "unitsMph": "MPH",
+      "unitsKph": "KPH",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add telemetry overlay to exported videos",
+      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+    },
+
+    "miniMap": {
+      "enabled": "Enable Mini-Map",
+      "enabledHint": "Press M to toggle, right-click for options",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add mini-map overlay to exported videos",
+      "darkMode": "Dark Mode Map",
+      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
+      "tileProvider": "Map Tile Provider",
+      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
+      "providerCarto": "Carto (Default)",
+      "providerOsm": "OpenStreetMap",
+      "providerStadia": "Stadia Maps",
+      "description": "GPS map overlay showing vehicle position synced with video playback"
     }
   },
 
@@ -243,6 +296,14 @@
   "statistics": {
     "title": "Statistieken",
     "close": "Sluiten",
+    "tabs": {
+      "overview": "Overview",
+      "timeline": "Timeline",
+      "locations": "Locations",
+      "sentry": "Sentry Analysis",
+      "quality": "Data Quality",
+      "export": "Export"
+    },
     "recordingOverview": "Opname overzicht",
     "totalEvents": "Totaal gebeurtenissen",
     "totalClips": "Totaal clips",
@@ -278,7 +339,16 @@
     "noTrendData": "Geen trendgegevens beschikbaar",
     "noLocationData": "Geen locatiegegevens beschikbaar",
     "noSentryLocationData": "Geen schildwacht locatiegegevens",
-    "events": "gebeurtenissen"
+    "events": "gebeurtenissen",
+    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
+    "triggeringCamera": "Triggering Camera Distribution",
+    "sentryByDayOfWeek": "Sentry Events by Day of Week",
+    "dayVsNight": "Day vs Night Events",
+    "dataQuality": "Data Quality",
+    "eventsWithTelemetry": "Events with Telemetry",
+    "eventsWithoutTelemetry": "Events without Telemetry",
+    "noTriggeringCameraData": "No triggering camera data available",
+    "noEventData": "No event data available"
   },
 
   "errors": {

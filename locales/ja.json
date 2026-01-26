@@ -196,12 +196,65 @@
       "accessibility": "アクセシビリティ",
       "mobile": "モバイル",
       "export": "エクスポート",
-      "language": "言語"
+      "language": "言語",
+      "telemetry": "Telemetry Overlay",
+      "miniMap": "Mini-Map"
+    },
+
+    "tabs": {
+      "general": "General",
+      "playback": "Playback",
+      "overlays": "Overlays",
+      "export": "Export",
+      "advanced": "Advanced"
     },
 
     "language": {
       "selectLanguage": "言語",
       "languageHint": "お好みの言語を選択してください"
+    },
+
+    "export": {
+      "videoFormat": "ビデオ形式",
+      "webm": "WebM (VP9) - ファイルサイズ小",
+      "mp4": "MP4 (H.264) - 互換性良好",
+      "formatHint": "ビデオエクスポート時の形式",
+      "privacyMode": "Privacy Mode Export",
+      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
+      "blurPlates": "Blur License Plates",
+      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
+      "branding": "Show TeslaCamViewer.com branding",
+      "brandingHint": "Display branding in the bottom banner of exported videos"
+    },
+
+    "telemetry": {
+      "enabled": "Enable Telemetry Overlay",
+      "enabledHint": "Press T to toggle during playback",
+      "style": "Display Style",
+      "styleCockpit": "Cockpit HUD",
+      "styleTesla": "Tesla-Native Pill",
+      "styleMinimal": "Minimal Corner",
+      "units": "Speed Units",
+      "unitsMph": "MPH",
+      "unitsKph": "KPH",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add telemetry overlay to exported videos",
+      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+    },
+
+    "miniMap": {
+      "enabled": "Enable Mini-Map",
+      "enabledHint": "Press M to toggle, right-click for options",
+      "inExport": "Include in Exports",
+      "inExportHint": "Add mini-map overlay to exported videos",
+      "darkMode": "Dark Mode Map",
+      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
+      "tileProvider": "Map Tile Provider",
+      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
+      "providerCarto": "Carto (Default)",
+      "providerOsm": "OpenStreetMap",
+      "providerStadia": "Stadia Maps",
+      "description": "GPS map overlay showing vehicle position synced with video playback"
     }
   },
 
@@ -243,6 +296,14 @@
   "statistics": {
     "title": "統計",
     "close": "閉じる",
+    "tabs": {
+      "overview": "Overview",
+      "timeline": "Timeline",
+      "locations": "Locations",
+      "sentry": "Sentry Analysis",
+      "quality": "Data Quality",
+      "export": "Export"
+    },
     "recordingOverview": "録画概要",
     "totalEvents": "イベント合計",
     "totalClips": "クリップ合計",
@@ -278,7 +339,16 @@
     "noTrendData": "トレンドデータがありません",
     "noLocationData": "位置データがありません",
     "noSentryLocationData": "セントリー位置データがありません",
-    "events": "イベント"
+    "events": "イベント",
+    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
+    "triggeringCamera": "Triggering Camera Distribution",
+    "sentryByDayOfWeek": "Sentry Events by Day of Week",
+    "dayVsNight": "Day vs Night Events",
+    "dataQuality": "Data Quality",
+    "eventsWithTelemetry": "Events with Telemetry",
+    "eventsWithoutTelemetry": "Events without Telemetry",
+    "noTriggeringCameraData": "No triggering camera data available",
+    "noEventData": "No event data available"
   },
 
   "errors": {

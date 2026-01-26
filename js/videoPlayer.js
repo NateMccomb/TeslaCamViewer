@@ -109,7 +109,8 @@ class VideoPlayer {
             video.addEventListener('error', () => {
                 // Only handle if video was actually playing (has currentTime > 0)
                 // This avoids double-handling errors that loadVideoForCamera already caught
-                if (video.currentTime > 0) {
+                // Suppress warnings during export to avoid 100K+ error spam
+                if (video.currentTime > 0 && !window.app?.videoExporter?.isExporting) {
                     console.warn(`Runtime playback error for ${camera} video`);
                     this.updateVideoLabelState(camera, true);
                 }
@@ -288,7 +289,10 @@ class VideoPlayer {
                 };
                 video.onerror = (e) => {
                     clearTimeout(timeout);
-                    console.error(`[LoadVideo] ERROR for ${camera}: ${file.name}`, e);
+                    // Suppress error logging during export to avoid 100K+ error spam
+                    if (!window.app?.videoExporter?.isExporting) {
+                        console.error(`[LoadVideo] ERROR for ${camera}: ${file.name}`, e);
+                    }
                     // Clear the source on error so it doesn't block playback
                     video.src = '';
                     this.videoURLs[camera] = null;
@@ -370,11 +374,28 @@ class VideoPlayer {
             for (const video of Object.values(this.videos)) {
                 video.currentTime = Math.max(0, newTime);
             }
-        } else {
-            // Normal seek within current clip
+            return;
+        }
+
+        // Check if seeking past end of current clip - load next clip
+        const currentDuration = this.getCurrentDuration();
+        if (time >= currentDuration && this.currentEvent &&
+            this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
+            console.log('Seeking past end of clip, loading next clip');
+            const overflow = time - currentDuration;
+            await this.loadClip(this.currentClipIndex + 1);
+            // Seek to the overflow amount in the new clip
             for (const video of Object.values(this.videos)) {
-                video.currentTime = Math.max(0, time); // Don't allow negative time
+                video.currentTime = Math.max(0, overflow);
             }
+            return;
+        }
+
+        // Normal seek within current clip
+        // Clamp time to valid range [0, duration - 0.05] to avoid end-of-video issues
+        for (const video of Object.values(this.videos)) {
+            const maxTime = video.duration ? Math.max(0, video.duration - 0.05) : time;
+            video.currentTime = Math.max(0, Math.min(time, maxTime));
         }
     }
 
@@ -585,9 +606,14 @@ class VideoPlayer {
     async seekToEventTime(eventTime) {
         if (!this.currentEvent) return;
 
+        // Clamp eventTime to valid range [0, totalDuration]
+        // This prevents jumping to the start when seeking past the end
+        eventTime = Math.max(0, eventTime);
+
         let accumulatedTime = 0;
         let targetClipIndex = 0;
         let timeInClip = 0;
+        let foundClip = false;
 
         // Use cached durations for consistent seeking (populated by getTotalDuration)
         if (this.cachedClipDurations.length === this.currentEvent.clipGroups.length) {
@@ -599,13 +625,31 @@ class VideoPlayer {
                 if (accumulatedTime + duration >= eventTime) {
                     targetClipIndex = i;
                     timeInClip = eventTime - accumulatedTime;
+                    foundClip = true;
                     break;
                 }
                 accumulatedTime += duration;
             }
+
+            // If eventTime exceeds total duration, seek to the end of the last valid clip
+            if (!foundClip && this.cachedClipDurations.length > 0) {
+                // Find the last clip with valid duration
+                for (let i = this.cachedClipDurations.length - 1; i >= 0; i--) {
+                    if (this.cachedClipDurations[i] > 0) {
+                        targetClipIndex = i;
+                        // Seek to slightly before the end (0.1s buffer to avoid end-of-video issues)
+                        timeInClip = Math.max(0, this.cachedClipDurations[i] - 0.1);
+                        console.log(`[VideoPlayer] seekToEventTime: eventTime ${eventTime.toFixed(2)}s exceeds duration, seeking to end of clip ${i} at ${timeInClip.toFixed(2)}s`);
+                        break;
+                    }
+                }
+            }
         } else {
             // Fallback: calculate durations (slower, but works if cache not available)
             console.warn('[VideoPlayer] seekToEventTime: Using fallback duration calculation');
+            let lastValidClipIndex = 0;
+            let lastValidDuration = 60;
+
             for (let i = 0; i < this.currentEvent.clipGroups.length; i++) {
                 const clipGroup = this.currentEvent.clipGroups[i];
                 const clip = clipGroup.clips.front;
@@ -634,9 +678,14 @@ class VideoPlayer {
                     video.src = '';
                     URL.revokeObjectURL(url);
 
+                    // Track last valid clip for edge case handling
+                    lastValidClipIndex = i;
+                    lastValidDuration = duration;
+
                     if (accumulatedTime + duration >= eventTime) {
                         targetClipIndex = i;
                         timeInClip = eventTime - accumulatedTime;
+                        foundClip = true;
                         break;
                     }
                     accumulatedTime += duration;
@@ -644,6 +693,14 @@ class VideoPlayer {
                     console.error('Error during seek:', error);
                     accumulatedTime += 60; // Default on error to prevent drift
                 }
+            }
+
+            // If eventTime exceeds total duration, seek to the end of the last valid clip
+            if (!foundClip) {
+                targetClipIndex = lastValidClipIndex;
+                // Seek to slightly before the end (0.1s buffer to avoid end-of-video issues)
+                timeInClip = Math.max(0, lastValidDuration - 0.1);
+                console.log(`[VideoPlayer] seekToEventTime (fallback): eventTime ${eventTime.toFixed(2)}s exceeds duration, seeking to end of clip ${targetClipIndex} at ${timeInClip.toFixed(2)}s`);
             }
         }
 

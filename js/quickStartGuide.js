@@ -179,7 +179,17 @@ class QuickStartGuide {
         document.body.appendChild(this.modal);
 
         // Bind events
-        this.modal.querySelector('.quickstart-overlay').addEventListener('click', () => this.hide());
+        // Only close if click started AND ended on overlay (prevents close during text selection)
+        const overlay = this.modal.querySelector('.quickstart-overlay');
+        let mouseDownOnOverlay = false;
+        overlay.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === overlay;
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mouseDownOnOverlay && e.target === overlay) {
+                this.hide();
+            }
+        });
         this.modal.querySelector('.quickstart-skip').addEventListener('click', () => this.hide());
         this.modal.querySelector('#quickstartPrev').addEventListener('click', () => this.prevStep());
         this.modal.querySelector('#quickstartNext').addEventListener('click', () => this.nextStep());

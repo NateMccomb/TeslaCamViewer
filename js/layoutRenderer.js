@@ -13,6 +13,74 @@ class LayoutRenderer {
     }
 
     /**
+     * Calculate draw parameters for rendering a video to canvas
+     * This is the SINGLE SOURCE OF TRUTH for crop/objectFit calculations
+     * All rendering paths should use this method for consistency
+     *
+     * @param {HTMLVideoElement} video - The video element
+     * @param {Object} camConfig - Camera configuration { x, y, w, h, crop, objectFit }
+     * @returns {Object} { sx, sy, sw, sh, dx, dy, dw, dh } - Source and destination rectangles
+     */
+    static calculateDrawParams(video, camConfig) {
+        const crop = camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 };
+        const vw = video.videoWidth || 1280;
+        const vh = video.videoHeight || 960;
+
+        // Calculate source rectangle (after crop)
+        let sx = vw * (crop.left / 100);
+        let sy = vh * (crop.top / 100);
+        let sw = vw * (1 - crop.left / 100 - crop.right / 100);
+        let sh = vh * (1 - crop.top / 100 - crop.bottom / 100);
+
+        // Calculate destination rectangle
+        let dx = camConfig.x;
+        let dy = camConfig.y;
+        let dw = camConfig.w;
+        let dh = camConfig.h;
+
+        const objectFit = camConfig.objectFit || 'fill';
+
+        if (objectFit === 'contain') {
+            // Contain: Maintain aspect ratio, fit within bounds (letterbox/pillarbox)
+            const sourceAR = sw / sh;
+            const destAR = dw / dh;
+
+            if (sourceAR > destAR) {
+                // Source is wider, letterbox top/bottom
+                const newH = dw / sourceAR;
+                dy += (dh - newH) / 2;
+                dh = newH;
+            } else {
+                // Source is taller, pillarbox left/right
+                const newW = dh * sourceAR;
+                dx += (dw - newW) / 2;
+                dw = newW;
+            }
+        } else if (objectFit === 'cover') {
+            // Cover: Maintain aspect ratio, crop source to fill destination
+            const sourceAR = sw / sh;
+            const destAR = dw / dh;
+
+            if (sourceAR > destAR) {
+                // Source is wider - crop sides
+                const newSW = sh * destAR;
+                const cropX = (sw - newSW) / 2;
+                sx += cropX;
+                sw = newSW;
+            } else {
+                // Source is taller - crop top/bottom
+                const newSH = sw / destAR;
+                const cropY = (sh - newSH) / 2;
+                sy += cropY;
+                sh = newSH;
+            }
+        }
+        // 'fill' stretches to fit (default drawImage behavior) - no adjustments needed
+
+        return { sx, sy, sw, sh, dx, dy, dw, dh };
+    }
+
+    /**
      * Calculate "contain" dimensions - fit within container while maintaining aspect ratio
      * @param {HTMLElement} container - Parent container
      * @param {number} aspectRatio - Width/height ratio (e.g., 1.333 for 4:3)
@@ -279,8 +347,31 @@ class LayoutRenderer {
                 return false;
             };
 
-            // Find first non-occluded position
+            // Check if label position is within the visible grid bounds
+            const isWithinGrid = (labelScreenX, labelScreenY) => {
+                if (!gridRect) return true;
+                return labelScreenX >= gridRect.left &&
+                       labelScreenX + labelWidth <= gridRect.right &&
+                       labelScreenY >= gridRect.top &&
+                       labelScreenY + labelHeight <= gridRect.bottom;
+            };
+
+            // Calculate the VISIBLE portion of the container (clamped to grid)
+            const visibleLeft = gridRect ? Math.max(containerRect.left, gridRect.left) : containerRect.left;
+            const visibleTop = gridRect ? Math.max(containerRect.top, gridRect.top) : containerRect.top;
+            const visibleRight = gridRect ? Math.min(containerRect.right, gridRect.right) : containerRect.right;
+            const visibleBottom = gridRect ? Math.min(containerRect.bottom, gridRect.bottom) : containerRect.bottom;
+
+            // If container has no visible area within grid, hide label
+            if (visibleRight - visibleLeft < labelWidth + padding * 2 ||
+                visibleBottom - visibleTop < labelHeight + padding * 2) {
+                label.style.display = 'none';
+                return;
+            }
+
+            // Find first non-occluded position that's within the grid
             let bestPosition = positions[0];
+            let foundValidPosition = false;
             for (const pos of positions) {
                 // Calculate screen position of label with this setting
                 let labelScreenX, labelScreenY;
@@ -297,10 +388,25 @@ class LayoutRenderer {
                     labelScreenY = containerRect.bottom - padding - labelHeight;
                 }
 
-                if (!isOccluded(labelScreenX, labelScreenY)) {
+                // Position must be both non-occluded AND within grid bounds
+                if (!isOccluded(labelScreenX, labelScreenY) && isWithinGrid(labelScreenX, labelScreenY)) {
                     bestPosition = pos;
+                    foundValidPosition = true;
                     break;
                 }
+            }
+
+            // If no valid position found, calculate position within visible area
+            if (!foundValidPosition) {
+                // Use top-left of the VISIBLE portion of the container
+                const relativeLeft = visibleLeft - containerRect.left + padding;
+                const relativeTop = visibleTop - containerRect.top + padding;
+                bestPosition = {
+                    top: relativeTop,
+                    left: relativeLeft,
+                    right: null,
+                    bottom: null
+                };
             }
 
             // Apply the best position (use 'auto' to override CSS defaults, not empty string)
@@ -467,40 +573,8 @@ class LayoutRenderer {
                 continue;
             }
 
-            // Calculate source rectangle (for cropping)
-            const crop = camConfig.crop;
-            const vw = video.videoWidth;
-            const vh = video.videoHeight;
-
-            const sx = vw * (crop.left / 100);
-            const sy = vh * (crop.top / 100);
-            const sw = vw * (1 - crop.left / 100 - crop.right / 100);
-            const sh = vh * (1 - crop.top / 100 - crop.bottom / 100);
-
-            // Calculate destination rectangle (with object-fit logic)
-            let dx = camConfig.x;
-            let dy = camConfig.y;
-            let dw = camConfig.w;
-            let dh = camConfig.h;
-
-            if (camConfig.objectFit === 'contain') {
-                // Maintain aspect ratio, fit within bounds
-                const sourceAR = sw / sh;
-                const destAR = dw / dh;
-
-                if (sourceAR > destAR) {
-                    // Source is wider, letterbox top/bottom
-                    const newH = dw / sourceAR;
-                    dy += (dh - newH) / 2;
-                    dh = newH;
-                } else {
-                    // Source is taller, pillarbox left/right
-                    const newW = dh * sourceAR;
-                    dx += (dw - newW) / 2;
-                    dw = newW;
-                }
-            }
-            // 'cover' and 'fill' use the full destination rectangle
+            // Use centralized calculation for source/destination rectangles
+            const { sx, sy, sw, sh, dx, dy, dw, dh } = LayoutRenderer.calculateDrawParams(video, camConfig);
 
             try {
                 ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
@@ -514,18 +588,39 @@ class LayoutRenderer {
 
     /**
      * Add camera labels to canvas with smart positioning to avoid occlusion
+     * @param {CanvasRenderingContext2D} ctx - Canvas context
+     * @param {Object} exportConfig - Export configuration with cameras
+     * @param {Object} options - Options: fontSize, cameraMapping, videos, miniMapRect
      */
     addLabelsToCanvas(ctx, exportConfig, options = {}) {
         const { cameras } = exportConfig;
         const fontSize = options.fontSize || 14;
-        const padding = 4;
+        const cameraMapping = options.cameraMapping || null;
+        const videos = options.videos || null;
+        const miniMapRect = options.miniMapRect || null; // { x, y, w, h }
 
-        ctx.font = `${fontSize}px 'JetBrains Mono', monospace`;
+        // CSS-matching styling
+        const paddingX = Math.round(fontSize * 0.85);  // ~0.75rem horizontal
+        const paddingY = Math.round(fontSize * 0.35);  // ~0.3rem vertical
+        const borderRadius = 4;
+        const letterSpacing = fontSize * 0.05;  // 0.05em
+
+        // Use monospace font to match CSS --font-mono
+        ctx.font = `500 ${fontSize}px 'JetBrains Mono', 'Fira Code', monospace`;
         ctx.textBaseline = 'top';
 
         // Sort cameras by z-index
         const sortedCameras = Object.entries(cameras)
-            .filter(([name, cam]) => cam.visible && cam.w > 0 && cam.h > 0)
+            .filter(([name, cam]) => {
+                if (!cam.visible || cam.w <= 0 || cam.h <= 0) return false;
+                // If videos provided, check if this camera actually has a video source
+                if (videos) {
+                    const actualCamera = cameraMapping ? (cameraMapping[name] || name) : name;
+                    const video = videos[actualCamera];
+                    return video && video.src;
+                }
+                return true;
+            })
             .sort((a, b) => (a[1].zIndex || 1) - (b[1].zIndex || 1));
 
         // Get all camera rects with z-index for occlusion checking
@@ -538,66 +633,171 @@ class LayoutRenderer {
             zIndex: cam.zIndex || 1
         }));
 
+        // Label name mapping (uppercase to match live view CSS)
+        const labelMap = {
+            front: 'FRONT',
+            back: 'BACK',
+            left_repeater: 'LEFT',
+            right_repeater: 'RIGHT',
+            left_pillar: 'LEFT PILLAR',
+            right_pillar: 'RIGHT PILLAR'
+        };
+
         for (const [camName, camConfig] of sortedCameras) {
-            const label = LayoutConfig.CAMERA_NAMES[camName] || camName;
+            // Use mapping to get the actual camera shown in this position
+            const actualCamera = cameraMapping ? (cameraMapping[camName] || camName) : camName;
+            const label = labelMap[actualCamera] || actualCamera.toUpperCase();
+
+            // Check if video has ended (for visual feedback)
+            const video = videos ? videos[actualCamera] : null;
+            const isEnded = video && video.ended;
+
+            // Measure text with letter spacing
             const metrics = ctx.measureText(label);
-            const labelWidth = metrics.width + padding * 2;
-            const labelHeight = fontSize + padding * 2;
+            const textWidth = metrics.width + (label.length - 1) * letterSpacing;
+            const labelWidth = textWidth + paddingX * 2;
+            const labelHeight = fontSize + paddingY * 2;
             const myZIndex = camConfig.zIndex || 1;
             const offset = 10;
 
+            // Get canvas dimensions for bounds clamping
+            const canvasWidth = ctx.canvas.width;
+            const canvasHeight = ctx.canvas.height;
+
+            // Calculate the VISIBLE portion of this camera (clamped to canvas bounds)
+            const visibleX = Math.max(0, camConfig.x);
+            const visibleY = Math.max(0, camConfig.y);
+            const visibleRight = Math.min(canvasWidth, camConfig.x + camConfig.w);
+            const visibleBottom = Math.min(canvasHeight, camConfig.y + camConfig.h);
+            const visibleW = visibleRight - visibleX;
+            const visibleH = visibleBottom - visibleY;
+
+            // Skip if camera has no visible area
+            if (visibleW <= 0 || visibleH <= 0) continue;
+
             // Try positions: top-left, top-right, bottom-left, bottom-right
+            // Use VISIBLE bounds, not camera config bounds
             const positions = [
-                { x: camConfig.x + offset, y: camConfig.y + offset },
-                { x: camConfig.x + camConfig.w - labelWidth - offset, y: camConfig.y + offset },
-                { x: camConfig.x + offset, y: camConfig.y + camConfig.h - labelHeight - offset },
-                { x: camConfig.x + camConfig.w - labelWidth - offset, y: camConfig.y + camConfig.h - labelHeight - offset }
+                { x: visibleX + offset, y: visibleY + offset, name: 'top-left' },
+                { x: visibleRight - labelWidth - offset, y: visibleY + offset, name: 'top-right' },
+                { x: visibleX + offset, y: visibleBottom - labelHeight - offset, name: 'bottom-left' },
+                { x: visibleRight - labelWidth - offset, y: visibleBottom - labelHeight - offset, name: 'bottom-right' }
             ];
 
-            // Find first position not occluded by higher z-index cameras
-            let bestPos = positions[0];
-            for (const pos of positions) {
-                const labelRect = {
-                    x: pos.x - padding,
-                    y: pos.y - padding,
-                    w: labelWidth,
-                    h: labelHeight
-                };
+            // Find the lowest point of higher z-index cameras that overlap this camera
+            // This determines where the "visible" (non-occluded) portion of this camera starts
+            let occlusionBottom = visibleY; // Start with camera top
+            for (const cam of cameraRects) {
+                if (cam.name === camName) continue;
+                if ((cam.zIndex || 1) <= myZIndex) continue;
 
-                // Check if this position is covered by a higher z-index camera
-                let isOccluded = false;
-                for (const cam of cameraRects) {
-                    if (cam.name === camName) continue;
-                    if ((cam.zIndex || 1) <= myZIndex) continue;
-
-                    // Check rectangle overlap
-                    if (labelRect.x < cam.x + cam.w &&
-                        labelRect.x + labelRect.w > cam.x &&
-                        labelRect.y < cam.y + cam.h &&
-                        labelRect.y + labelRect.h > cam.y) {
-                        isOccluded = true;
-                        break;
+                // Check if this higher camera overlaps horizontally with our camera
+                if (cam.x < visibleRight && cam.x + cam.w > visibleX) {
+                    // This camera overlaps horizontally - check where it ends vertically
+                    const camBottom = cam.y + cam.h;
+                    if (camBottom > occlusionBottom && cam.y < visibleBottom) {
+                        occlusionBottom = Math.min(camBottom, visibleBottom);
                     }
-                }
-
-                if (!isOccluded) {
-                    bestPos = pos;
-                    break;
                 }
             }
 
-            // Draw background
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(
-                bestPos.x - padding,
-                bestPos.y - padding,
-                labelWidth,
-                labelHeight
-            );
+            // Calculate the non-occluded visible area
+            const nonOccludedTop = Math.max(visibleY, occlusionBottom);
+            const nonOccludedHeight = visibleBottom - nonOccludedTop;
 
-            // Draw text
-            ctx.fillStyle = '#ffffff';
-            ctx.fillText(label, bestPos.x, bestPos.y);
+            // If there's enough space below the occluding cameras, position label there
+            // This matches the live view behavior where labels appear below overlapping cameras
+            let bestPos;
+            if (nonOccludedHeight >= labelHeight + offset * 2 && nonOccludedTop > visibleY) {
+                // Use top-left of the non-occluded area (below higher z-index cameras)
+                bestPos = { x: visibleX + offset, y: nonOccludedTop + offset, name: 'non-occluded-top-left' };
+            } else {
+                // Try standard positions: top-left, top-right, bottom-left, bottom-right
+                bestPos = positions[0];
+                for (const pos of positions) {
+                    const labelRect = {
+                        x: pos.x,
+                        y: pos.y,
+                        w: labelWidth,
+                        h: labelHeight
+                    };
+
+                    // Check if this position is covered by a higher z-index camera
+                    let isOccluded = false;
+                    for (const cam of cameraRects) {
+                        if (cam.name === camName) continue;
+                        if ((cam.zIndex || 1) <= myZIndex) continue;
+
+                        // Check rectangle overlap
+                        if (labelRect.x < cam.x + cam.w &&
+                            labelRect.x + labelRect.w > cam.x &&
+                            labelRect.y < cam.y + cam.h &&
+                            labelRect.y + labelRect.h > cam.y) {
+                            isOccluded = true;
+                            break;
+                        }
+                    }
+
+                    // Also check if occluded by mini-map overlay
+                    if (!isOccluded && miniMapRect) {
+                        if (labelRect.x < miniMapRect.x + miniMapRect.w &&
+                            labelRect.x + labelRect.w > miniMapRect.x &&
+                            labelRect.y < miniMapRect.y + miniMapRect.h &&
+                            labelRect.y + labelRect.h > miniMapRect.y) {
+                            isOccluded = true;
+                        }
+                    }
+
+                    if (!isOccluded) {
+                        bestPos = pos;
+                        break;
+                    }
+                }
+            }
+
+            // Draw rounded rectangle background matching CSS --glass
+            const bgX = bestPos.x;
+            const bgY = bestPos.y;
+
+            ctx.beginPath();
+            ctx.roundRect(bgX, bgY, labelWidth, labelHeight, borderRadius);
+
+            // Fill with CSS-matching colors
+            if (isEnded) {
+                // Ended state: rgba(255, 59, 59, 0.85) from CSS .video-label.ended
+                ctx.fillStyle = 'rgba(255, 59, 59, 0.85)';
+            } else {
+                // Normal state: rgba(15, 18, 24, 0.85) from CSS --glass
+                ctx.fillStyle = 'rgba(15, 18, 24, 0.85)';
+            }
+            ctx.fill();
+
+            // Draw border matching CSS --glass-border
+            ctx.strokeStyle = isEnded ? 'rgba(255, 59, 59, 0.5)' : 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Draw text with letter spacing
+            ctx.fillStyle = '#e8eaed';  // CSS --text-primary
+            this.drawTextWithLetterSpacing(ctx, label, bgX + paddingX, bgY + paddingY, letterSpacing);
+        }
+    }
+
+    /**
+     * Draw text with letter spacing (canvas doesn't support letter-spacing natively)
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {string} text
+     * @param {number} x
+     * @param {number} y
+     * @param {number} spacing
+     */
+    drawTextWithLetterSpacing(ctx, text, x, y, spacing) {
+        let currentX = x;
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            ctx.fillText(char, currentX, y);
+            const charWidth = ctx.measureText(char).width;
+            currentX += charWidth + spacing;
         }
     }
 

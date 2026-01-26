@@ -9,35 +9,82 @@ class OfflinePackager {
         this.modal = null;
         this.isPackaging = false;
 
-        // List of JS files to include
+        // List of JS files to include (keep updated when adding new files!)
         this.jsFiles = [
-            'eventFilter.js',
-            'filterPanel.js',
-            'mapView.js',
+            // Core
+            'i18n.js',
+            'app.js',
+
+            // Folder & Event Management
             'folderManager.js',
             'folderParser.js',
             'eventBrowser.js',
+            'eventFilter.js',
+            'filterPanel.js',
+            'eventDataBackup.js',
+
+            // Video Playback
             'videoPlayer.js',
             'timeline.js',
             'syncController.js',
+            'clipMarking.js',
+            'incidentSlowMo.js',
+
+            // Layout System
             'layoutConfig.js',
             'layoutRenderer.js',
             'layoutManager.js',
             'layoutEditor.js',
+            'sidebarResize.js',
+
+            // Telemetry & Data
+            'seiExtractor.js',
+            'telemetryOverlay.js',
+            'telemetryGraphs.js',
+
+            // Maps & Location
+            'mapView.js',
+            'miniMapOverlay.js',
+            'streetViewOverlay.js',
+            'elevationService.js',
+            'elevationOverlay.js',
+            'speedLimitService.js',
+            'weatherService.js',
+
+            // License Plate Features
+            'plateDetector.js',
+            'plateRecognizer.js',
+            'plateEnhancer.js',
+            'plateBlur.js',
+            'platePostProcessor.js',
+            'frameStacker.js',
+            'regionTracker.js',
+            'siameseTracker.js',
+            'paddleOCR.js',
+
+            // Export & Capture
             'screenshotCapture.js',
-            'videoEnhancer.js',
-            'notesManager.js',
             'videoExport.js',
-            'clipMarking.js',
+            'videoEnhancer.js',
+            'insuranceReport.js',
+            'collisionReconstruction.js',
+
+            // Notes & Data
+            'notesManager.js',
+            'statisticsManager.js',
+
+            // Settings & UI
             'settingsManager.js',
             'versionManager.js',
-            'statisticsManager.js',
             'helpModal.js',
             'quickStartGuide.js',
-            'offlinePackager.js',
+
+            // Drive Sync
             'driveSync.js',
             'driveSyncUI.js',
-            'app.js'
+
+            // Self-reference (for re-packaging)
+            'offlinePackager.js'
         ];
 
         // Font files to download (subset for common weights)
@@ -50,7 +97,17 @@ class OfflinePackager {
     /**
      * Show the packaging modal with progress
      */
-    showModal() {
+    async showModal() {
+        // Check session access first
+        const sessionManager = window.app?.sessionManager;
+        if (sessionManager) {
+            const access = await sessionManager.checkAccess('offlinePackage');
+            if (!access.allowed) {
+                this._showUpgradeModal();
+                return;
+            }
+        }
+
         if (this.modal) {
             this.modal.remove();
         }
@@ -124,7 +181,16 @@ class OfflinePackager {
         };
 
         closeBtn.addEventListener('click', closeModal);
-        overlay.addEventListener('click', closeModal);
+        // Only close if click started AND ended on overlay (prevents close during text selection)
+        let mouseDownOnOverlay = false;
+        overlay.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === overlay;
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mouseDownOnOverlay && e.target === overlay) {
+                closeModal();
+            }
+        });
 
         startBtn.addEventListener('click', () => this.startPackaging());
 
@@ -212,6 +278,14 @@ class OfflinePackager {
         const cssContent = await this.fetchLocal('styles/main.css');
         zip.file('styles/main.css', cssContent);
 
+        // Also bundle plate-enhancer.css
+        try {
+            const plateEnhancerCSS = await this.fetchLocal('styles/plate-enhancer.css');
+            zip.file('styles/plate-enhancer.css', plateEnhancerCSS);
+        } catch (e) {
+            console.warn('plate-enhancer.css not found, skipping');
+        }
+
         // 2. Bundle favicon
         progressCallback('Bundling assets...', 10);
         try {
@@ -235,6 +309,37 @@ class OfflinePackager {
             } catch (e) {
                 console.warn(`Failed to bundle ${file}:`, e);
             }
+        }
+
+        // 3b. Bundle locales for multi-language support
+        progressCallback('Bundling locales...', 42);
+        const locales = ['en', 'es', 'de', 'fr', 'zh', 'ja', 'ko', 'nl', 'no'];
+        for (const locale of locales) {
+            try {
+                const content = await this.fetchLocal(`locales/${locale}.json`);
+                zip.file(`locales/${locale}.json`, content);
+            } catch (e) {
+                console.warn(`Failed to bundle locale ${locale}:`, e);
+            }
+        }
+
+        // 3c. Bundle vendor assets (protobuf schema for telemetry)
+        progressCallback('Bundling vendor assets...', 44);
+        try {
+            const proto = await this.fetchLocal('vendor/dashcam.proto');
+            zip.file('vendor/dashcam.proto', proto);
+        } catch (e) {
+            console.warn('dashcam.proto not found, skipping');
+        }
+
+        // 3d. Bundle gif.js library for GIF export
+        try {
+            const gifJs = await this.fetchLocal('vendor/gif.js');
+            zip.file('vendor/gif.js', gifJs);
+            const gifWorker = await this.fetchLocal('vendor/gif.worker.js');
+            zip.file('vendor/gif.worker.js', gifWorker);
+        } catch (e) {
+            console.warn('gif.js not found, skipping');
         }
 
         // 4. Download external libraries
@@ -436,6 +541,83 @@ class OfflinePackager {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Show upgrade required modal for free tier users
+     */
+    _showUpgradeModal() {
+        const modal = document.createElement('div');
+        modal.className = 'offline-packager-modal';
+        modal.innerHTML = `
+            <div class="offline-packager-overlay"></div>
+            <div class="offline-packager-panel" style="max-width: 400px;">
+                <div class="offline-packager-header">
+                    <h2>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px; vertical-align: middle;">
+                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                        </svg>
+                        Pro Feature
+                    </h2>
+                    <button class="offline-packager-close-btn" title="Close">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="offline-packager-content" style="padding: 20px;">
+                    <p style="margin-bottom: 15px;">Offline packaging is available with a TeslaCamViewer Pro license.</p>
+                    <p style="margin-bottom: 15px;">Upgrade to unlock:</p>
+                    <ul style="margin-left: 20px; margin-bottom: 20px;">
+                        <li>Unlimited event viewing</li>
+                        <li>Watermark-free exports</li>
+                        <li>Offline package creation</li>
+                    </ul>
+                </div>
+                <div class="offline-packager-footer">
+                    <button class="offline-packager-btn secondary close-btn">Close</button>
+                    <button class="offline-packager-btn primary upgrade-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/>
+                        </svg>
+                        Upgrade
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Bind close events
+        const closeBtn = modal.querySelector('.offline-packager-close-btn');
+        const closeBtnFooter = modal.querySelector('.close-btn');
+        const overlay = modal.querySelector('.offline-packager-overlay');
+        const upgradeBtn = modal.querySelector('.upgrade-btn');
+
+        const closeModal = () => modal.remove();
+
+        closeBtn.addEventListener('click', closeModal);
+        closeBtnFooter.addEventListener('click', closeModal);
+        // Only close if click started AND ended on overlay (prevents close during text selection)
+        let mouseDownOnOverlay = false;
+        overlay.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === overlay;
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mouseDownOnOverlay && e.target === overlay) {
+                closeModal();
+            }
+        });
+
+        upgradeBtn.addEventListener('click', () => {
+            closeModal();
+            // Open session modal if available
+            if (window.app?.sessionManager?.showSessionModal) {
+                window.app.sessionManager.showSessionModal();
+            } else {
+                window.open('https://www.natemccomb.store/', '_blank');
+            }
+        });
     }
 }
 

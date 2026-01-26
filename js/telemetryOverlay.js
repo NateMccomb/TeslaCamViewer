@@ -913,8 +913,8 @@ class TelemetryOverlay {
             const actualDuration = this.clipVideoDurations.get(clipIndex) || clipDuration;
             const baseTime = clipIndex * clipDuration; // Approximate event time at clip start
 
-            // Sample frames (every ~5 seconds of video = every ~180 frames at 36fps)
-            const sampleInterval = Math.max(1, Math.floor(data.frames.length / 12)); // ~12 samples per clip
+            // Sample frames (every ~1 second of video = every ~36 frames at 36fps)
+            const sampleInterval = Math.max(1, Math.floor(data.frames.length / 60)); // ~60 samples per clip
 
             for (let i = 0; i < data.frames.length; i += sampleInterval) {
                 const frame = data.frames[i];
@@ -1156,7 +1156,7 @@ class TelemetryOverlay {
                 </div>
 
                 <!-- G-Force Meter (compact) -->
-                <div style="position: relative; width: 40px; height: 40px;">
+                <div style="position: relative; width: 40px; height: 48px;">
                     ${this._renderGForceMeter(gForceX, gForceY)}
                 </div>
 
@@ -1322,32 +1322,32 @@ class TelemetryOverlay {
         const scaleRings = `<circle cx="${centerX}" cy="${centerY}" r="${maxOffset * 0.5}" fill="none" stroke="rgba(100, 150, 200, 0.25)" stroke-width="0.5"/>`;
 
         return `
-            <svg viewBox="0 0 50 50" style="width: 100%; height: 100%;">
+            <svg viewBox="0 0 50 56" style="width: 100%; height: 100%;">
                 <!-- Background circle -->
-                <circle cx="25" cy="25" r="22" fill="#1a1a1a" stroke="#333" stroke-width="1"/>
+                <circle cx="25" cy="22" r="20" fill="#1a1a1a" stroke="#333" stroke-width="1"/>
 
                 <!-- Grid lines -->
-                <line x1="25" y1="5" x2="25" y2="45" stroke="#333" stroke-width="0.5"/>
-                <line x1="5" y1="25" x2="45" y2="25" stroke="#333" stroke-width="0.5"/>
+                <line x1="25" y1="4" x2="25" y2="40" stroke="#333" stroke-width="0.5"/>
+                <line x1="7" y1="22" x2="43" y2="22" stroke="#333" stroke-width="0.5"/>
 
                 <!-- Scale rings (show G levels) -->
-                ${scaleRings}
+                <circle cx="25" cy="22" r="${18 * 0.5}" fill="none" stroke="rgba(100, 150, 200, 0.25)" stroke-width="0.5"/>
 
                 <!-- Center dot -->
-                <circle cx="25" cy="25" r="2" fill="#555"/>
+                <circle cx="25" cy="22" r="2" fill="#555"/>
 
                 <!-- G-force trace -->
                 ${tracePath}
 
                 <!-- G-force ball (current position) -->
-                <circle cx="${ballX}" cy="${ballY}" r="5"
+                <circle cx="${25 - (gX / 1.0) * 16}" cy="${22 - (gY / 1.0) * 16}" r="5"
                     fill="hsl(${hue}, 80%, 50%)"
                     stroke="hsl(${hue}, 80%, 70%)"
                     stroke-width="1"/>
 
-                <!-- G value and scale label -->
-                <text x="25" y="48" text-anchor="middle" fill="#666" font-size="5" font-family="monospace">
-                    ${totalG.toFixed(2)}g
+                <!-- G value label - positioned below circle with clear separation -->
+                <text x="25" y="53" text-anchor="middle" fill="#666" font-size="6" font-family="monospace">
+                    ${totalG.toFixed(1)}g
                 </text>
             </svg>
         `;
@@ -1669,28 +1669,42 @@ class TelemetryOverlay {
         // Steering wheel (blue when AP/FSD active)
         this._drawSteeringWheelColored(ctx, currentX + 22, centerY, 20, steeringAngle, wheelColor);
 
-        // AP mode label (bottom-right of steering wheel)
+        // AP mode label (bottom-right of steering wheel, positioned outside the wheel)
+        // Steering wheel is at currentX + 22 with radius 20, so right edge is currentX + 42
         if (apModeText) {
-            ctx.font = 'bold 7px JetBrains Mono, monospace';
-            ctx.fillStyle = 'rgba(10, 12, 18, 0.75)';
-            const labelWidth = ctx.measureText(apModeText).width + 4;
-            this._roundRect(ctx, currentX + 38, centerY + 10, labelWidth, 12, 2);
+            ctx.font = 'bold 8px JetBrains Mono, monospace';
+            const labelWidth = ctx.measureText(apModeText).width + 6;
+            const labelX = currentX + 44; // Right of steering wheel
+            const labelY = centerY + 14; // Below center
+
+            // Background
+            ctx.fillStyle = 'rgba(10, 12, 18, 0.85)';
+            this._roundRect(ctx, labelX, labelY, labelWidth, 14, 3);
             ctx.fill();
+
+            // Text
             ctx.fillStyle = '#0078ff';
             ctx.textAlign = 'left';
-            ctx.fillText(apModeText, currentX + 40, centerY + 19);
+            ctx.textBaseline = 'middle';
+            ctx.fillText(apModeText, labelX + 3, labelY + 7);
+            ctx.textBaseline = 'alphabetic'; // Reset
         }
         currentX += 55;
 
-        // Speed
-        ctx.font = 'bold 28px JetBrains Mono, monospace';
+        // Speed - match DOM styling (32px bold, vertically centered)
+        ctx.font = 'bold 32px JetBrains Mono, monospace';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.round(speed).toString(), currentX + 25, centerY + 8);
+        ctx.textBaseline = 'middle';
+        // Shift speed up slightly to center the speed+unit combo as a group
+        ctx.fillText(Math.round(speed).toString(), currentX + 25, centerY - 5);
 
-        ctx.font = '8px JetBrains Mono, monospace';
+        // Unit label - match DOM (9px, below speed)
+        ctx.font = '9px JetBrains Mono, monospace';
         ctx.fillStyle = '#666';
-        ctx.fillText(unitLabel, currentX + 25, centerY + 20);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(unitLabel, currentX + 25, centerY + 16);
+        ctx.textBaseline = 'alphabetic'; // Reset to default
         currentX += 55;
 
         // G-Force meter (compact)
@@ -1802,15 +1816,20 @@ class TelemetryOverlay {
         ctx.closePath();
         ctx.fill();
 
-        // Speed
-        ctx.font = '600 24px -apple-system, sans-serif';
+        // Speed - match DOM (28px 600 weight)
+        ctx.font = '600 28px -apple-system, sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
-        ctx.fillText(Math.round(speed).toString(), x + 100, y + 30);
+        ctx.textBaseline = 'middle';
+        const centerY = y + height / 2;
+        ctx.fillText(Math.round(speed).toString(), x + 100, centerY);
 
-        ctx.font = '12px -apple-system, sans-serif';
+        // Unit label - match DOM (14px inline with speed)
+        ctx.font = '14px -apple-system, sans-serif';
         ctx.fillStyle = '#888888';
-        ctx.fillText(unitLabel, x + 132, y + 30);
+        ctx.textAlign = 'left';
+        ctx.fillText(unitLabel, x + 130, centerY);
+        ctx.textBaseline = 'alphabetic'; // Reset to default
 
         // Right signal (arrow pointing RIGHT →)
         ctx.fillStyle = rightBlinker ? '#4caf50' : 'rgba(255, 255, 255, 0.3)';
@@ -1896,35 +1915,39 @@ class TelemetryOverlay {
         const unitLabel = units.toUpperCase();
         const apState = data.autopilot_name || 'NONE';
 
-        // Measure text for background sizing
-        ctx.font = 'bold 16px JetBrains Mono, monospace';
+        // Measure text for background sizing - match DOM (18px bold speed)
+        ctx.font = 'bold 18px JetBrains Mono, monospace';
         const speedText = Math.round(speed).toString();
         const speedWidth = ctx.measureText(speedText + ' ' + unitLabel).width;
-        const totalWidth = speedWidth + (apState !== 'NONE' ? 60 : 0) + 24;
+        const totalWidth = speedWidth + (apState !== 'NONE' ? 60 : 0) + 28;
 
         // Background
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        this._roundRect(ctx, x, y, totalWidth, 32, 6);
+        this._roundRect(ctx, x, y, totalWidth, 34, 6);
         ctx.fill();
 
-        // Speed
-        ctx.font = 'bold 16px JetBrains Mono, monospace';
+        // Speed - match DOM (18px bold)
+        const centerY = y + 17; // Vertically center in 34px height
+        ctx.font = 'bold 18px JetBrains Mono, monospace';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'left';
-        ctx.fillText(speedText, x + 12, y + 22);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(speedText, x + 14, centerY);
 
-        ctx.font = '12px JetBrains Mono, monospace';
+        // Unit label - match DOM (14px, 4px gap)
+        ctx.font = '14px JetBrains Mono, monospace';
         ctx.fillStyle = '#888888';
         const speedNumWidth = ctx.measureText(speedText).width;
-        ctx.fillText(unitLabel, x + 16 + speedNumWidth, y + 22);
+        ctx.fillText(unitLabel, x + 14 + speedNumWidth + 4, centerY);
 
-        // AP status
+        // AP status - match DOM (11px bold)
         if (apState !== 'NONE') {
             const apColor = apState === 'FSD' ? '#00c853' : '#0078ff';
-            ctx.font = 'bold 10px JetBrains Mono, monospace';
+            ctx.font = 'bold 11px JetBrains Mono, monospace';
             ctx.fillStyle = apColor;
-            ctx.fillText(apState, x + totalWidth - 50, y + 22);
+            ctx.fillText(apState, x + totalWidth - 50, centerY);
         }
+        ctx.textBaseline = 'alphabetic'; // Reset to default
     }
 
     _drawSteeringWheel(ctx, cx, cy, radius, angle) {

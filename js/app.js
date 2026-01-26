@@ -5,6 +5,9 @@
 
 class TeslaCamViewerApp {
     constructor() {
+        // Check for other instances using BroadcastChannel
+        this._initInstanceDetection();
+
         // Initialize components - tcv.0x4E4D43
         this.folderParser = new FolderParser();
         this.folderManager = new FolderManager();
@@ -94,6 +97,7 @@ class TeslaCamViewerApp {
 
         // Settings, Help, Quick Start, Version, Statistics, and Notes
         this.settingsManager = new SettingsManager();
+        this.sessionManager = new SessionManager();
         this.versionManager = new VersionManager();
         this.statisticsManager = new StatisticsManager();
         this.notesManager = new NotesManager();
@@ -120,15 +124,15 @@ class TeslaCamViewerApp {
             }
         });
 
-        // Settings, Help, Stats buttons
+        // Settings, Help, Stats, Session buttons
         this.settingsBtn = document.getElementById('settingsBtn');
         this.helpBtn = document.getElementById('helpBtn');
         this.statsBtn = document.getElementById('statsBtn');
+        this.sessionBtn = document.getElementById('sessionBtn');
 
         // UI elements
         this.selectFolderBtn = document.getElementById('selectFolderBtn');
-        this.playBtn = document.getElementById('playBtn');
-        this.pauseBtn = document.getElementById('pauseBtn');
+        this.playPauseBtn = document.getElementById('playPauseBtn');
         this.frameBackBtn = document.getElementById('frameBackBtn');
         this.frameForwardBtn = document.getElementById('frameForwardBtn');
         this.prevClipBtn = document.getElementById('prevClipBtn');
@@ -138,6 +142,7 @@ class TeslaCamViewerApp {
         this.screenshotBtn = document.getElementById('screenshotBtn');
         this.pipBtn = document.getElementById('pipBtn');
         this.enhanceBtn = document.getElementById('enhanceBtn');
+        this.enhanceRegionBtn = document.getElementById('enhanceRegionBtn');
         this.notesBtn = document.getElementById('notesBtn');
         this.markInBtn = document.getElementById('markInBtn');
         this.markOutBtn = document.getElementById('markOutBtn');
@@ -232,7 +237,6 @@ class TeslaCamViewerApp {
 
         this.setupEventListeners();
         this.checkBrowserSupport();
-        this.initPillarCycleButton();
 
         // Set layout select to match saved preference
         this.layoutSelect.value = this.layoutManager.getCurrentLayout();
@@ -493,9 +497,8 @@ class TeslaCamViewerApp {
             }
         });
 
-        // Playback controls
-        this.playBtn.addEventListener('click', () => this.play());
-        this.pauseBtn.addEventListener('click', () => this.pause());
+        // Playback controls - combined play/pause toggle
+        this.playPauseBtn.addEventListener('click', () => this.togglePlayback());
 
         // Frame stepping - single click or hold
         this.frameBackBtn.addEventListener('mousedown', () => this.startFrameStepping(-1));
@@ -530,6 +533,13 @@ class TeslaCamViewerApp {
         if (videoGridContainer) {
             this.videoEnhancer.initialize(videoGridContainer);
         }
+
+        // Enhance Region button
+        this.enhanceRegionBtn?.addEventListener('click', () => {
+            if (window.plateEnhancer) {
+                window.plateEnhancer.startEnhanceRegionMode();
+            }
+        });
 
         // Overlay toggle buttons
         this.toggleHudBtn?.addEventListener('click', () => {
@@ -637,21 +647,87 @@ class TeslaCamViewerApp {
             }
         }
 
-        // Export options (excluding privacy mode checkbox which has its own handler)
-        this.exportDropdown.querySelectorAll('.export-option:not(.privacy-mode-option)').forEach(btn => {
+        // Blur license plates checkbox - syncs with settings
+        const blurPlatesExportCheckbox = document.getElementById('blurPlatesExportCheckbox');
+        if (blurPlatesExportCheckbox) {
+            // Initialize from settings
+            blurPlatesExportCheckbox.checked = this.settingsManager.get('blurPlatesExport') === true;
+
+            // Update settings when checkbox changes
+            blurPlatesExportCheckbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                this.settingsManager.set('blurPlatesExport', e.target.checked);
+                console.log('Blur plates export:', e.target.checked ? 'enabled' : 'disabled');
+            });
+
+            // Prevent clicks on label from closing dropdown
+            const blurPlatesOption = blurPlatesExportCheckbox.closest('.export-checkbox-option');
+            if (blurPlatesOption) {
+                blurPlatesOption.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Toggle checkbox when clicking label (but not the checkbox itself)
+                    if (e.target !== blurPlatesExportCheckbox && e.target.tagName !== 'INPUT') {
+                        blurPlatesExportCheckbox.checked = !blurPlatesExportCheckbox.checked;
+                        blurPlatesExportCheckbox.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+        }
+
+        // Export format dropdown - syncs with settings
+        const exportFormatSelect = document.getElementById('exportFormatSelect');
+        if (exportFormatSelect) {
+            // Initialize from settings
+            const savedFormat = this.settingsManager.get('exportFormat') || 'webm';
+            exportFormatSelect.value = savedFormat;
+
+            // Update settings when format changes
+            exportFormatSelect.addEventListener('change', (e) => {
+                e.stopPropagation();
+                this.settingsManager.set('exportFormat', e.target.value);
+                console.log('Export format:', e.target.value);
+            });
+
+            // Prevent clicks on video group from closing dropdown
+            const videoGroup = exportFormatSelect.closest('.export-video-group');
+            if (videoGroup) {
+                videoGroup.addEventListener('click', (e) => {
+                    // Only stop propagation for format select, not the button
+                    if (e.target === exportFormatSelect || e.target.closest('.export-format-select')) {
+                        e.stopPropagation();
+                    }
+                });
+            }
+        }
+
+        // Export action buttons (Screenshot, Export Video, Insurance Report)
+        this.exportDropdown.querySelectorAll('.export-action-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.exportDropdown.classList.add('hidden');
 
                 // Check if it's a screenshot action, insurance report, or video export
-                const action = e.target.closest('.export-option').dataset.action;
+                const action = btn.dataset.action;
                 if (action === 'screenshot') {
                     this.captureScreenshot();
                 } else if (action === 'insurance-report') {
                     this.generateInsuranceReport();
                 } else {
-                    const camera = e.target.closest('.export-option').dataset.camera;
+                    const camera = btn.dataset.camera;
                     this.exportVideo(camera);
+                }
+            });
+        });
+
+        // Prevent checkbox options from closing dropdown
+        this.exportDropdown.querySelectorAll('.export-checkbox-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Toggle checkbox when clicking anywhere in the option
+                const checkbox = option.querySelector('input[type="checkbox"]');
+                if (checkbox && e.target !== checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change'));
                 }
             });
         });
@@ -827,10 +903,11 @@ class TeslaCamViewerApp {
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
 
-        // Settings, Help, and Stats buttons
+        // Settings, Help, Stats, and Session buttons
         this.settingsBtn.addEventListener('click', () => this.settingsManager.showSettingsModal());
         this.helpBtn.addEventListener('click', () => this.helpModal.show());
         this.statsBtn.addEventListener('click', () => this.statisticsManager.showModal());
+        this.sessionBtn.addEventListener('click', () => this.sessionManager.showSessionModal());
 
         // Camera visibility toggles
         this.setupCameraVisibilityControls();
@@ -1303,9 +1380,13 @@ class TeslaCamViewerApp {
             modal.remove();
         });
 
-        // Close on overlay click
+        // Close on overlay click (only if mousedown started on overlay - prevents close during text selection)
+        let mouseDownOnOverlay = false;
+        modal.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === modal;
+        });
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
+            if (mouseDownOnOverlay && e.target === modal) {
                 modal.remove();
             }
         });
@@ -1431,7 +1512,7 @@ class TeslaCamViewerApp {
             const restored = await this.folderManager.restoreArchiveDrive(driveId);
             if (!restored) {
                 this.hideLoading();
-                alert('Could not access the drive. Please check if it is connected.');
+                alert('Drive may be disconnected or needs permission. Please reconnect the drive and try again.');
                 return;
             }
 
@@ -1486,7 +1567,7 @@ class TeslaCamViewerApp {
         } catch (error) {
             console.error('Error syncing archive drive:', error);
             this.hideLoading();
-            alert('Error syncing drive. Please try again.');
+            alert('Unable to sync drive. Please check the connection and try again.');
         }
     }
 
@@ -1523,7 +1604,7 @@ class TeslaCamViewerApp {
             const permission = await drive.handle.requestPermission({ mode: 'read' });
             if (permission !== 'granted') {
                 this.hideLoading();
-                alert('Permission denied. Cannot reload drive.');
+                alert('Permission needed to access this drive. Please allow access when prompted.');
                 return;
             }
 
@@ -1674,9 +1755,13 @@ class TeslaCamViewerApp {
                 resolve(null);
             });
 
-            // Close on overlay click
+            // Close on overlay click (only if mousedown started on overlay)
+            let mouseDownOnOverlay = false;
+            modal.addEventListener('mousedown', (e) => {
+                mouseDownOnOverlay = e.target === modal;
+            });
             modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
+                if (mouseDownOnOverlay && e.target === modal) {
                     modal.remove();
                     resolve(null);
                 }
@@ -1881,6 +1966,11 @@ class TeslaCamViewerApp {
                     dateFilter: settings.dateFilter
                 });
 
+                // Check for session recovery from drive
+                if (this.sessionManager) {
+                    await this.sessionManager.checkDriveRecovery(handle);
+                }
+
                 // If archive drive, skip loading and just save
                 if (settings.isArchive) {
                     this.hideLoading();
@@ -1944,7 +2034,7 @@ class TeslaCamViewerApp {
             } catch (error) {
                 this.hideLoading();
                 console.error('Error parsing folder:', error);
-                alert('Error parsing TeslaCam folder. Please make sure you selected the correct folder.');
+                alert('Unable to read TeslaCam folder. Please make sure you selected the correct folder containing TeslaCam data.');
             }
 
             break; // Exit loop after successful processing
@@ -2083,6 +2173,15 @@ class TeslaCamViewerApp {
      * @param {Object} event
      */
     async onEventSelected(event) {
+        // Check session access for viewing events
+        if (this.sessionManager) {
+            const access = await this.sessionManager.checkAccess('viewEvent');
+            if (!access.allowed) {
+                this.sessionManager.showLimitModal(access.type || 'daily');
+                return;
+            }
+        }
+
         // Check if plate enhancer has active work
         if (window.plateEnhancer) {
             const pe = window.plateEnhancer;
@@ -2114,6 +2213,11 @@ class TeslaCamViewerApp {
 
             // Load event in video player
             await this.videoPlayer.loadEvent(event);
+
+            // Record event view for session tracking
+            if (this.sessionManager) {
+                await this.sessionManager.recordEventView(event.compoundKey || event.name);
+            }
 
             // Update pillar camera support based on event
             this.layoutManager.setHasPillarCameras(event.hasPillarCameras || false);
@@ -2205,7 +2309,7 @@ class TeslaCamViewerApp {
         } catch (error) {
             this.hideLoading();
             console.error('Error loading event:', error);
-            alert('Error loading event videos.');
+            alert('Unable to load event videos. The drive may have been disconnected.');
         }
     }
 
@@ -2486,8 +2590,18 @@ class TeslaCamViewerApp {
      */
     updatePlaybackButtons() {
         const isPlaying = this.videoPlayer.getIsPlaying();
-        this.playBtn.disabled = isPlaying;
-        this.pauseBtn.disabled = !isPlaying;
+
+        // Update combined play/pause button icon
+        if (this.playPauseBtn) {
+            const playIcon = this.playPauseBtn.querySelector('.play-icon');
+            const pauseIcon = this.playPauseBtn.querySelector('.pause-icon');
+            if (playIcon && pauseIcon) {
+                playIcon.style.display = isPlaying ? 'none' : '';
+                pauseIcon.style.display = isPlaying ? '' : 'none';
+            }
+            // Update aria-label for accessibility
+            this.playPauseBtn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
+        }
 
         // Update bottom sheet play button icon
         if (this.bottomSheetPlayBtn) {
@@ -2515,8 +2629,7 @@ class TeslaCamViewerApp {
      */
     disableAllControls() {
         console.log('Disabling all controls...');
-        this.playBtn.disabled = true;
-        this.pauseBtn.disabled = true;
+        this.playPauseBtn.disabled = true;
         this.frameBackBtn.disabled = true;
         this.frameForwardBtn.disabled = true;
         this.prevClipBtn.disabled = true;
@@ -2524,6 +2637,7 @@ class TeslaCamViewerApp {
         this.screenshotBtn.disabled = true;
         this.pipBtn.disabled = true;
         this.enhanceBtn.disabled = true;
+        if (this.enhanceRegionBtn) this.enhanceRegionBtn.disabled = true;
         this.notesBtn.disabled = true;
         this.markInBtn.disabled = true;
         this.markOutBtn.disabled = true;
@@ -2541,8 +2655,7 @@ class TeslaCamViewerApp {
      * Disable playback controls (during export)
      */
     disableControls() {
-        this.playBtn.disabled = true;
-        this.pauseBtn.disabled = true;
+        this.playPauseBtn.disabled = true;
         this.frameBackBtn.disabled = true;
         this.frameForwardBtn.disabled = true;
         this.prevClipBtn.disabled = true;
@@ -2550,6 +2663,7 @@ class TeslaCamViewerApp {
         this.screenshotBtn.disabled = true;
         this.pipBtn.disabled = true;
         this.enhanceBtn.disabled = true;
+        if (this.enhanceRegionBtn) this.enhanceRegionBtn.disabled = true;
         this.notesBtn.disabled = true;
         this.markInBtn.disabled = true;
         this.markOutBtn.disabled = true;
@@ -2579,8 +2693,7 @@ class TeslaCamViewerApp {
      * Enable playback controls
      */
     enableControls() {
-        this.playBtn.disabled = false;
-        this.pauseBtn.disabled = true;
+        this.playPauseBtn.disabled = false;
         this.frameBackBtn.disabled = false;
         this.frameForwardBtn.disabled = false;
         this.prevClipBtn.disabled = false;
@@ -2588,6 +2701,7 @@ class TeslaCamViewerApp {
         this.screenshotBtn.disabled = false;
         this.pipBtn.disabled = !document.pictureInPictureEnabled; // Only enable if PiP is supported
         this.enhanceBtn.disabled = false;
+        if (this.enhanceRegionBtn) this.enhanceRegionBtn.disabled = false;
         this.notesBtn.disabled = false;
         this.updateNotesButtonState();
         this.markInBtn.disabled = false;
@@ -3404,28 +3518,20 @@ class TeslaCamViewerApp {
                 }
             };
 
-            // Export based on camera selection
-            // Using frame-by-frame export for stable, stutter-free output
-            if (camera === 'all') {
-                await this.videoExport.exportFrameByFrame({
-                    format: this.settingsManager.get('exportFormat'),
-                    quality: 0.9,
-                    startTime: exportStartTime,
-                    endTime: exportEndTime,
-                    includeOverlay: true,
-                    fps: 30,
-                    onProgress: progressCallback
-                });
-            } else {
-                await this.videoExport.exportSingle(camera, {
-                    format: this.settingsManager.get('exportFormat'),
-                    startTime: exportStartTime,
-                    endTime: exportEndTime,
-                    includeOverlay: true,
-                    speed: currentSpeed,
-                    onProgress: progressCallback
-                });
-            }
+            // Get format from export dropdown (fallback to settings)
+            const exportFormatSelect = document.getElementById('exportFormatSelect');
+            const format = exportFormatSelect ? exportFormatSelect.value : this.settingsManager.get('exportFormat');
+
+            // Export current layout using frame-by-frame for stable, stutter-free output
+            await this.videoExport.exportFrameByFrame({
+                format: format,
+                quality: 0.9,
+                startTime: exportStartTime,
+                endTime: exportEndTime,
+                includeOverlay: true,
+                fps: 30,
+                onProgress: progressCallback
+            });
 
             // Remove cancel handler (cancelBtn is stable, not recreated)
             if (cancelBtn && cancelHandler) {
@@ -3449,7 +3555,7 @@ class TeslaCamViewerApp {
                 console.log('Export cancelled by user');
             } else {
                 console.error('Export failed:', error);
-                alert('Export failed: ' + error.message);
+                alert('Export was unable to complete: ' + error.message);
             }
         }
     }
@@ -3528,8 +3634,8 @@ class TeslaCamViewerApp {
      * Update export dropdown to show current layout name
      */
     updateExportLayoutName() {
-        const allCamerasBtn = this.exportDropdown.querySelector('[data-camera="all"]');
-        if (allCamerasBtn && this.layoutManager) {
+        const exportVideoBtn = document.getElementById('exportVideoBtn');
+        if (exportVideoBtn && this.layoutManager) {
             const config = this.layoutManager.getCurrentConfig();
             const layoutName = config?.name || this.layoutManager.getCurrentLayout();
             // Format the display name - capitalize each word
@@ -3537,8 +3643,9 @@ class TeslaCamViewerApp {
                 .replace(/^layout-/, '')
                 .replace(/-/g, ' ')
                 .replace(/\b\w/g, c => c.toUpperCase());
-            // Two lines: "Current Layout" on first, name on second
-            allCamerasBtn.innerHTML = `Current Layout<span class="layout-name-line">${displayName}</span>`;
+            // Keep the icon and update the text
+            const icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>`;
+            exportVideoBtn.innerHTML = `${icon}<span>Export Video<span class="layout-name-line">${displayName}</span></span>`;
         }
     }
 
@@ -3694,6 +3801,9 @@ class TeslaCamViewerApp {
                 this.layoutSelect.value = this.layoutManager.getCurrentLayout();
                 break;
 
+            // Note: [ and ] are now used for bookmark navigation (see below)
+            // Frame stepping moved to , and . keys
+
             case 'KeyH':
             case 'Slash':
                 // ? or H for help
@@ -3704,7 +3814,13 @@ class TeslaCamViewerApp {
                 break;
 
             case 'Comma':
-                // , for settings
+                // , for frame back (pairs with . for frame forward)
+                event.preventDefault();
+                this.stepFrame(-1);
+                break;
+
+            case 'KeyQ':
+                // Q for quick settings
                 event.preventDefault();
                 this.settingsManager.showSettingsModal();
                 break;
@@ -3752,15 +3868,10 @@ class TeslaCamViewerApp {
             // Note: 'G' keyboard shortcut removed - telemetry graphs are now always visible in sidebar
 
             case 'KeyP':
+                // P for Picture-in-Picture
                 event.preventDefault();
-                if (event.shiftKey) {
-                    // Shift+P for pillar/repeater cycle
-                    this.cyclePillarMode();
-                } else {
-                    // P for Picture-in-Picture
-                    if (!this.pipBtn.disabled) {
-                        this.togglePictureInPicture();
-                    }
+                if (!this.pipBtn.disabled) {
+                    this.togglePictureInPicture();
                 }
                 break;
 
@@ -3780,6 +3891,14 @@ class TeslaCamViewerApp {
                 }
                 break;
 
+            case 'KeyD':
+                // D for detect plates
+                event.preventDefault();
+                if (window.plateEnhancer && this.currentEvent) {
+                    window.plateEnhancer.autoDetectPlates();
+                }
+                break;
+
             case 'KeyF':
                 // F for fullscreen
                 event.preventDefault();
@@ -3794,9 +3913,11 @@ class TeslaCamViewerApp {
             case 'Digit2':
             case 'Digit3':
             case 'Digit4':
-                // 1-4 for focus camera
+            case 'Digit5':
+            case 'Digit6':
+                // 1-6 for focus camera (includes pillar cameras)
                 event.preventDefault();
-                const cameras = ['front', 'back', 'left_repeater', 'right_repeater'];
+                const cameras = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'];
                 const cameraIndex = parseInt(event.key) - 1;
                 if (cameraIndex >= 0 && cameraIndex < cameras.length) {
                     this.layoutManager.setLayout('layout-focus');
@@ -3887,6 +4008,28 @@ class TeslaCamViewerApp {
                 // ] for next bookmark
                 event.preventDefault();
                 this.jumpToNextBookmark();
+                break;
+
+            case 'ArrowUp':
+                // Up arrow for select previous event in list
+                event.preventDefault();
+                if (!this.prevEventBtn.disabled) {
+                    this.previousEvent();
+                }
+                break;
+
+            case 'ArrowDown':
+                // Down arrow for select next event in list
+                event.preventDefault();
+                if (!this.nextEventBtn.disabled) {
+                    this.nextEvent();
+                }
+                break;
+
+            case 'Period':
+                // . for frame forward
+                event.preventDefault();
+                this.stepFrame(1);
                 break;
         }
     }
@@ -4227,6 +4370,28 @@ class TeslaCamViewerApp {
                 this._cacheNearMissData(nearMisses);
             };
 
+            // Set up incident detection callback to feed MapView
+            // TelemetryGraphs is the source of truth for incident detection
+            this.telemetryGraphs.onIncidentsDetected = (incidents) => {
+                if (this.mapView && this.currentEvent) {
+                    this.mapView.addIncidentsFromTelemetry(
+                        incidents,
+                        this.currentEvent
+                    );
+                }
+            };
+
+            // Set up AP disengagement detection callback to feed MapView
+            // TelemetryGraphs is the source of truth for AP struggle zones
+            this.telemetryGraphs.onApEventsDetected = (apDisengagements) => {
+                if (this.mapView && this.currentEvent) {
+                    this.mapView.addApDisengagementsFromTelemetry(
+                        apDisengagements,
+                        this.currentEvent
+                    );
+                }
+            };
+
             // Load data into graphs
             this.telemetryGraphs.loadData(clipSeiData, totalDuration);
 
@@ -4539,16 +4704,6 @@ class TeslaCamViewerApp {
     // ==================== PILLAR CAMERA SUPPORT ====================
 
     /**
-     * Cycle between repeaters and pillars in 4-camera layouts
-     */
-    cyclePillarMode() {
-        if (!this.layoutManager.hasPillarCameras) return;
-
-        this.layoutManager.cyclePillarMode();
-        this.updatePillarCycleButton();
-    }
-
-    /**
      * Update pillar layout options visibility based on whether event has pillar cameras
      * @param {boolean} hasPillars
      */
@@ -4564,40 +4719,6 @@ class TeslaCamViewerApp {
         pillarCameraOptions.forEach(opt => {
             opt.style.display = hasPillars ? '' : 'none';
         });
-
-        // Update cycle button
-        this.updatePillarCycleButton();
-    }
-
-    /**
-     * Update the pillar cycle button state
-     */
-    updatePillarCycleButton() {
-        const cycleBtn = document.getElementById('pillarCycleBtn');
-        if (!cycleBtn) return;
-
-        const hasPillars = this.layoutManager.hasPillarCameras;
-        const pillarMode = this.layoutManager.pillarMode;
-
-        cycleBtn.style.display = hasPillars ? '' : 'none';
-
-        if (hasPillars) {
-            const label = cycleBtn.querySelector('.pillar-cycle-label');
-            if (label) {
-                label.textContent = pillarMode === 'pillars' ? 'Pillars' : 'Repeaters';
-            }
-            cycleBtn.classList.toggle('pillars-active', pillarMode === 'pillars');
-        }
-    }
-
-    /**
-     * Initialize pillar cycle button click handler
-     */
-    initPillarCycleButton() {
-        const cycleBtn = document.getElementById('pillarCycleBtn');
-        if (cycleBtn) {
-            cycleBtn.addEventListener('click', () => this.cyclePillarMode());
-        }
     }
 
     /**
@@ -4760,6 +4881,63 @@ class TeslaCamViewerApp {
         }, duration);
     }
 
+    /**
+     * Initialize instance detection using BroadcastChannel
+     * Detects if another tab/window has TeslaCamViewer open
+     */
+    _initInstanceDetection() {
+        this._instanceId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        this._otherInstancesDetected = false;
+
+        try {
+            this._instanceChannel = new BroadcastChannel('teslacamviewer-instance');
+
+            // Listen for messages from other instances
+            this._instanceChannel.onmessage = (event) => {
+                if (event.data.type === 'ping' && event.data.id !== this._instanceId) {
+                    // Another instance is checking - respond with pong
+                    this._instanceChannel.postMessage({ type: 'pong', id: this._instanceId });
+                } else if (event.data.type === 'pong' && event.data.id !== this._instanceId) {
+                    // Received response from another instance
+                    if (!this._otherInstancesDetected) {
+                        this._otherInstancesDetected = true;
+                        this._showInstanceWarning();
+                    }
+                }
+            };
+
+            // Send ping to detect other instances
+            this._instanceChannel.postMessage({ type: 'ping', id: this._instanceId });
+
+            // Also respond to pings sent before we started listening
+            setTimeout(() => {
+                this._instanceChannel.postMessage({ type: 'ping', id: this._instanceId });
+            }, 500);
+
+            console.log('[App] Instance detection initialized, id:', this._instanceId);
+        } catch (e) {
+            console.warn('[App] BroadcastChannel not supported:', e);
+        }
+    }
+
+    /**
+     * Show warning about multiple instances
+     */
+    _showInstanceWarning() {
+        console.warn('[App] Another TeslaCamViewer instance detected in another tab/window!');
+
+        // Create persistent warning banner
+        const banner = document.createElement('div');
+        banner.id = 'instance-warning-banner';
+        banner.innerHTML = `
+            <div style="background: #ff6b35; color: white; padding: 10px 20px; text-align: center; font-weight: bold; position: fixed; top: 0; left: 0; right: 0; z-index: 10001; display: flex; justify-content: center; align-items: center; gap: 15px;">
+                <span>⚠️ Another TeslaCamViewer tab is open. This may cause playback issues. Please close other tabs.</span>
+                <button onclick="this.parentElement.remove()" style="background: white; color: #ff6b35; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">Dismiss</button>
+            </div>
+        `;
+        document.body.appendChild(banner);
+    }
+
 }
 
 // Initialize app when DOM is ready
@@ -4771,6 +4949,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.app = new TeslaCamViewerApp();
 
+    // Initialize session state (header button, expiry warnings)
+    if (window.app.sessionManager) {
+        window.app.sessionManager._updateHeaderButton();
+        window.app.sessionManager.showExpiryWarningIfNeeded();
+    }
+
     // Initialize plate enhancer (delayed and wrapped in try-catch)
     setTimeout(() => {
         try {
@@ -4781,6 +4965,40 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('[PlateEnhancer] Init error (non-fatal):', e);
         }
     }, 2000);
+
+    // Preload plate detection model if setting is enabled (delayed to not block startup)
+    setTimeout(async () => {
+        try {
+            const blurEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
+            if (blurEnabled && window.app?.plateBlur && !window.app.plateBlur.isReady()) {
+                console.log('[App] Preloading license plate detection model...');
+
+                // Show a toast notification
+                const toast = document.createElement('div');
+                toast.id = 'plate-model-toast';
+                toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #2d2d2d; color: #e0e0e0; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10000; font-size: 14px; display: flex; align-items: center; gap: 10px;';
+                toast.innerHTML = '<div class="loading-spinner" style="width: 16px; height: 16px; border: 2px solid #555; border-top-color: #4a9eff; border-radius: 50%; animation: spin 1s linear infinite;"></div><span>Loading plate detection model...</span>';
+                document.body.appendChild(toast);
+
+                const success = await window.app.plateBlur.loadModel((progress) => {
+                    const span = toast.querySelector('span');
+                    if (span && progress.percent >= 0) {
+                        span.textContent = progress.message;
+                    }
+                });
+
+                // Update toast and auto-dismiss
+                if (success) {
+                    toast.innerHTML = '<span style="color: #66bb6a;">✓ Plate detection ready</span>';
+                } else {
+                    toast.innerHTML = '<span style="color: #ef5350;">⚠ Plate detection failed to load</span>';
+                }
+                setTimeout(() => toast.remove(), 3000);
+            }
+        } catch (e) {
+            console.error('[App] Plate model preload error (non-fatal):', e);
+        }
+    }, 3000);
 
     // Debug helper for export troubleshooting
     window.debugExport = () => {

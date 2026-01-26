@@ -15,11 +15,10 @@ class SpeedLimitService {
         // Multiple Overpass API servers to rotate between
         this.overpassServers = [
             'https://overpass-api.de/api/interpreter',
-            'https://overpass.kumi.systems/api/interpreter',
-            'https://maps.mail.ru/osm/tools/overpass/api/interpreter'
+            'https://overpass.kumi.systems/api/interpreter'
         ];
         this.currentServerIndex = 0;
-        this.serverFailCounts = [0, 0, 0]; // Track failures per server
+        this.serverFailCounts = [0, 0]; // Track failures per server
 
         // In-memory cache for current session
         // Key: "lat,lng" rounded to ~500m grid, Value: { limit, unit, source }
@@ -233,6 +232,15 @@ class SpeedLimitService {
                 throw new Error(`Overpass API returned ${response.status}`);
             }
 
+            // Check content type before parsing
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                // Server returned non-JSON (likely XML error page) - fail silently, try next server
+                this._markServerFailed(serverUrl);
+                this.backoffMultiplier = Math.min(this.backoffMultiplier * 1.5, this.maxBackoff);
+                throw new Error('Server returned non-JSON response');
+            }
+
             // Success - mark server as working and reduce backoff
             this._markServerSuccess(serverUrl);
             if (this.backoffMultiplier > 1) {
@@ -249,7 +257,7 @@ class SpeedLimitService {
 
             return result;
         } catch (error) {
-            console.warn('[SpeedLimitService] Failed to fetch speed limit:', error.message);
+            // Silently fail - speed limit is optional and servers can be flaky
             return null;
         }
     }

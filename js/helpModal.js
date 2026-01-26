@@ -67,15 +67,15 @@ class HelpModal {
                         </div>
                         <div class="shortcut-row">
                             <kbd>Left Arrow</kbd>
-                            <span>${this.t('help.shortcuts.previousFrame')}</span>
+                            <span>Seek back 5 seconds</span>
                         </div>
                         <div class="shortcut-row">
                             <kbd>Right Arrow</kbd>
-                            <span>${this.t('help.shortcuts.nextFrame')}</span>
+                            <span>Seek forward 5 seconds</span>
                         </div>
                         <div class="shortcut-row">
-                            <kbd>Hold Left/Right</kbd>
-                            <span>${this.t('help.shortcuts.slowMotion')}</span>
+                            <kbd>,</kbd> / <kbd>.</kbd>
+                            <span>Step back / forward 1 frame</span>
                         </div>
                         <div class="shortcut-row">
                             <kbd>Shift + Left</kbd>
@@ -110,11 +110,11 @@ class HelpModal {
                         </div>
                         <div class="shortcut-row">
                             <kbd>Up Arrow</kbd>
-                            <span>${this.t('help.shortcuts.selectPreviousEvent')}</span>
+                            <span>Previous event</span>
                         </div>
                         <div class="shortcut-row">
                             <kbd>Down Arrow</kbd>
-                            <span>${this.t('help.shortcuts.selectNextEvent')}</span>
+                            <span>Next event</span>
                         </div>
                     </div>
                 </div>
@@ -128,8 +128,8 @@ class HelpModal {
                             <span>${this.t('help.shortcuts.cycleLayouts')}</span>
                         </div>
                         <div class="shortcut-row">
-                            <kbd>1-4</kbd>
-                            <span>${this.t('help.shortcuts.focusCamera')}</span>
+                            <kbd>1-6</kbd>
+                            <span>Focus camera (1-4 main, 5-6 pillars)</span>
                         </div>
                         <div class="shortcut-row">
                             <kbd>F</kbd>
@@ -174,6 +174,29 @@ class HelpModal {
                             <kbd>E</kbd>
                             <span>${this.t('help.shortcuts.exportVideo')}</span>
                         </div>
+                        <div class="shortcut-row">
+                            <kbd>D</kbd>
+                            <span>Auto-Detect License Plates</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plate Detection (Cycling Mode) -->
+                <div class="help-section">
+                    <h3>Plate Detection</h3>
+                    <div class="shortcut-grid">
+                        <div class="shortcut-row">
+                            <kbd>← →</kbd>
+                            <span>Cycle through detected plates</span>
+                        </div>
+                        <div class="shortcut-row">
+                            <kbd>Enter</kbd>
+                            <span>Enhance selected plate</span>
+                        </div>
+                        <div class="shortcut-row">
+                            <kbd>Esc</kbd>
+                            <span>Cancel plate detection</span>
+                        </div>
                     </div>
                 </div>
 
@@ -187,11 +210,11 @@ class HelpModal {
                         </div>
                         <div class="shortcut-row">
                             <kbd>[</kbd>
-                            <span>${this.t('help.shortcuts.jumpToPreviousBookmark')}</span>
+                            <span>Jump to previous bookmark</span>
                         </div>
                         <div class="shortcut-row">
                             <kbd>]</kbd>
-                            <span>${this.t('help.shortcuts.jumpToNextBookmark')}</span>
+                            <span>Jump to next bookmark</span>
                         </div>
                         <div class="shortcut-row">
                             <kbd>Scroll on timeline</kbd>
@@ -228,8 +251,8 @@ class HelpModal {
                             <span>${this.t('help.shortcuts.showHelp')}</span>
                         </div>
                         <div class="shortcut-row">
-                            <kbd>,</kbd>
-                            <span>${this.t('help.shortcuts.openSettings')}</span>
+                            <kbd>Q</kbd>
+                            <span>Quick Settings</span>
                         </div>
                         <div class="shortcut-row">
                             <kbd>Esc</kbd>
@@ -273,7 +296,16 @@ class HelpModal {
      */
     bindEvents() {
         const overlay = this.modal.querySelector('.help-overlay');
-        overlay.addEventListener('click', () => this.hide());
+        // Only close if click started AND ended on overlay (prevents close during text selection)
+        let mouseDownOnOverlay = false;
+        overlay.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === overlay;
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mouseDownOnOverlay && e.target === overlay) {
+                this.hide();
+            }
+        });
 
         // ESC to close
         document.addEventListener('keydown', (e) => {

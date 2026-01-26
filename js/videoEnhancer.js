@@ -234,6 +234,9 @@ class VideoEnhancer {
         if (this.controlsContainer) {
             this.controlsContainer.classList.remove('hidden');
             this.controlsVisible = true;
+            // Highlight the button in controls
+            const btn = document.getElementById('enhanceBtn');
+            if (btn) btn.classList.add('active');
         }
     }
 
@@ -244,6 +247,9 @@ class VideoEnhancer {
         if (this.controlsContainer) {
             this.controlsContainer.classList.add('hidden');
             this.controlsVisible = false;
+            // Remove highlight from button
+            const btn = document.getElementById('enhanceBtn');
+            if (btn) btn.classList.remove('active');
         }
     }
 

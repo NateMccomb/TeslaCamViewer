@@ -330,6 +330,16 @@ class CollisionReconstruction {
 
         // Only add point if we have valid GPS
         if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+            // Check if this is first position or a position jump
+            const isFirstPosition = this.pathPoints.length === 0;
+            const isJump = !isFirstPosition && this.currentLat !== null && this.currentLng !== null &&
+                this._calculateDistance(this.currentLat, this.currentLng, lat, lng) > 100;
+
+            if (isFirstPosition || isJump) {
+                // Load historical trail backwards from this position
+                this._loadPathBackwards(lat, lng);
+            }
+
             this.currentLat = lat;
             this.currentLng = lng;
             this.currentHeading = heading;
@@ -352,6 +362,85 @@ class CollisionReconstruction {
                 this.pathPoints.shift();
             }
         }
+    }
+
+    /**
+     * Calculate distance between two GPS coordinates in meters (Haversine formula)
+     */
+    _calculateDistance(lat1, lng1, lat2, lng2) {
+        const R = 6371000; // Earth's radius in meters
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    /**
+     * Load path backwards from a position (when jumping to new location)
+     * Fills the path with historical GPS points going backwards
+     * @param {number} lat - Target latitude
+     * @param {number} lng - Target longitude
+     */
+    _loadPathBackwards(lat, lng) {
+        // Clear existing path first
+        this.pathPoints = [];
+
+        // Get time-ordered GPS points from current event's telemetry
+        const telemetryPoints = window.app?.telemetryOverlay?.getAllGpsPoints();
+        if (!telemetryPoints || telemetryPoints.length === 0) {
+            console.log('[BirdsEye] No telemetry GPS data available for backward trail loading');
+            return;
+        }
+
+        // Find the closest point to the target position
+        let closestIndex = -1;
+        let closestDistance = Infinity;
+
+        for (let i = 0; i < telemetryPoints.length; i++) {
+            const point = telemetryPoints[i];
+            const dist = this._calculateDistance(lat, lng, point.lat, point.lng);
+
+            if (dist < closestDistance) {
+                closestDistance = dist;
+                closestIndex = i;
+            }
+        }
+
+        // If closest point is too far (>50m), don't load trail
+        if (closestIndex === -1 || closestDistance > 50) {
+            console.log('[BirdsEye] No close telemetry point found for backward trail loading');
+            return;
+        }
+
+        // Load points backwards from closest index (within view radius)
+        const loadedPoints = [];
+        for (let i = closestIndex; i >= 0 && loadedPoints.length < this.maxPathPoints; i--) {
+            const point = telemetryPoints[i];
+
+            // Check if point is within view radius (meters)
+            const distFromTarget = this._calculateDistance(lat, lng, point.lat, point.lng);
+            if (distFromTarget > this.viewRadiusMeters * 2) {
+                // Point is outside view, stop loading
+                break;
+            }
+
+            // Add point to beginning of array (we're going backwards)
+            loadedPoints.unshift({
+                lat: point.lat,
+                lng: point.lng,
+                heading: 0, // Will be calculated from path direction
+                gForce: 0,
+                timestamp: Date.now()
+            });
+        }
+
+        // Set the path points
+        this.pathPoints = loadedPoints;
+
+        console.log(`[BirdsEye] Loaded ${loadedPoints.length} path points backwards from position jump`);
     }
 
     _render() {

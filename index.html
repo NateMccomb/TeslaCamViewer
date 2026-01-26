@@ -10,8 +10,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="styles/main.css?v=20">
-    <link rel="stylesheet" href="styles/plate-enhancer.css">
+    <link rel="stylesheet" href="styles/main.css?v=25">
+    <link rel="stylesheet" href="styles/plate-enhancer.css?v=8">
 </head>
 <body>
     <div class="app-container" role="application" aria-label="TeslaCam Viewer Application">
@@ -55,17 +55,12 @@
                     </svg>
                     <span data-i18n="header.github">GitHub</span>
                 </a>
-                <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=8UKFUQCU9476N&source=url"
-                   target="_blank"
-                   rel="noopener noreferrer"
-                   class="header-btn donate-btn"
-                   data-i18n-title="header.supportProject"
-                   title="Support this project">
+                <button id="sessionBtn" class="header-btn session-btn" title="Session Status">
                     <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
                     </svg>
-                    <span data-i18n="header.donate">Donate</span>
-                </a>
+                    <span id="sessionBtnText">Free</span>
+                </button>
                 <button id="statsBtn" class="header-btn" data-i18n-title="header.statistics" title="Statistics">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/>
@@ -386,13 +381,11 @@
                 <div class="controls">
                     <!-- Primary Playback Group -->
                     <div class="control-group control-group-playback">
-                        <button id="playBtn" class="control-btn" disabled data-i18n-aria="controls.play" aria-label="Play">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <button id="playPauseBtn" class="control-btn" disabled data-i18n-aria="controls.play" aria-label="Play">
+                            <svg class="play-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                                 <path d="M8 5v14l11-7z"/>
                             </svg>
-                        </button>
-                        <button id="pauseBtn" class="control-btn" disabled data-i18n-aria="controls.pause" aria-label="Pause">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <svg class="pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="display: none;">
                                 <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
                             </svg>
                         </button>
@@ -430,6 +423,16 @@
                                 <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
                             </svg>
                         </button>
+                        <button id="enhanceRegionBtn" class="control-btn" disabled title="Enhance Region (Right-click video)">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <!-- Crop/region box -->
+                                <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8z"/>
+                                <path d="M7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
+                                <!-- Magnifying glass overlay -->
+                                <circle cx="14" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M16.5 12.5L19 15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                        </button>
                         <input type="checkbox" id="loopCheckbox" disabled style="display: none;">
                     </div>
 
@@ -463,31 +466,54 @@
                             </button>
                             <div id="exportDropdown" class="export-dropdown hidden">
                                 <div class="export-dropdown-header" data-i18n="export.header">Export Options</div>
-                                <label class="export-option privacy-mode-option">
-                                    <input type="checkbox" id="privacyModeCheckbox">
-                                    <span data-i18n="export.privacyMode">Privacy mode (strip metadata)</span>
-                                    <span class="privacy-mode-hint" data-i18n="export.privacyModeHint">Removes timestamp, GPS, location</span>
-                                </label>
-                                <div class="export-dropdown-divider"></div>
-                                <button class="export-option" data-action="screenshot">
+
+                                <!-- Capture Screenshot -->
+                                <button class="export-option export-action-btn" data-action="screenshot">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
                                     </svg>
-                                    <span data-i18n="controls.screenshot">Screenshot</span>
+                                    <span data-i18n="controls.screenshot">Capture Screenshot</span>
                                 </button>
-                                <div class="export-dropdown-divider"></div>
-                                <button class="export-option" data-camera="all" data-i18n="export.allCameras">All Cameras (Grid)</button>
-                                <button class="export-option" data-camera="front" data-i18n="export.frontOnly">Front Only</button>
-                                <button class="export-option" data-camera="back" data-i18n="export.rearOnly">Rear Only</button>
-                                <button class="export-option" data-camera="left_repeater" data-i18n="export.leftOnly">Left Only</button>
-                                <button class="export-option" data-camera="right_repeater" data-i18n="export.rightOnly">Right Only</button>
-                                <div class="export-dropdown-divider"></div>
-                                <button class="export-option" data-action="insurance-report" id="insuranceReportBtn">
+
+                                <!-- Export Video with Format -->
+                                <div class="export-video-group">
+                                    <button class="export-option export-action-btn" data-camera="all" id="exportVideoBtn">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                                        </svg>
+                                        <span data-i18n="export.exportVideo">Export Video</span>
+                                    </button>
+                                    <select id="exportFormatSelect" class="export-format-select" title="Export format">
+                                        <option value="webm">WebM</option>
+                                        <option value="mp4">MP4</option>
+                                        <option value="gif">GIF</option>
+                                    </select>
+                                </div>
+
+                                <!-- Insurance Report -->
+                                <button class="export-option export-action-btn" data-action="insurance-report" id="insuranceReportBtn">
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
                                     </svg>
                                     <span data-i18n="export.insuranceReport">Insurance Report (PDF)</span>
                                 </button>
+
+                                <div class="export-dropdown-divider"></div>
+
+                                <!-- Export Settings -->
+                                <div class="export-settings-header">Settings</div>
+
+                                <label class="export-option export-checkbox-option">
+                                    <input type="checkbox" id="blurPlatesExportCheckbox">
+                                    <span class="export-checkbox-label">Blur License Plates</span>
+                                    <span class="export-option-hint">Adds significant render time</span>
+                                </label>
+
+                                <label class="export-option export-checkbox-option">
+                                    <input type="checkbox" id="privacyModeCheckbox">
+                                    <span class="export-checkbox-label" data-i18n="export.privacyMode">Privacy mode (strip metadata)</span>
+                                    <span class="export-option-hint" data-i18n="export.privacyModeHint">Removes timestamp, GPS, location</span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -512,10 +538,6 @@
                                 <option value="layout-focus" data-i18n="layouts.focus">Focus Mode</option>
                             </select>
                         </div>
-                        <button id="pillarCycleBtn" class="pillar-cycle-btn" style="display: none;" title="Cycle between Repeaters and Pillars (Shift+P)" data-i18n-title="controls.cyclePillarTitle">
-                            <span class="pillar-cycle-icon">⟳</span>
-                            <span class="pillar-cycle-label" data-i18n="controls.repeaters">Repeaters</span>
-                        </button>
                         <div class="layout-control" id="focusCameraControl" style="display: none;">
                             <select id="focusCameraSelect" class="layout-select" title="Focus Camera">
                                 <option value="front" data-i18n="cameras.front">Front</option>
@@ -749,12 +771,22 @@
     <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.6/dist/protobuf.min.js"></script>
     <!-- jsPDF for insurance report generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- TensorFlow.js for license plate detection -->
+    <!-- ONNX Runtime Web for license plate detection (uses CDN for proper module resolution) -->
+    <script>
+        // Pre-configure ONNX Runtime before loading
+        window.ortConfig = { numThreads: 1 };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js" defer></script>
+    <!-- UpscalerJS for AI-powered image super-resolution -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/default-model@latest/dist/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@latest/dist/umd/4x.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/upscaler@latest/dist/browser/umd/upscaler.min.js"></script>
+    <!-- gif.js for animated GIF export -->
+    <script src="vendor/gif.js"></script>
 
     <!-- i18n (load first) -->
-    <script src="js/i18n.js"></script>
+    <script src="js/i18n.js?v=2"></script>
 
     <!-- App Modules -->
     <script src="js/sidebarResize.js"></script>
@@ -764,43 +796,45 @@
     <script src="js/folderManager.js"></script>
     <script src="js/folderParser.js?v=3"></script>
     <script src="js/eventBrowser.js?v=2"></script>
-    <script src="js/videoPlayer.js"></script>
+    <script src="js/videoPlayer.js?v=4"></script>
     <script src="js/timeline.js?v=2"></script>
     <script src="js/syncController.js"></script>
     <script src="js/layoutConfig.js"></script>
-    <script src="js/layoutRenderer.js"></script>
-    <script src="js/layoutManager.js"></script>
-    <script src="js/layoutEditor.js"></script>
-    <script src="js/screenshotCapture.js?v=2"></script>
+    <script src="js/layoutRenderer.js?v=6"></script>
+    <script src="js/layoutManager.js?v=5"></script>
+    <script src="js/layoutEditor.js?v=1"></script>
+    <script src="js/screenshotCapture.js?v=6"></script>
     <script src="js/videoEnhancer.js"></script>
     <script src="js/seiExtractor.js"></script>
-    <script src="js/telemetryOverlay.js?v=7"></script>
-    <script src="js/miniMapOverlay.js?v=5"></script>
+    <script src="js/telemetryOverlay.js?v=8"></script>
+    <script src="js/miniMapOverlay.js?v=8"></script>
     <script src="js/weatherService.js"></script>
     <script src="js/elevationService.js?v=2"></script>
-    <script src="js/speedLimitService.js?v=3"></script>
+    <script src="js/speedLimitService.js?v=7"></script>
     <script src="js/elevationOverlay.js?v=4"></script>
-    <script src="js/telemetryGraphs.js?v=9"></script>
+    <script src="js/telemetryGraphs.js?v=12"></script>
     <script src="js/incidentSlowMo.js?v=1"></script>
-    <script src="js/collisionReconstruction.js?v=1"></script>
+    <script src="js/collisionReconstruction.js?v=3"></script>
     <script src="js/streetViewOverlay.js?v=2"></script>
     <script src="js/eventDataBackup.js"></script>
-    <script src="js/notesManager.js"></script>
-    <script src="js/videoExport.js?v=2"></script>
+    <script src="js/notesManager.js?v=1"></script>
+    <script src="js/videoExport.js?v=14"></script>
     <script src="js/clipMarking.js"></script>
-    <script src="js/insuranceReport.js?v=3"></script>
-    <script src="js/settingsManager.js?v=3"></script>
-    <script src="js/versionManager.js?v=4"></script>
-    <script src="js/statisticsManager.js"></script>
-    <script src="js/helpModal.js?v=3"></script>
-    <script src="js/quickStartGuide.js"></script>
-    <script src="js/offlinePackager.js"></script>
+    <script src="js/insuranceReport.js?v=10"></script>
+    <script src="js/settingsManager.js?v=11"></script>
+    <script src="js/versionManager.js?v=6"></script>
+    <script src="js/statisticsManager.js?v=1"></script>
+    <script src="js/helpModal.js?v=6"></script>
+    <script src="js/quickStartGuide.js?v=3"></script>
+    <script src="js/offlinePackager.js?v=1"></script>
     <script src="js/driveSync.js"></script>
     <script src="js/driveSyncUI.js"></script>
-    <script src="js/regionTracker.js?v=2"></script>
-    <script src="js/frameStacker.js?v=2"></script>
-    <script src="js/plateEnhancer.js?v=2"></script>
-    <script src="js/plateBlur.js?v=1"></script>
-    <script src="js/app.js?v=18"></script>
+    <script src="js/regionTracker.js?v=5"></script>
+    <script src="js/frameStacker.js?v=69"></script>
+    <script src="js/plateRecognizer.js?v=4"></script>
+    <script src="js/plateEnhancer.js?v=90"></script>
+    <script src="js/plateDetector.js?v=13"></script>
+    <script src="js/plateBlur.js?v=17"></script>
+    <script src="js/app.js?v=29"></script>
 </body>
 </html>

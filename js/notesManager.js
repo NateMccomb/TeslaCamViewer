@@ -362,7 +362,16 @@ class NotesManager {
         // Close handlers
         closeBtn.addEventListener('click', closeModal);
         cancelBtn.addEventListener('click', closeModal);
-        overlay.addEventListener('click', closeModal);
+        // Only close if click started AND ended on overlay (prevents close during text selection)
+        let mouseDownOnOverlay = false;
+        overlay.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === overlay;
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mouseDownOnOverlay && e.target === overlay) {
+                closeModal();
+            }
+        });
 
         // Save notes
         saveBtn.addEventListener('click', () => {

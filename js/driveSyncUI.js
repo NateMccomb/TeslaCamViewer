@@ -41,6 +41,18 @@ class DriveSyncUI {
         return window.i18n ? window.i18n.t(key) : key.split('.').pop();
     }
 
+    /**
+     * Escape HTML to prevent XSS attacks
+     * @param {string} str - String to escape
+     * @returns {string} Escaped string safe for innerHTML
+     */
+    escapeHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
     show() {
         this.render();
         this.modal.classList.remove('hidden');
@@ -847,7 +859,10 @@ class DriveSyncUI {
             const errorsEl = document.getElementById('syncErrors');
             if (errorsEl) {
                 errorsEl.classList.remove('hidden');
-                errorsEl.innerHTML = state.errors.map(e => `${e.event}: ${e.error}`).join('<br>');
+                // Sanitize error messages to prevent XSS
+                errorsEl.innerHTML = state.errors.map(e =>
+                    `${this.escapeHtml(e.event)}: ${this.escapeHtml(e.error)}`
+                ).join('<br>');
             }
         }
 

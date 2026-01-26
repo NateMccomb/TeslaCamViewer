@@ -19,12 +19,71 @@ class VersionManager {
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.4.1.2';
+        this.currentVersion = '2026.5.1.1';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
+            {
+                version: '2026.5.1.1',
+                date: '2026-01-27',
+                title: 'AI License Plate Detection & Incident Markers',
+                features: [
+                    {
+                        id: 'ai-plate-detection',
+                        text: 'AI-powered license plate detection - automatically finds plates across all cameras (press D)',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'plate-size-warnings',
+                        text: 'Real-time selection size indicator warns when plate region is too large for fast processing',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'incident-markers',
+                        text: 'Incident Markers detect hard braking (>0.35g) and lateral g-force events in your telemetry',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'map-theme-sync',
+                        text: 'Map now syncs with app theme and has improved styled controls',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'region-tracking-improvements',
+                        text: 'Improved plate tracking with Siamese network for better accuracy across frames',
+                        elementSelector: null
+                    }
+                ]
+            },
+            {
+                version: '2026.4.6.1',
+                date: '2026-01-25',
+                title: 'Modern UI for Settings & Statistics',
+                features: [
+                    {
+                        id: 'settings-sidebar-layout',
+                        text: 'Settings modal redesigned with modern vertical sidebar navigation (like VS Code/Discord)',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'statistics-sidebar-layout',
+                        text: 'Statistics modal redesigned with sidebar navigation: Overview, Timeline, Locations, Sentry Analysis, Data Quality, Export tabs',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'themed-scrollbars',
+                        text: 'Themed scrollbars throughout the app for a consistent modern look',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'privacy-mode-export-ui',
+                        text: 'Added Privacy Mode Export toggle in Settings (strips metadata from exports)',
+                        elementSelector: null
+                    }
+                ]
+            },
             {
                 version: '2026.4.1.2',
                 date: '2026-01-19',

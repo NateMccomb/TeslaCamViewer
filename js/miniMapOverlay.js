@@ -696,11 +696,12 @@ class MiniMapOverlay {
         if (!posChanged && !headingChanged) return;
 
         // Detect position jump (e.g., user seeked to different time)
-        // If distance is > ~500 meters, reset the trail to avoid stray lines
+        // If distance is > ~500 meters, load trail backwards from new position
         if (this.currentLat !== null && this.currentLng !== null && posChanged) {
             const distance = this._calculateDistance(this.currentLat, this.currentLng, lat, lng);
             if (distance > 500) { // 500 meters threshold
-                this.clearTrail();
+                // Load historical trail backwards from new position
+                this._loadTrailBackwards(lat, lng);
             }
         }
 
@@ -728,7 +729,8 @@ class MiniMapOverlay {
     }
 
     /**
-     * Update position for export (no throttling, no jump detection, no map requirement)
+     * Update position for export (no throttling, no map requirement)
+     * Includes backward trail loading for first position or position jumps
      * @param {number} lat - Latitude in degrees
      * @param {number} lng - Longitude in degrees
      * @param {number} heading - Heading in degrees (0-360)
@@ -737,11 +739,24 @@ class MiniMapOverlay {
         // Skip invalid coords
         if (!lat || !lng || (lat === 0 && lng === 0)) return;
 
+        // Check if this is first position or a jump - load trail backwards
+        const isFirstPosition = this.trailPoints.length === 0;
+        const isJump = !isFirstPosition && this._calculateDistance(
+            this.trailPoints[this.trailPoints.length - 1][0],
+            this.trailPoints[this.trailPoints.length - 1][1],
+            lat, lng
+        ) > 500;
+
+        if (isFirstPosition || isJump) {
+            // Load trail backwards from this position
+            this._loadTrailBackwards(lat, lng);
+        }
+
         this.currentLat = lat;
         this.currentLng = lng;
         this.currentHeading = heading || 0;
 
-        // Add to trail (no jump detection - trail should be cleared before export)
+        // Add to trail
         this.trailPoints.push([lat, lng]);
 
         // Keep trail to max length
@@ -792,6 +807,85 @@ class MiniMapOverlay {
         this.currentLat = null;
         this.currentLng = null;
         // Note: Don't clear weather here - it's set at event load and should persist
+    }
+
+    /**
+     * Load trail backwards from a position (when jumping to new location)
+     * Fills the trail with historical GPS points going backwards until:
+     * 1. Trail goes off the visible map screen, or
+     * 2. Buffer is full (maxTrailPoints)
+     * @param {number} lat - Target latitude
+     * @param {number} lng - Target longitude
+     */
+    _loadTrailBackwards(lat, lng) {
+        // Clear existing trail first
+        this.trailPoints = [];
+
+        // Get time-ordered GPS points from current event's telemetry
+        const telemetryPoints = window.app?.telemetryOverlay?.getAllGpsPoints();
+        if (!telemetryPoints || telemetryPoints.length === 0) {
+            console.log('[MiniMap] No telemetry GPS data available for backward trail loading');
+            return;
+        }
+
+        // Find the closest point to the target position
+        let closestIndex = -1;
+        let closestDistance = Infinity;
+
+        for (let i = 0; i < telemetryPoints.length; i++) {
+            const point = telemetryPoints[i];
+            const dist = this._calculateDistance(lat, lng, point.lat, point.lng);
+
+            if (dist < closestDistance) {
+                closestDistance = dist;
+                closestIndex = i;
+            }
+        }
+
+        // If closest point is too far (>100m), don't load trail
+        if (closestIndex === -1 || closestDistance > 100) {
+            console.log('[MiniMap] No close telemetry point found for backward trail loading');
+            return;
+        }
+
+        // Calculate visible map bounds (approximately)
+        // At zoom 16, one tile is ~600m. Map shows ~3 tiles, so ~1800m visible
+        const mapVisibleRadius = 900; // meters from center
+
+        // Load points backwards from closest index (time-ordered data)
+        const loadedPoints = [];
+        for (let i = closestIndex; i >= 0 && loadedPoints.length < this.maxTrailPoints; i--) {
+            const point = telemetryPoints[i];
+
+            // Check if point is within visible map area
+            const distFromTarget = this._calculateDistance(lat, lng, point.lat, point.lng);
+            if (distFromTarget > mapVisibleRadius) {
+                // Point is off-screen, stop loading
+                break;
+            }
+
+            // Add point to beginning of array (we're going backwards)
+            loadedPoints.unshift([point.lat, point.lng]);
+        }
+
+        // Set the trail points (already in correct order - oldest first)
+        this.trailPoints = loadedPoints;
+
+        // Update the polyline
+        if (this.trail && loadedPoints.length > 0) {
+            this.trail.setLatLngs(loadedPoints);
+        }
+
+        console.log(`[MiniMap] Loaded ${loadedPoints.length} trail points backwards from position jump`);
+    }
+
+    /**
+     * Public method to load trail backwards (call when starting export or loading new position)
+     * @param {number} lat - Target latitude
+     * @param {number} lng - Target longitude
+     */
+    loadTrailBackwards(lat, lng) {
+        this._loadTrailBackwards(lat, lng);
     }
 
     /**

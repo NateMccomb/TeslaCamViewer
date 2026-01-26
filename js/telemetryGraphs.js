@@ -41,26 +41,47 @@ class TelemetryGraphs {
             steering: {
                 rapidMovement: 30 // degrees per second
             },
-            phantomBraking: {
-                minDecelG: 0.25,       // Minimum deceleration in g (negative g_force_y)
-                minSpeedDropMph: 5,    // Minimum speed drop in 1 second
-                minSpeedMph: 15,       // Minimum speed to consider (avoid false positives at low speed)
-                cooldownSeconds: 3     // Minimum time between phantom brake events
+            // Incident detection thresholds (replaces phantom braking)
+            incidents: {
+                // Hard braking thresholds
+                braking: {
+                    minDecelG: 0.35,       // Minimum deceleration in g (positive g_force_y = braking)
+                    minSpeedDropMph: 8,    // Minimum total speed drop over the window
+                    minSpeedMph: 20,       // Minimum speed to consider (avoid false positives at low speed)
+                    windowSeconds: 1.5     // Time window to measure speed drop
+                },
+                // Sudden swerve thresholds (lateral g-force)
+                swerve: {
+                    minLateralG: 0.35,     // Minimum lateral g-force (g_force_x)
+                    minSpeedMph: 30,       // Minimum speed (avoid flagging parking lot turns)
+                    sustainedMs: 300       // Must be sustained for at least 300ms
+                },
+                // General settings
+                cooldownSeconds: 3,        // Minimum time between incidents
+                // Severity thresholds
+                criticalBrakingG: 0.5,     // >0.5g braking = critical
+                criticalSwerveG: 0.45,     // >0.45g lateral = critical
+                criticalSpeedDrop: 15      // >15mph drop = critical
             }
         };
 
-        // Phantom braking detection
-        this.phantomBrakes = []; // Array of { time, latitude, longitude, severity, speedDrop, gForce, duration }
-        this.onPhantomBrakesDetected = null; // Callback to notify timeline of phantom brakes
+        // Incident detection (replaces phantom braking)
+        this.incidents = []; // Array of { time, latitude, longitude, severity, type, speedDrop, gForce, lateralG, duration }
+        this.onIncidentsDetected = null; // Callback to notify map/timeline of incidents
 
         // Near-miss detection
         this.nearMisses = []; // Array of { time, score, brakeG, steeringRate, speed, severity }
         this.onNearMissesDetected = null; // Callback to notify timeline of near-misses
 
+        // Autopilot event detection (engagements/disconnections)
+        this.apEvents = []; // Array of { time, type, fromMode, toMode, speed }
+        this.currentApEventIndex = -1; // For cycling through AP events (-1 = no selection)
+        this.onApEventsDetected = null; // Callback to notify MapView of AP disengagements
+
         // Hard braking/acceleration detection thresholds (configurable)
-        // Using longitudinal G-force (g_force_y): negative = braking, positive = acceleration
-        this.hardBrakeThreshold = -0.4;  // G-force threshold for hard braking (default: -0.4g)
-        this.hardAccelThreshold = 0.3;   // G-force threshold for hard acceleration (default: +0.3g)
+        // Tesla coordinate system: g_force_y positive = braking/decel, negative = acceleration
+        this.hardBrakeThreshold = 0.4;   // G-force threshold for hard braking (default: +0.4g)
+        this.hardAccelThreshold = -0.3;  // G-force threshold for hard acceleration (default: -0.3g)
 
         // Detected hard braking/acceleration events
         this.hardBrakeEvents = [];  // Array of { time, gForce, severity }
@@ -75,6 +96,16 @@ class TelemetryGraphs {
         this.gforceCanvas = null;
         this.steeringCanvas = null;
         this.elevationCanvas = null;
+
+        // Marker positions for hover tooltips (populated during draw)
+        this.markerPositions = {
+            speed: [],      // { x, y, type, data }
+            gforce: [],
+            steering: [],
+            elevation: []
+        };
+        this.tooltip = null; // Tooltip element
+        this.activeTooltipMarker = null; // Currently hovered marker
 
         // Callbacks
         this.onSeek = null; // (eventTime) => void
@@ -118,6 +149,8 @@ class TelemetryGraphs {
         // Bind methods
         this._update = this._update.bind(this);
         this._onCanvasClick = this._onCanvasClick.bind(this);
+        this._onCanvasMouseMove = this._onCanvasMouseMove.bind(this);
+        this._onCanvasMouseLeave = this._onCanvasMouseLeave.bind(this);
         this._onHeaderMouseDown = this._onHeaderMouseDown.bind(this);
         this._onMouseMove = this._onMouseMove.bind(this);
         this._onMouseUp = this._onMouseUp.bind(this);
@@ -129,11 +162,50 @@ class TelemetryGraphs {
         this._init();
     }
 
+    /**
+     * Translation helper - returns key's last part as fallback
+     */
+    _t(key, params = {}) {
+        let text = window.i18n?.t(key) || key.split('.').pop();
+        // Replace {{param}} placeholders
+        for (const [k, v] of Object.entries(params)) {
+            text = text.replace(new RegExp(`{{${k}}}`, 'g'), v);
+        }
+        return text;
+    }
+
     _init() {
         this._loadThresholds();
         this._createContainer();
+        this._createTooltip();
         this._setupPanelCollapse();
         window.addEventListener('resize', this._onWindowResize);
+    }
+
+    /**
+     * Create tooltip element for marker hover info
+     */
+    _createTooltip() {
+        this.tooltip = document.createElement('div');
+        this.tooltip.className = 'telemetry-marker-tooltip';
+        this.tooltip.style.cssText = `
+            position: fixed;
+            z-index: 10001;
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: var(--font-mono, monospace);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            max-width: 250px;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+        `;
+        document.body.appendChild(this.tooltip);
     }
 
     /**
@@ -412,7 +484,7 @@ class TelemetryGraphs {
 
         const title = document.createElement('span');
         title.style.cssText = 'font-size: 10px; font-weight: 500; color: rgba(255,255,255,0.7);';
-        title.textContent = 'Telemetry';
+        title.textContent = this._t('telemetry.title');
         titleSection.appendChild(title);
 
         // Data coverage indicator
@@ -444,7 +516,7 @@ class TelemetryGraphs {
         // Anomaly toggle button
         this.anomalyToggleBtn = document.createElement('button');
         this.anomalyToggleBtn.className = 'telemetry-anomaly-toggle-btn';
-        this.anomalyToggleBtn.title = 'Toggle anomaly markers';
+        this.anomalyToggleBtn.title = this._t('telemetry.toggleAnomalyMarkers');
         this.anomalyToggleBtn.style.cssText = `
             background: none;
             border: none;
@@ -477,7 +549,7 @@ class TelemetryGraphs {
         // Export CSV button
         const exportBtn = document.createElement('button');
         exportBtn.className = 'telemetry-export-btn';
-        exportBtn.title = 'Export telemetry data as CSV';
+        exportBtn.title = this._t('telemetry.exportCsv');
         exportBtn.style.cssText = `
             background: none;
             border: none;
@@ -589,6 +661,8 @@ class TelemetryGraphs {
             cursor: crosshair;
         `;
         canvas.addEventListener('click', (e) => this._onCanvasClick(e, canvas, type));
+        canvas.addEventListener('mousemove', (e) => this._onCanvasMouseMove(e, canvas, type));
+        canvas.addEventListener('mouseleave', () => this._onCanvasMouseLeave());
         row.appendChild(canvas);
 
         // Value display
@@ -966,8 +1040,11 @@ class TelemetryGraphs {
         // Detect near-miss incidents
         this._detectNearMisses(allPoints);
 
-        // Detect phantom braking events (AP braking without driver input)
-        this._detectPhantomBraking(allPoints);
+        // Detect incident markers (hard braking, sudden swerves)
+        this._detectIncidents(allPoints);
+
+        // Detect autopilot engagement/disconnection events
+        this._detectApEvents(allPoints);
 
         // Detect hard braking/acceleration events
         this._detectHardEvents(allPoints);
@@ -1282,9 +1359,34 @@ class TelemetryGraphs {
                 parts.push(`<span>Max <b style="color: ${this._getAccentColor()}">${Math.round(maxSpeed)}</b></span>`);
             }
 
-            // Autopilot percentage
-            if (this.tripStats.apPercent > 0) {
-                parts.push(`<span>AP <b style="color: #0078ff">${this.tripStats.apPercent}%</b></span>`);
+            // Autopilot percentage with event cycling
+            if (this.tripStats.apPercent > 0 || this.apEvents.length > 0) {
+                const hasEvents = this.apEvents.length > 0;
+                const currentEvent = this.getCurrentApEvent();
+                const eventNum = this.currentApEventIndex + 1;
+                const totalEvents = this.apEvents.length;
+
+                // Build the AP display with optional navigation
+                let apDisplay = '';
+                if (hasEvents) {
+                    // Show arrows for cycling through AP events
+                    const prevArrow = `<span class="ap-nav ap-prev" style="cursor: pointer; padding: 0 2px; opacity: 0.6;" title="Previous AP event">◀</span>`;
+                    const nextArrow = `<span class="ap-nav ap-next" style="cursor: pointer; padding: 0 2px; opacity: 0.6;" title="Next AP event">▶</span>`;
+
+                    if (currentEvent) {
+                        // Show current event info
+                        const eventLabel = currentEvent.type === 'engaged' ? '▲' :
+                                          currentEvent.type === 'disconnected' ? '▼' : '↔';
+                        const modeLabel = currentEvent.toMode !== 'NONE' ? currentEvent.toMode : currentEvent.fromMode;
+                        apDisplay = `<span class="ap-events-cycler" style="display: inline-flex; align-items: center; gap: 2px;" title="Click arrows to cycle through ${totalEvents} AP events">${prevArrow}<b style="color: #0078ff">${eventLabel} ${modeLabel}</b> <span style="opacity: 0.6">${eventNum}/${totalEvents}</span>${nextArrow}</span>`;
+                    } else {
+                        // Show AP% with event count
+                        apDisplay = `<span class="ap-events-cycler" style="display: inline-flex; align-items: center; gap: 2px;" title="Click arrows to cycle through ${totalEvents} AP events">${prevArrow}AP <b style="color: #0078ff">${this.tripStats.apPercent}%</b> <span style="opacity: 0.6">(${totalEvents})</span>${nextArrow}</span>`;
+                    }
+                } else {
+                    apDisplay = `<span>AP <b style="color: #0078ff">${this.tripStats.apPercent}%</b></span>`;
+                }
+                parts.push(apDisplay);
             }
 
             // Smoothness score
@@ -1319,11 +1421,13 @@ class TelemetryGraphs {
             parts.push(`<span title="Near-miss incidents detected">Near-miss: <b style="color: ${color}">${flaggedNearMisses.length}</b> (max: <b style="color: ${color}">${maxScore.toFixed(1)}</b>)</span>`);
         }
 
-        // Phantom braking summary (AP braking without driver input)
-        if (this.showAnomalies && this.phantomBrakes && this.phantomBrakes.length > 0) {
-            const criticalCount = this.phantomBrakes.filter(pb => pb.severity === 'critical').length;
-            const warningCount = this.phantomBrakes.filter(pb => pb.severity === 'warning').length;
-            const totalCount = this.phantomBrakes.length;
+        // Incident markers summary (hard braking, sudden swerves)
+        if (this.showAnomalies && this.incidents && this.incidents.length > 0) {
+            const criticalCount = this.incidents.filter(i => i.severity === 'critical').length;
+            const warningCount = this.incidents.filter(i => i.severity === 'warning').length;
+            const brakingCount = this.incidents.filter(i => i.type === 'braking' || i.type === 'combined').length;
+            const swerveCount = this.incidents.filter(i => i.type === 'swerve' || i.type === 'combined').length;
+            const totalCount = this.incidents.length;
 
             // Determine color based on worst severity
             let color;
@@ -1335,11 +1439,13 @@ class TelemetryGraphs {
                 color = '#ffc107'; // Yellow for info
             }
 
-            const severityBreakdown = criticalCount > 0 || warningCount > 0
-                ? ` (${criticalCount > 0 ? criticalCount + ' crit' : ''}${criticalCount > 0 && warningCount > 0 ? ', ' : ''}${warningCount > 0 ? warningCount + ' warn' : ''})`
-                : '';
+            // Build type breakdown
+            const typeInfo = [];
+            if (brakingCount > 0) typeInfo.push(`${brakingCount} brake`);
+            if (swerveCount > 0) typeInfo.push(`${swerveCount} swerve`);
+            const typeBreakdown = typeInfo.length > 0 ? ` (${typeInfo.join(', ')})` : '';
 
-            parts.push(`<span title="Phantom braking: unexpected deceleration while on Autopilot without driver brake input">Phantom: <b style="color: ${color}">${totalCount}</b>${severityBreakdown}</span>`);
+            parts.push(`<span title="Incident markers: hard braking and sudden swerves worth reviewing">Incidents: <b style="color: ${color}">${totalCount}</b>${typeBreakdown}</span>`);
         }
 
         // Hard braking/acceleration summary (if anomalies are enabled)
@@ -1365,6 +1471,28 @@ class TelemetryGraphs {
             this.statsContainer.innerHTML = '<span style="color: rgba(255,255,255,0.3);">No data</span>';
         } else {
             this.statsContainer.innerHTML = parts.join('');
+
+            // Add click handlers for AP event navigation arrows
+            const prevBtn = this.statsContainer.querySelector('.ap-prev');
+            const nextBtn = this.statsContainer.querySelector('.ap-next');
+
+            if (prevBtn) {
+                prevBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.cycleApEvent(-1);
+                });
+                prevBtn.addEventListener('mouseenter', () => prevBtn.style.opacity = '1');
+                prevBtn.addEventListener('mouseleave', () => prevBtn.style.opacity = '0.6');
+            }
+
+            if (nextBtn) {
+                nextBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.cycleApEvent(1);
+                });
+                nextBtn.addEventListener('mouseenter', () => nextBtn.style.opacity = '1');
+                nextBtn.addEventListener('mouseleave', () => nextBtn.style.opacity = '0.6');
+            }
         }
     }
 
@@ -1376,9 +1504,11 @@ class TelemetryGraphs {
         this.elevationProfile = null;
         this.speedLimitProfile = null;
         this.nearMisses = [];
-        this.phantomBrakes = [];
+        this.incidents = [];
         this.hardBrakeEvents = [];
         this.hardAccelEvents = [];
+        this.apEvents = [];
+        this.currentApEventIndex = -1;
         this.totalDuration = 0;
         this.coverageIndicator.textContent = '';
         this.statsContainer.innerHTML = '';
@@ -1508,6 +1638,14 @@ class TelemetryGraphs {
     }
 
     _drawAllGraphs() {
+        // Clear marker positions before redraw
+        this.markerPositions = {
+            speed: [],
+            gforce: [],
+            steering: [],
+            elevation: []
+        };
+
         this._drawGraph(this.speedCanvas, 'speed');
         this._drawGraph(this.gforceCanvas, 'gforce');
         this._drawGraph(this.steeringCanvas, 'steering');
@@ -1527,7 +1665,7 @@ class TelemetryGraphs {
             ctx.fillStyle = 'rgba(255,255,255,0.2)';
             ctx.font = '8px system-ui';
             ctx.textAlign = 'center';
-            ctx.fillText('No data', width / 2, height / 2 + 2);
+            ctx.fillText(this._t('telemetry.noData'), width / 2, height / 2 + 2);
             return;
         }
 
@@ -1794,9 +1932,9 @@ class TelemetryGraphs {
             }
         }
 
-        // Draw phantom braking markers on speed graph
+        // Draw incident markers on speed graph
         if (type === 'speed') {
-            this._drawPhantomBrakeMarkers(ctx, width, height, padding, graphWidth, graphHeight, dataStartTime, dataDuration, minVal, range);
+            this._drawIncidentMarkers(ctx, width, height, padding, graphWidth, graphHeight, dataStartTime, dataDuration, minVal, range);
         }
 
         // Draw anomaly markers for speed, gforce, and steering graphs
@@ -1857,7 +1995,7 @@ class TelemetryGraphs {
             ctx.fillStyle = 'rgba(255,255,255,0.2)';
             ctx.font = '8px system-ui';
             ctx.textAlign = 'center';
-            ctx.fillText('No data', width / 2, height / 2 + 2);
+            ctx.fillText(this._t('telemetry.noData'), width / 2, height / 2 + 2);
             return;
         }
 
@@ -1992,6 +2130,154 @@ class TelemetryGraphs {
         }
 
         this.onSeek(seekTime);
+    }
+
+    /**
+     * Handle mouse move over canvas to show marker tooltips
+     */
+    _onCanvasMouseMove(e, canvas, type) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const markers = this.markerPositions[type] || [];
+        const hitRadius = 8; // Pixels from marker center to trigger hover
+
+        // Find nearest marker within hit radius
+        let nearestMarker = null;
+        let nearestDist = Infinity;
+
+        for (const marker of markers) {
+            const dx = x - marker.x;
+            const dy = y - marker.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < hitRadius && dist < nearestDist) {
+                nearestDist = dist;
+                nearestMarker = marker;
+            }
+        }
+
+        if (nearestMarker) {
+            this._showMarkerTooltip(nearestMarker, e.clientX, e.clientY);
+        } else {
+            this._hideTooltip();
+        }
+    }
+
+    /**
+     * Handle mouse leave from canvas
+     */
+    _onCanvasMouseLeave() {
+        this._hideTooltip();
+    }
+
+    /**
+     * Show tooltip for a marker
+     */
+    _showMarkerTooltip(marker, clientX, clientY) {
+        if (!this.tooltip) return;
+
+        // Format tooltip content based on marker type
+        let content = '';
+        const time = this._formatTime(marker.data.time);
+
+        switch (marker.type) {
+            case 'incident':
+                const inc = marker.data;
+                const incLabel = inc.type === 'combined' ? 'Combined Incident' :
+                    inc.type === 'swerve' ? 'Sudden Swerve' : 'Hard Braking';
+                const incIcon = inc.type === 'combined' ? '⚠' :
+                    inc.type === 'swerve' ? '↔' : '⬇';
+                let incDetails = `Time: ${time}<br>Speed: ${Math.round(inc.speed)}&nbsp;mph`;
+                if (inc.type === 'braking' || inc.type === 'combined') {
+                    incDetails += `<br>Braking: ${inc.gForce.toFixed(2)}g, -${inc.speedDrop.toFixed(1)}&nbsp;mph`;
+                }
+                if (inc.type === 'swerve' || inc.type === 'combined') {
+                    incDetails += `<br>Lateral: ${inc.lateralG.toFixed(2)}g`;
+                }
+                if (inc.autopilotMode && inc.autopilotMode !== 'NONE') {
+                    incDetails += `<br>AP: ${inc.autopilotMode}`;
+                }
+                content = `<b style="color: ${this._getIncidentColor(inc.severity, inc.type)}">${incIcon} ${incLabel}</b><br>${incDetails}`;
+                break;
+
+            case 'hard_brake':
+                const hb = marker.data;
+                content = `<b style="color: #ef4444">Hard Brake</b><br>` +
+                    `Time: ${time}<br>` +
+                    `G-force: ${Math.abs(hb.gForce).toFixed(2)}g`;
+                break;
+
+            case 'hard_accel':
+                const ha = marker.data;
+                content = `<b style="color: #22c55e">Hard Accel</b><br>` +
+                    `Time: ${time}<br>` +
+                    `G-force: ${Math.abs(ha.gForce).toFixed(2)}g`;
+                break;
+
+            case 'ap_event':
+                const ap = marker.data;
+                const apIcon = ap.type === 'engaged' ? '▲' : ap.type === 'disconnected' ? '▼' : '↔';
+                const apColor = ap.type === 'engaged' ? '#22c55e' : ap.type === 'disconnected' ? '#ef4444' : '#3b82f6';
+                const apLabel = ap.type === 'engaged' ? 'AP Engaged' : ap.type === 'disconnected' ? 'AP Disconnected' : 'AP Mode Change';
+                content = `<b style="color: ${apColor}">${apIcon} ${apLabel}</b><br>` +
+                    `Time: ${time}<br>` +
+                    `Mode: ${ap.toMode !== 'NONE' ? ap.toMode : ap.fromMode}<br>` +
+                    `Speed: ${Math.round(ap.speed)}&nbsp;mph`;
+                break;
+
+            case 'anomaly':
+                const an = marker.data;
+                content = `<b style="color: ${this._getAnomalyColor(an.severity)}">Anomaly</b><br>` +
+                    `Time: ${time}<br>` +
+                    `${an.description || 'Unknown'}`;
+                break;
+
+            default:
+                content = `Marker at ${time}`;
+        }
+
+        this.tooltip.innerHTML = content;
+        this.tooltip.style.opacity = '1';
+
+        // Position tooltip near cursor but not overlapping
+        const tooltipRect = this.tooltip.getBoundingClientRect();
+        let left = clientX + 12;
+        let top = clientY - 10;
+
+        // Keep tooltip on screen
+        if (left + tooltipRect.width > window.innerWidth - 10) {
+            left = clientX - tooltipRect.width - 12;
+        }
+        if (top + tooltipRect.height > window.innerHeight - 10) {
+            top = clientY - tooltipRect.height - 10;
+        }
+        if (top < 10) top = 10;
+
+        this.tooltip.style.left = `${left}px`;
+        this.tooltip.style.top = `${top}px`;
+
+        this.activeTooltipMarker = marker;
+    }
+
+    /**
+     * Hide the tooltip
+     */
+    _hideTooltip() {
+        if (this.tooltip) {
+            this.tooltip.style.opacity = '0';
+        }
+        this.activeTooltipMarker = null;
+    }
+
+    /**
+     * Format time in MM:SS format
+     */
+    _formatTime(seconds) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 
     /**
@@ -2321,14 +2607,16 @@ class TelemetryGraphs {
 
             if (savedBrake !== null) {
                 const val = parseFloat(savedBrake);
-                if (!isNaN(val) && val < 0) {
+                // Brake threshold should be positive in Tesla coords
+                if (!isNaN(val) && val > 0) {
                     this.hardBrakeThreshold = val;
                 }
             }
 
             if (savedAccel !== null) {
                 const val = parseFloat(savedAccel);
-                if (!isNaN(val) && val > 0) {
+                // Accel threshold should be negative in Tesla coords
+                if (!isNaN(val) && val < 0) {
                     this.hardAccelThreshold = val;
                 }
             }
@@ -2357,10 +2645,10 @@ class TelemetryGraphs {
 
     /**
      * Set hard braking threshold
-     * @param {number} threshold - G-force threshold (should be negative, e.g., -0.4)
+     * @param {number} threshold - G-force threshold (should be positive in Tesla coords, e.g., 0.4)
      */
     setHardBrakeThreshold(threshold) {
-        if (threshold < 0) {
+        if (threshold > 0) {
             this.hardBrakeThreshold = threshold;
             this._saveThresholds();
             // Re-detect events if we have data
@@ -2373,10 +2661,10 @@ class TelemetryGraphs {
 
     /**
      * Set hard acceleration threshold
-     * @param {number} threshold - G-force threshold (should be positive, e.g., 0.3)
+     * @param {number} threshold - G-force threshold (should be negative in Tesla coords, e.g., -0.3)
      */
     setHardAccelThreshold(threshold) {
-        if (threshold > 0) {
+        if (threshold < 0) {
             this.hardAccelThreshold = threshold;
             this._saveThresholds();
             // Re-detect events if we have data
@@ -2410,11 +2698,11 @@ class TelemetryGraphs {
             const gForceY = point.g_force_y || 0;
             const time = point.time;
 
-            // Check for hard braking (negative g_force_y below threshold)
-            if (gForceY <= this.hardBrakeThreshold && (time - lastBrakeTime) >= cooldownTime) {
-                // Calculate severity: how far below threshold (0-1 scale)
-                // -0.4g is threshold, -0.8g would be severity 1.0
-                const severity = Math.min(1.0, (Math.abs(gForceY) - Math.abs(this.hardBrakeThreshold)) / 0.4);
+            // Check for hard braking (positive g_force_y above threshold in Tesla coords)
+            if (gForceY >= this.hardBrakeThreshold && (time - lastBrakeTime) >= cooldownTime) {
+                // Calculate severity: how far above threshold (0-1 scale)
+                // 0.4g is threshold, 0.8g would be severity 1.0
+                const severity = Math.min(1.0, (gForceY - this.hardBrakeThreshold) / 0.4);
 
                 this.hardBrakeEvents.push({
                     time: time,
@@ -2424,11 +2712,11 @@ class TelemetryGraphs {
                 lastBrakeTime = time;
             }
 
-            // Check for hard acceleration (positive g_force_y above threshold)
-            if (gForceY >= this.hardAccelThreshold && (time - lastAccelTime) >= cooldownTime) {
-                // Calculate severity: how far above threshold (0-1 scale)
-                // 0.3g is threshold, 0.6g would be severity 1.0
-                const severity = Math.min(1.0, (gForceY - this.hardAccelThreshold) / 0.3);
+            // Check for hard acceleration (negative g_force_y below threshold in Tesla coords)
+            if (gForceY <= this.hardAccelThreshold && (time - lastAccelTime) >= cooldownTime) {
+                // Calculate severity: how far below threshold (0-1 scale)
+                // -0.3g is threshold, -0.6g would be severity 1.0
+                const severity = Math.min(1.0, (Math.abs(gForceY) - Math.abs(this.hardAccelThreshold)) / 0.3);
 
                 this.hardAccelEvents.push({
                     time: time,
@@ -2485,10 +2773,10 @@ class TelemetryGraphs {
 
         if (this.showAnomalies) {
             this.anomalyToggleBtn.style.color = '#ffc107';
-            this.anomalyToggleBtn.title = 'Hide anomaly markers';
+            this.anomalyToggleBtn.title = this._t('telemetry.hideAnomalyMarkers');
         } else {
             this.anomalyToggleBtn.style.color = 'rgba(255, 255, 255, 0.4)';
-            this.anomalyToggleBtn.title = 'Show anomaly markers';
+            this.anomalyToggleBtn.title = this._t('telemetry.showAnomalyMarkers');
         }
     }
 
@@ -2504,10 +2792,12 @@ class TelemetryGraphs {
             const timeDelta = curr.time - prev.time;
             if (timeDelta <= 0 || timeDelta > 10) continue;
             // Speed anomalies (>10 mph/sec change)
-            const speedRate = Math.abs(curr.speed_mph - prev.speed_mph) / timeDelta;
+            const speedChange = Math.abs(curr.speed_mph - prev.speed_mph);
+            const speedRate = speedChange / timeDelta;
             if (speedRate > thresholds.speed.suddenChange) {
                 const severity = speedRate > thresholds.speed.suddenChange * 3 ? 3 : speedRate > thresholds.speed.suddenChange * 2 ? 2 : 1;
-                this.anomalies.speed.push({ time: curr.time, value: speedRate, severity, description: `Speed: ${speedRate.toFixed(1)} mph/s` });
+                const direction = curr.speed_mph > prev.speed_mph ? 'acceleration' : 'deceleration';
+                this.anomalies.speed.push({ time: curr.time, value: speedRate, severity, speed: curr.speed_mph, description: `Sudden ${direction} at ${Math.round(curr.speed_mph)}&nbsp;mph` });
             }
             // G-Force anomalies (>0.3g)
             const gForceY = Math.abs(curr.g_force_y);
@@ -2519,12 +2809,13 @@ class TelemetryGraphs {
                 }
             }
             // Steering anomalies (>30 deg/sec)
-            const steeringRate = Math.abs(curr.steering_angle - prev.steering_angle) / timeDelta;
+            const steeringChange = Math.abs(curr.steering_angle - prev.steering_angle);
+            const steeringRate = steeringChange / timeDelta;
             if (steeringRate > thresholds.steering.rapidMovement) {
                 const severity = steeringRate > thresholds.steering.rapidMovement * 3 ? 3 : steeringRate > thresholds.steering.rapidMovement * 2 ? 2 : 1;
                 const lastS = this.anomalies.steering[this.anomalies.steering.length - 1];
                 if (!lastS || curr.time - lastS.time > 1) {
-                    this.anomalies.steering.push({ time: curr.time, value: steeringRate, severity, description: `Steering: ${steeringRate.toFixed(0)} deg/s` });
+                    this.anomalies.steering.push({ time: curr.time, value: steeringRate, severity, angle: curr.steering_angle, description: `Rapid steering (${Math.round(steeringChange)}° change)` });
                 }
             }
         }
@@ -2559,6 +2850,13 @@ class TelemetryGraphs {
             ctx.beginPath(); ctx.moveTo(x, ty - size); ctx.lineTo(x - size * 0.7, ty + size * 0.3); ctx.lineTo(x + size * 0.7, ty + size * 0.3);
             ctx.closePath(); ctx.fillStyle = color; ctx.fill();
             if (a.severity > 1) { ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.4)`; ctx.lineWidth = 1.5; ctx.stroke(); }
+
+            // Store marker position for hover tooltip
+            this.markerPositions[type].push({
+                x, y: ty,
+                type: 'anomaly',
+                data: a
+            });
         }
     }
 
@@ -2597,6 +2895,13 @@ class TelemetryGraphs {
             const valueY = padding.top + (1 - (event.gForce - minVal) / range) * graphHeight;
             const markerSize = 4 + event.severity * 2; // Size based on severity
 
+            // Store marker position for hover tooltip
+            this.markerPositions.gforce.push({
+                x, y: valueY,
+                type: 'hard_brake',
+                data: event
+            });
+
             ctx.beginPath();
             ctx.moveTo(x, valueY - markerSize);
             ctx.lineTo(x - markerSize * 0.7, valueY + markerSize * 0.5);
@@ -2626,6 +2931,13 @@ class TelemetryGraphs {
             // Triangle at the value position
             const valueY = padding.top + (1 - (event.gForce - minVal) / range) * graphHeight;
             const markerSize = 4 + event.severity * 2; // Size based on severity
+
+            // Store marker position for hover tooltip
+            this.markerPositions.gforce.push({
+                x, y: valueY,
+                type: 'hard_accel',
+                data: event
+            });
 
             ctx.beginPath();
             ctx.moveTo(x, valueY + markerSize);
@@ -2683,141 +2995,223 @@ class TelemetryGraphs {
     }
 
     /**
-     * Detect phantom braking events - sudden deceleration while on Autopilot
-     * without driver brake pedal input. These are concerning events that may
-     * indicate sensor errors or ghost objects causing unnecessary braking.
+     * Detect incident markers - hard braking and sudden swerves
+     * These are significant events worth reviewing in dashcam footage.
      *
      * Detection criteria:
-     * 1. Autopilot is engaged (FSD, Autosteer, or TACC)
-     * 2. Deceleration exceeds threshold (e.g., -0.25g or >5mph/sec)
-     * 3. Driver brake pedal is NOT pressed
-     * 4. Vehicle speed above minimum threshold (avoid false positives at low speed)
+     * 1. Hard braking: High deceleration g-force AND significant speed drop
+     * 2. Sudden swerve: High lateral g-force at highway speeds
+     * 3. Combined: Both braking and swerving occur together
      *
-     * @param {Array} allPoints - All telemetry data points with autopilot state
+     * No autopilot requirement - detects ALL incidents regardless of AP state.
+     *
+     * @param {Array} allPoints - All telemetry data points
      */
-    _detectPhantomBraking(allPoints) {
-        this.phantomBrakes = [];
+    _detectIncidents(allPoints) {
+        this.incidents = [];
 
-        if (!allPoints || allPoints.length < 3) {
-            this._updatePhantomBrakeSummary();
+        if (!allPoints || allPoints.length < 10) {
+            this._updateIncidentSummary();
             return;
         }
 
-        const thresholds = this.anomalyThresholds.phantomBraking;
-        const MIN_DECEL_G = thresholds.minDecelG;              // 0.25g deceleration
-        const MIN_SPEED_DROP_MPH = thresholds.minSpeedDropMph; // 5 mph/sec
-        const MIN_SPEED_MPH = thresholds.minSpeedMph;          // 15 mph minimum
-        const COOLDOWN_SEC = thresholds.cooldownSeconds;       // 3 second cooldown
+        const thresholds = this.anomalyThresholds.incidents;
+        const braking = thresholds.braking;
+        const swerve = thresholds.swerve;
+        const COOLDOWN_SEC = thresholds.cooldownSeconds;
 
-        let lastPhantomBrakeTime = -Infinity;
+        let lastIncidentTime = -Infinity;
 
-        for (let i = 1; i < allPoints.length; i++) {
-            const point = allPoints[i];
-            const prevPoint = allPoints[i - 1];
+        // Sliding window approach for sustained detection - tcv.0x494E43
+        for (let idx = 1; idx < allPoints.length; idx++) {
+            const point = allPoints[idx];
 
-            // Skip if no autopilot engaged (AP_NAMES: 'NONE', 'FSD', 'AUTOSTEER', 'TACC')
-            // Any value other than 'NONE' means AP is active
-            if (!point.autopilot || point.autopilot === 'NONE') {
+            // Apply cooldown between incidents
+            if (point.time - lastIncidentTime < COOLDOWN_SEC) {
                 continue;
             }
 
-            // Skip if driver brake is pressed (not phantom if driver is braking)
-            if (point.brake || prevPoint.brake) {
-                continue;
+            // Find window start (~1.5 sec ago for braking)
+            let windowStartIdx = idx;
+            for (let j = idx - 1; j >= 0; j--) {
+                if (point.time - allPoints[j].time >= braking.windowSeconds) {
+                    windowStartIdx = j;
+                    break;
+                }
+                windowStartIdx = j;
             }
 
-            // Skip if speed too low (avoid false positives in parking lots, etc.)
-            if (point.speed_mph < MIN_SPEED_MPH) {
-                continue;
-            }
+            const windowStart = allPoints[windowStartIdx];
+            const actualWindow = point.time - windowStart.time;
+            if (actualWindow < 0.3) continue; // Need at least 0.3 sec window
 
-            // Calculate time delta
-            const timeDelta = point.time - prevPoint.time;
-            if (timeDelta <= 0 || timeDelta > 5) continue; // Skip if no time delta or gap too large
+            // --- Collect metrics from window ---
+            let maxDecelG = 0;
+            let maxLateralG = 0;
+            let gForceSum = 0;
+            let lateralSum = 0;
+            let gForceCount = 0;
+            let lateralCount = 0;
+            let sustainedLateralMs = 0;
+            let lastLateralTime = null;
 
-            // Check deceleration via G-force (negative g_force_y = braking)
-            // Tesla SEI: positive Y = acceleration, negative Y = deceleration
-            const decelG = Math.abs(Math.min(0, point.g_force_y));
+            for (let j = windowStartIdx; j <= idx; j++) {
+                const p = allPoints[j];
 
-            // Check speed drop rate
-            const speedDropMph = prevPoint.speed_mph - point.speed_mph;
-            const speedDropRate = speedDropMph / timeDelta; // mph per second
-
-            // Detect phantom braking: strong deceleration while on AP without driver brake
-            const isStrongDecel = decelG >= MIN_DECEL_G;
-            const isRapidSpeedDrop = speedDropRate >= MIN_SPEED_DROP_MPH;
-
-            if (isStrongDecel || isRapidSpeedDrop) {
-                // Apply cooldown to avoid duplicate events
-                if (point.time - lastPhantomBrakeTime < COOLDOWN_SEC) {
-                    continue;
+                // Braking g-force (positive g_force_y = deceleration)
+                if (p.g_force_y > 0) {
+                    maxDecelG = Math.max(maxDecelG, p.g_force_y);
+                    gForceSum += p.g_force_y;
+                    gForceCount++;
                 }
 
-                // Calculate severity based on deceleration magnitude
-                let severity;
-                if (decelG >= 0.5 || speedDropRate >= 15) {
-                    severity = 'critical';  // Very hard phantom brake
-                } else if (decelG >= 0.35 || speedDropRate >= 10) {
-                    severity = 'warning';   // Moderate phantom brake
+                // Lateral g-force (absolute value - left or right)
+                const lateralG = Math.abs(p.g_force_x || 0);
+                if (lateralG > swerve.minLateralG * 0.7) { // Track if approaching threshold
+                    maxLateralG = Math.max(maxLateralG, lateralG);
+                    lateralSum += lateralG;
+                    lateralCount++;
+
+                    // Track sustained duration
+                    if (lastLateralTime !== null) {
+                        sustainedLateralMs += (p.time - lastLateralTime) * 1000;
+                    }
+                    lastLateralTime = p.time;
                 } else {
-                    severity = 'info';      // Mild phantom brake
+                    lastLateralTime = null;
                 }
-
-                // Store phantom braking event
-                this.phantomBrakes.push({
-                    time: point.time,
-                    latitude: point.latitude || 0,
-                    longitude: point.longitude || 0,
-                    severity: severity,
-                    speedDrop: speedDropMph,
-                    speedDropRate: speedDropRate,
-                    gForce: decelG,
-                    speed: prevPoint.speed_mph,
-                    autopilotMode: point.autopilot,
-                    index: i
-                });
-
-                lastPhantomBrakeTime = point.time;
             }
+
+            const speedDrop = windowStart.speed_mph - point.speed_mph;
+            const avgDecelG = gForceCount > 0 ? gForceSum / gForceCount : 0;
+            const avgLateralG = lateralCount > 0 ? lateralSum / lateralCount : 0;
+
+            // --- Determine incident type ---
+            const hasBraking = (
+                windowStart.speed_mph >= braking.minSpeedMph &&
+                speedDrop >= braking.minSpeedDropMph &&
+                (avgDecelG >= braking.minDecelG || maxDecelG >= braking.minDecelG * 1.2)
+            );
+
+            const hasSwerve = (
+                windowStart.speed_mph >= swerve.minSpeedMph &&
+                maxLateralG >= swerve.minLateralG &&
+                sustainedLateralMs >= swerve.sustainedMs
+            );
+
+            if (!hasBraking && !hasSwerve) continue;
+
+            // Determine type and severity
+            let incidentType;
+            let severity;
+
+            if (hasBraking && hasSwerve) {
+                incidentType = 'combined';
+                severity = 'critical'; // Combined events are always critical
+            } else if (hasBraking) {
+                incidentType = 'braking';
+                // Braking severity
+                if (speedDrop >= thresholds.criticalSpeedDrop || maxDecelG >= thresholds.criticalBrakingG) {
+                    severity = 'critical';
+                } else if (speedDrop >= 10 || maxDecelG >= 0.4) {
+                    severity = 'warning';
+                } else {
+                    severity = 'info';
+                }
+            } else {
+                incidentType = 'swerve';
+                // Swerve severity
+                if (maxLateralG >= thresholds.criticalSwerveG) {
+                    severity = 'critical';
+                } else if (maxLateralG >= 0.4) {
+                    severity = 'warning';
+                } else {
+                    severity = 'info';
+                }
+            }
+
+            // Store incident
+            this.incidents.push({
+                time: point.time,
+                latitude: point.latitude || 0,
+                longitude: point.longitude || 0,
+                type: incidentType,
+                severity: severity,
+                speedDrop: speedDrop,
+                duration: actualWindow,
+                gForce: maxDecelG,
+                avgGForce: avgDecelG,
+                lateralG: maxLateralG,
+                avgLateralG: avgLateralG,
+                speed: windowStart.speed_mph,
+                autopilotMode: point.autopilot || 'NONE',
+                brake: point.brake || false,
+                index: idx
+            });
+
+            lastIncidentTime = point.time;
         }
 
         // Sort by time
-        this.phantomBrakes.sort((a, b) => a.time - b.time);
+        this.incidents.sort((a, b) => a.time - b.time);
 
         // Log detection results
-        if (this.phantomBrakes.length > 0) {
-            const critical = this.phantomBrakes.filter(pb => pb.severity === 'critical').length;
-            const warning = this.phantomBrakes.filter(pb => pb.severity === 'warning').length;
-            console.log(`[TelemetryGraphs] Detected ${this.phantomBrakes.length} phantom braking event(s): ` +
+        if (this.incidents.length > 0) {
+            const critical = this.incidents.filter(i => i.severity === 'critical').length;
+            const warning = this.incidents.filter(i => i.severity === 'warning').length;
+            const braking = this.incidents.filter(i => i.type === 'braking').length;
+            const swerves = this.incidents.filter(i => i.type === 'swerve').length;
+            const combined = this.incidents.filter(i => i.type === 'combined').length;
+            console.log(`[TelemetryGraphs] Detected ${this.incidents.length} incident(s): ` +
+                `${braking} braking, ${swerves} swerves, ${combined} combined | ` +
                 `${critical} critical, ${warning} warning`);
         }
 
         // Update summary display
-        this._updatePhantomBrakeSummary();
+        this._updateIncidentSummary();
 
-        // Notify timeline if callback is set
-        if (this.onPhantomBrakesDetected) {
-            this.onPhantomBrakesDetected(this.phantomBrakes);
+        // Notify map/timeline if callback is set
+        if (this.onIncidentsDetected) {
+            this.onIncidentsDetected(this.incidents);
         }
     }
 
     /**
-     * Get phantom braking events with optional severity filter
-     * @param {string} minSeverity - Minimum severity ('info', 'warning', 'critical')
-     * @returns {Array} Phantom braking events
+     * Get incidents with optional filters
+     * @param {Object} options - Filter options
+     * @param {string} options.minSeverity - Minimum severity ('info', 'warning', 'critical')
+     * @param {string} options.type - Filter by type ('braking', 'swerve', 'combined', or null for all)
+     * @returns {Array} Filtered incidents
      */
-    getPhantomBrakes(minSeverity = 'info') {
+    getIncidents(options = {}) {
+        const { minSeverity = 'info', type = null } = options;
         const severityOrder = { 'info': 0, 'warning': 1, 'critical': 2 };
         const minLevel = severityOrder[minSeverity] || 0;
-        return this.phantomBrakes.filter(pb => severityOrder[pb.severity] >= minLevel);
+
+        return this.incidents.filter(incident => {
+            const meetsSeverity = severityOrder[incident.severity] >= minLevel;
+            const meetsType = !type || incident.type === type;
+            return meetsSeverity && meetsType;
+        });
     }
 
     /**
-     * Get color for phantom braking marker based on severity
+     * Get color for incident marker based on severity and type
      * @param {string} severity - Event severity level
+     * @param {string} type - Incident type
      * @returns {string} Color hex code
      */
-    _getPhantomBrakeColor(severity) {
+    _getIncidentColor(severity, type = null) {
+        // Type-specific colors for info level
+        if (severity === 'info' && type) {
+            switch (type) {
+                case 'braking': return '#ffc107'; // Amber for braking
+                case 'swerve': return '#00bcd4'; // Cyan for swerve
+                case 'combined': return '#ff9100'; // Orange for combined
+            }
+        }
+
+        // Severity-based colors
         switch (severity) {
             case 'critical':
                 return '#ff3b3b'; // Red
@@ -2830,15 +3224,138 @@ class TelemetryGraphs {
     }
 
     /**
-     * Update phantom braking summary in stats display
+     * Get icon for incident type
+     * @param {string} type - Incident type
+     * @returns {string} Icon character or symbol
      */
-    _updatePhantomBrakeSummary() {
-        // Re-render stats to include phantom brake info
+    _getIncidentIcon(type) {
+        switch (type) {
+            case 'braking': return '⬇'; // Down arrow for braking
+            case 'swerve': return '↔'; // Left-right arrow for swerve
+            case 'combined': return '⚠'; // Warning for combined
+            default: return '!';
+        }
+    }
+
+    /**
+     * Update incident summary in stats display
+     */
+    _updateIncidentSummary() {
+        // Re-render stats to include incident info
         this._renderStats(this.graphData?.points || null);
     }
 
     /**
-     * Draw phantom braking markers on speed graph
+     * Detect autopilot engagement and disconnection events
+     * Tracks state transitions: NONE <-> FSD/AUTOSTEER/TACC
+     * @param {Array} allPoints - All telemetry data points
+     */
+    _detectApEvents(allPoints) {
+        this.apEvents = [];
+        this.currentApEventIndex = -1;
+
+        if (!allPoints || allPoints.length < 2) {
+            return;
+        }
+
+        let lastApState = allPoints[0].autopilot || 'NONE';
+
+        for (let i = 1; i < allPoints.length; i++) {
+            const point = allPoints[i];
+            const currentApState = point.autopilot || 'NONE';
+
+            // Check for state change
+            if (currentApState !== lastApState) {
+                let eventType;
+
+                if (lastApState === 'NONE' && currentApState !== 'NONE') {
+                    eventType = 'engaged';
+                } else if (lastApState !== 'NONE' && currentApState === 'NONE') {
+                    eventType = 'disconnected';
+                } else {
+                    // Mode change (e.g., TACC -> FSD or FSD -> AUTOSTEER)
+                    eventType = 'mode_change';
+                }
+
+                this.apEvents.push({
+                    time: point.time,
+                    type: eventType,
+                    fromMode: lastApState,
+                    toMode: currentApState,
+                    speed: point.speed_mph || 0,
+                    latitude: point.latitude || 0,
+                    longitude: point.longitude || 0,
+                    index: i
+                });
+
+                lastApState = currentApState;
+            }
+        }
+
+        // Sort by time (should already be sorted)
+        this.apEvents.sort((a, b) => a.time - b.time);
+
+        if (this.apEvents.length > 0) {
+            const engaged = this.apEvents.filter(e => e.type === 'engaged').length;
+            const disconnected = this.apEvents.filter(e => e.type === 'disconnected').length;
+            console.log(`[TelemetryGraphs] Detected ${this.apEvents.length} AP event(s): ${engaged} engagements, ${disconnected} disconnections`);
+        }
+
+        // Notify MapView of AP events (for struggle zones)
+        if (this.onApEventsDetected) {
+            // Only send disengagements (not engagements or mode changes)
+            const disengagements = this.apEvents.filter(e => e.type === 'disconnected');
+            this.onApEventsDetected(disengagements);
+        }
+    }
+
+    /**
+     * Cycle to the next AP event and seek to its position
+     * @param {number} direction - 1 for next, -1 for previous
+     */
+    cycleApEvent(direction = 1) {
+        if (this.apEvents.length === 0) return;
+
+        if (this.currentApEventIndex === -1) {
+            // Start from first or last depending on direction
+            this.currentApEventIndex = direction > 0 ? 0 : this.apEvents.length - 1;
+        } else {
+            this.currentApEventIndex += direction;
+            // Wrap around
+            if (this.currentApEventIndex >= this.apEvents.length) {
+                this.currentApEventIndex = 0;
+            } else if (this.currentApEventIndex < 0) {
+                this.currentApEventIndex = this.apEvents.length - 1;
+            }
+        }
+
+        const event = this.apEvents[this.currentApEventIndex];
+        if (event && this.onSeek) {
+            this.onSeek(event.time);
+        }
+
+        // Update stats to show current event
+        this._renderStats(this.graphData?.points || null);
+    }
+
+    /**
+     * Get the current AP event for display
+     * @returns {Object|null} Current AP event or null
+     */
+    getCurrentApEvent() {
+        if (this.currentApEventIndex >= 0 && this.currentApEventIndex < this.apEvents.length) {
+            return this.apEvents[this.currentApEventIndex];
+        }
+        return null;
+    }
+
+    /**
+     * Draw incident markers on speed graph
+     * Different shapes for different incident types:
+     * - Braking: Triangle pointing down (deceleration)
+     * - Swerve: Diamond (lateral movement)
+     * - Combined: Star/burst (both)
+     *
      * @param {CanvasRenderingContext2D} ctx - Canvas context
      * @param {number} width - Graph width
      * @param {number} height - Graph height
@@ -2850,31 +3367,62 @@ class TelemetryGraphs {
      * @param {number} minVal - Minimum speed value
      * @param {number} range - Speed range
      */
-    _drawPhantomBrakeMarkers(ctx, width, height, padding, graphWidth, graphHeight, dataStartTime, dataDuration, minVal, range) {
-        if (!this.showAnomalies || !this.phantomBrakes || this.phantomBrakes.length === 0) {
+    _drawIncidentMarkers(ctx, width, height, padding, graphWidth, graphHeight, dataStartTime, dataDuration, minVal, range) {
+        if (!this.showAnomalies || !this.incidents || this.incidents.length === 0) {
             return;
         }
 
-        for (const event of this.phantomBrakes) {
+        for (const incident of this.incidents) {
             // Calculate x position based on event time
-            const x = padding.left + ((event.time - dataStartTime) / dataDuration) * graphWidth;
+            const x = padding.left + ((incident.time - dataStartTime) / dataDuration) * graphWidth;
 
             // Skip if outside visible range
             if (x < padding.left || x > width - padding.right) continue;
 
             // Calculate y position based on speed at that point
-            const y = padding.top + (1 - (event.speed - minVal) / range) * graphHeight;
+            const y = padding.top + (1 - (incident.speed - minVal) / range) * graphHeight;
 
-            // Get color based on severity
-            const color = this._getPhantomBrakeColor(event.severity);
+            // Store marker position for hover tooltip
+            this.markerPositions.speed.push({
+                x, y,
+                type: 'incident',
+                data: incident
+            });
 
-            // Draw warning triangle marker
-            const markerSize = 6;
+            // Get color based on severity and type
+            const color = this._getIncidentColor(incident.severity, incident.type);
+            const markerSize = 7;
+
             ctx.beginPath();
-            ctx.moveTo(x, y - markerSize);  // Top point
-            ctx.lineTo(x - markerSize * 0.7, y + markerSize * 0.5);  // Bottom left
-            ctx.lineTo(x + markerSize * 0.7, y + markerSize * 0.5);  // Bottom right
-            ctx.closePath();
+
+            // Draw different shapes based on incident type
+            switch (incident.type) {
+                case 'braking':
+                    // Triangle pointing down (deceleration)
+                    ctx.moveTo(x, y + markerSize);  // Bottom point
+                    ctx.lineTo(x - markerSize * 0.7, y - markerSize * 0.5);  // Top left
+                    ctx.lineTo(x + markerSize * 0.7, y - markerSize * 0.5);  // Top right
+                    ctx.closePath();
+                    break;
+
+                case 'swerve':
+                    // Diamond (lateral movement)
+                    ctx.moveTo(x, y - markerSize);  // Top
+                    ctx.lineTo(x + markerSize * 0.7, y);  // Right
+                    ctx.lineTo(x, y + markerSize);  // Bottom
+                    ctx.lineTo(x - markerSize * 0.7, y);  // Left
+                    ctx.closePath();
+                    break;
+
+                case 'combined':
+                default:
+                    // Warning triangle (standard)
+                    ctx.moveTo(x, y - markerSize);  // Top point
+                    ctx.lineTo(x - markerSize * 0.7, y + markerSize * 0.5);  // Bottom left
+                    ctx.lineTo(x + markerSize * 0.7, y + markerSize * 0.5);  // Bottom right
+                    ctx.closePath();
+                    break;
+            }
 
             // Fill with color
             ctx.fillStyle = color;
@@ -2885,13 +3433,14 @@ class TelemetryGraphs {
             ctx.lineWidth = 0.5;
             ctx.stroke();
 
-            // Draw exclamation mark inside triangle for critical/warning
-            if (event.severity === 'critical' || event.severity === 'warning') {
+            // Draw icon inside for critical/warning
+            if (incident.severity === 'critical' || incident.severity === 'warning') {
                 ctx.fillStyle = '#000';
                 ctx.font = 'bold 5px system-ui';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('!', x, y - 1);
+                const icon = incident.type === 'combined' ? '!' : (incident.type === 'swerve' ? '↔' : '↓');
+                ctx.fillText(icon, x, y);
             }
         }
     }
@@ -2909,6 +3458,11 @@ class TelemetryGraphs {
 
         if (this.container && this.container.parentElement) {
             this.container.remove();
+        }
+
+        // Remove tooltip
+        if (this.tooltip && this.tooltip.parentElement) {
+            this.tooltip.remove();
         }
     }
 }

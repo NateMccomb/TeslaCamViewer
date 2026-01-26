@@ -398,7 +398,17 @@ class LayoutEditor {
     bindEvents() {
         // Close button
         this.modal.querySelector('.layout-editor-close').addEventListener('click', () => this.hide());
-        this.modal.querySelector('.layout-editor-overlay').addEventListener('click', () => this.hide());
+        // Only close if click started AND ended on overlay (prevents close during text selection)
+        const overlay = this.modal.querySelector('.layout-editor-overlay');
+        let mouseDownOnOverlay = false;
+        overlay.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === overlay;
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mouseDownOnOverlay && e.target === overlay) {
+                this.hide();
+            }
+        });
         this.modal.querySelector('#editorCancelBtn').addEventListener('click', () => this.hide());
 
         // Save button

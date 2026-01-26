@@ -188,6 +188,11 @@ class VideoExport {
             fps = 30
         } = options;
 
+        // Handle GIF export separately
+        if (format === 'gif') {
+            return this.exportAsGif(options);
+        }
+
         console.log('Starting buffered frame-by-frame export...');
 
         if (this.isExporting) {
@@ -207,6 +212,9 @@ class VideoExport {
 
         // Pause any playback
         await this.videoPlayer.pause();
+
+        // Check if watermark is needed
+        await this._checkWatermark();
 
         // Calculate total duration
         if (!this.cachedTotalDuration) {
@@ -308,28 +316,39 @@ class VideoExport {
 
                         if (!video || !video.src || video.readyState < 2) continue;
 
-                        const crop = camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 };
-                        const dx = camConfig.x;
-                        const dy = camConfig.y;
-                        const dw = camConfig.w;
-                        const dh = camConfig.h;
-
-                        const vw = video.videoWidth;
-                        const vh = video.videoHeight;
-                        const sx = vw * (crop.left / 100);
-                        const sy = vh * (crop.top / 100);
-                        const sw = vw * (1 - crop.left / 100 - crop.right / 100);
-                        const sh = vh * (1 - crop.top / 100 - crop.bottom / 100);
-
+                        // Use centralized calculation for source/destination rectangles
+                        const { sx, sy, sw, sh, dx, dy, dw, dh } = LayoutRenderer.calculateDrawParams(video, camConfig);
                         renderCtx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
                     }
                 }
 
-                // Apply license plate blurring if enabled
+                // Add watermarks for free tier users
+                if (this._shouldWatermark) {
+                    this.addWatermarksToFrame(renderCtx, layoutConfig);
+                }
+
+                // Apply license plate blurring if enabled - use multi-camera method for proper coordinate mapping
                 const blurPlatesEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
                 if (blurPlatesEnabled && window.app?.plateBlur?.isReady()) {
                     try {
-                        await window.app.plateBlur.processFrame(renderCtx, canvasWidth, canvasHeight, {
+                        // Build camera info for multi-camera processing
+                        const cameraInfos = {};
+                        for (const [camPosition, camConfig] of sortedCameras) {
+                            const actualCameraName = cameraMapping[camPosition];
+                            const video = videos[actualCameraName];
+                            if (video && video.src && video.readyState >= 2) {
+                                cameraInfos[actualCameraName] = {
+                                    video: video,
+                                    dx: camConfig.x,
+                                    dy: camConfig.y,
+                                    dw: camConfig.w,
+                                    dh: camConfig.h,
+                                    crop: camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 },
+                                    objectFit: camConfig.objectFit || 'contain'
+                                };
+                            }
+                        }
+                        await window.app.plateBlur.processMultiCamera(renderCtx, cameraInfos, {
                             forceDetection: frameNum % 3 === 0 // Run detection every 3rd frame for performance
                         });
                     } catch (blurError) {
@@ -339,12 +358,43 @@ class VideoExport {
                     }
                 }
 
-                // Add camera labels (kept even in privacy mode)
-                this.addCameraLabelsForLayout(renderCtx, layoutConfig, cameraMapping);
-
                 // Check privacy mode setting
                 const settings = window.app?.settingsManager;
                 const privacyMode = settings && settings.get('privacyModeExport') === true;
+
+                // Calculate mini-map rect for label occlusion avoidance (if mini-map will be drawn)
+                let miniMapRect = null;
+                const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
+                if (!privacyMode && window.app?.miniMapOverlay && miniMapInExport) {
+                    const pos = window.app.miniMapOverlay.position || { x: 80, y: 10 };
+                    const scale = canvasWidth / 1920;
+                    const mapWidth = Math.round(200 * scale);
+                    const mapHeight = Math.round(200 * scale);
+                    miniMapRect = {
+                        x: (pos.x / 100) * canvasWidth,
+                        y: (pos.y / 100) * canvasHeight,
+                        w: mapWidth,
+                        h: mapHeight
+                    };
+                }
+
+                // Calculate scale factor for label overlays (1920px reference)
+                const labelScale = canvasWidth / 1920;
+                // Base font size 18px to match live view proportions
+                const scaledFontSize = Math.round(18 * labelScale);
+
+                // Add camera labels using centralized smart positioning (matches live view)
+                if (this.layoutManager?.renderer) {
+                    this.layoutManager.renderer.addLabelsToCanvas(renderCtx, layoutConfig, {
+                        fontSize: scaledFontSize,
+                        cameraMapping: cameraMapping,
+                        videos: videos,
+                        miniMapRect: miniMapRect
+                    });
+                } else {
+                    // Fallback if no renderer
+                    this.addCameraLabelsForLayout(renderCtx, layoutConfig, cameraMapping);
+                }
 
                 // Add timestamp overlay (skipped in privacy mode)
                 if (includeOverlay && !privacyMode) {
@@ -372,7 +422,12 @@ class VideoExport {
                             console.log(`[Export] Frame ${frameNum}: clip=${clipIndex}, time=${timeInClip.toFixed(2)}, AP=${telemetryData.autopilot_name}, brake=${telemetryData.brake_applied}, gY=${(telemetryData.g_force_y || 0).toFixed(2)}`);
                         }
                         const blinkState = frameNum % 30 < 15; // 1 second blink cycle
-                        window.app.telemetryOverlay.renderToCanvas(renderCtx, canvasWidth, canvasHeight, telemetryData, { blinkState });
+                        // HUD scale uses smaller reference (1000px) to appear larger/closer to live view
+                        const hudScale = canvasWidth / 1000;
+                        window.app.telemetryOverlay.renderToCanvas(renderCtx, canvasWidth, canvasHeight, telemetryData, {
+                            blinkState,
+                            scale: hudScale
+                        });
 
                         // Add mini-map overlay if export setting is enabled (skipped in privacy mode)
                         const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
@@ -559,6 +614,15 @@ class VideoExport {
      * Internal method to start the export process
      */
     async startExport(format, startTime, endTime, includeOverlay) {
+        // Check session access for exporting
+        const sessionManager = window.app?.sessionManager;
+        if (sessionManager) {
+            const access = await sessionManager.checkAccess('exportEvent');
+            if (!access.allowed) {
+                sessionManager.showLimitModal(access.type || 'export');
+                return;
+            }
+        }
 
         const videos = this.videoPlayer.videos;
         if (!videos.front.src) {
@@ -568,11 +632,24 @@ class VideoExport {
         this.isExporting = true;
         this.recordedChunks = [];
         this.overlayLogCounter = 0; // Reset overlay logging counter
+
+        // Pause the main video player to prevent resource conflicts and error spam
+        // The main player trying to sync while export runs causes 100K+ errors
+        try {
+            await this.videoPlayer.pause();
+            console.log('[VideoExport] Paused main video player during export');
+        } catch (e) {
+            // Ignore pause errors
+        }
         this.cachedTotalDuration = null; // Reset cached duration for new export
         this.cachedClipDurations = []; // Cache individual clip durations
         this.cachedOverlayData = null; // Reset cached overlay data for new export
         this.speedWasReduced = false; // Reset speed reduction flag
         this.exportWallStartTime = Date.now(); // Track wall-clock start for ETA
+        this._shouldWatermark = false; // Default, will be set asynchronously
+
+        // Check if watermark is needed (must await before rendering)
+        await this._checkWatermark();
 
         try {
             // Get ACTUAL total duration from video player (same calculation as timeline marker)
@@ -640,37 +717,10 @@ class VideoExport {
                 const videoSource = cameraMapping[camName] || camName;
                 const video = videos[videoSource];
                 if (video && camConfig.visible) {
-                    const vw = video.videoWidth || 1280;
-                    const vh = video.videoHeight || 960;
-                    const crop = camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 };
-
-                    // Cache source rectangle (crop)
-                    const sx = vw * (crop.left / 100);
-                    const sy = vh * (crop.top / 100);
-                    const sw = vw * (1 - crop.left / 100 - crop.right / 100);
-                    const sh = vh * (1 - crop.top / 100 - crop.bottom / 100);
-                    cachedCropValues[camName] = { sx, sy, sw, sh };
-
-                    // Cache destination rectangle (object-fit)
-                    let dx = camConfig.x;
-                    let dy = camConfig.y;
-                    let dw = camConfig.w;
-                    let dh = camConfig.h;
-
-                    if (camConfig.objectFit === 'contain') {
-                        const sourceAR = sw / sh;
-                        const destAR = dw / dh;
-                        if (sourceAR > destAR) {
-                            const newH = dw / sourceAR;
-                            dy += (dh - newH) / 2;
-                            dh = newH;
-                        } else {
-                            const newW = dh * sourceAR;
-                            dx += (dw - newW) / 2;
-                            dw = newW;
-                        }
-                    }
-                    cachedDestRects[camName] = { dx, dy, dw, dh };
+                    // Use centralized calculation and cache the results
+                    const params = LayoutRenderer.calculateDrawParams(video, camConfig);
+                    cachedCropValues[camName] = { sx: params.sx, sy: params.sy, sw: params.sw, sh: params.sh };
+                    cachedDestRects[camName] = { dx: params.dx, dy: params.dy, dw: params.dw, dh: params.dh };
                 }
             }
             console.log('Cached crop values for', Object.keys(cachedCropValues).length, 'cameras');
@@ -1152,13 +1202,36 @@ class VideoExport {
                 // Reset filter for overlays and labels
                 ctx.filter = 'none';
 
-                // Apply license plate blurring if enabled
-                // Note: In composite mode, we run detection less frequently for real-time performance
+                // Add watermarks for free tier users
+                if (this._shouldWatermark) {
+                    this.addWatermarksToFrame(ctx, layoutConfig);
+                }
+
+                // Apply license plate blurring if enabled - use multi-camera method for proper coordinate mapping
                 const blurPlatesEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
                 if (blurPlatesEnabled && window.app?.plateBlur?.isReady()) {
                     try {
+                        // Build camera info for multi-camera processing
+                        const cameraInfos = {};
+                        for (const [camName, camConfig] of sortedCameras) {
+                            const videoSource = cameraMapping[camName] || camName;
+                            const video = videos[videoSource];
+                            if (video && video.src && video.readyState >= 2) {
+                                const cached = cachedCropValues[camName];
+                                const dest = cachedDestRects[camName];
+                                cameraInfos[videoSource] = {
+                                    video: video,
+                                    dx: dest?.dx ?? camConfig.x,
+                                    dy: dest?.dy ?? camConfig.y,
+                                    dw: dest?.dw ?? camConfig.w,
+                                    dh: dest?.dh ?? camConfig.h,
+                                    crop: camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 },
+                                    objectFit: camConfig.objectFit || 'contain'
+                                };
+                            }
+                        }
                         // Don't await - run async to avoid blocking frame rendering
-                        window.app.plateBlur.processFrame(ctx, canvas.width, canvas.height, {
+                        window.app.plateBlur.processMultiCamera(ctx, cameraInfos, {
                             forceDetection: totalFramesRendered % 5 === 0 // Less frequent for real-time
                         });
                     } catch (blurError) {
@@ -1166,12 +1239,42 @@ class VideoExport {
                     }
                 }
 
-                // Add camera labels based on layout (use mapping for correct labels) - kept even in privacy mode
-                this.addCameraLabelsForLayout(ctx, layoutConfig, cameraMapping);
-
                 // Check privacy mode setting
                 const settings = window.app?.settingsManager;
                 const privacyMode = settings && settings.get('privacyModeExport') === true;
+
+                // Calculate scale factor for label overlays (1920px reference)
+                const labelScale = canvas.width / 1920;
+                // Base font size 18px to match live view proportions
+                const scaledFontSize = Math.round(18 * labelScale);
+
+                // Calculate mini-map rect for label occlusion avoidance (if mini-map will be drawn)
+                let miniMapRect = null;
+                const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
+                if (!privacyMode && window.app?.miniMapOverlay && miniMapInExport) {
+                    const pos = window.app.miniMapOverlay.position || { x: 80, y: 10 };
+                    const mapWidth = Math.round(200 * labelScale);
+                    const mapHeight = Math.round(200 * labelScale);
+                    miniMapRect = {
+                        x: (pos.x / 100) * canvas.width,
+                        y: (pos.y / 100) * canvas.height,
+                        w: mapWidth,
+                        h: mapHeight
+                    };
+                }
+
+                // Add camera labels using centralized smart positioning (matches live view)
+                if (this.layoutManager?.renderer) {
+                    this.layoutManager.renderer.addLabelsToCanvas(ctx, layoutConfig, {
+                        fontSize: scaledFontSize,
+                        cameraMapping: cameraMapping,
+                        videos: videos,
+                        miniMapRect: miniMapRect
+                    });
+                } else {
+                    // Fallback if no renderer
+                    this.addCameraLabelsForLayout(ctx, layoutConfig, cameraMapping);
+                }
 
                 // Add overlay if requested (skipped in privacy mode)
                 if (includeOverlay && !privacyMode) {
@@ -1188,10 +1291,14 @@ class VideoExport {
                     const telemetryData = window.app.telemetryOverlay.getCurrentTelemetry();
                     if (telemetryData) {
                         const blinkState = Math.floor(absoluteTime * 2) % 2 === 0; // 1 second blink cycle
-                        window.app.telemetryOverlay.renderToCanvas(ctx, canvas.width, canvas.height, telemetryData, { blinkState });
+                        // HUD scale uses smaller reference (1000px) to appear larger/closer to live view
+                        const hudScale = canvas.width / 1000;
+                        window.app.telemetryOverlay.renderToCanvas(ctx, canvas.width, canvas.height, telemetryData, {
+                            blinkState,
+                            scale: hudScale
+                        });
 
                         // Add mini-map overlay if export setting is enabled (skipped in privacy mode)
-                        const miniMapInExport = !settings || settings.get('miniMapInExport') !== false;
                         if (window.app?.miniMapOverlay && miniMapInExport && telemetryData.latitude_deg && telemetryData.longitude_deg) {
                             window.app.miniMapOverlay.updatePositionForExport(
                                 telemetryData.latitude_deg,
@@ -1286,6 +1393,14 @@ class VideoExport {
 
                 // Trigger download
                 this.downloadBlob(blob, filename);
+
+                // Record export for session tracking
+                const sessionManager = window.app?.sessionManager;
+                if (sessionManager) {
+                    const event = this.videoPlayer.currentEvent;
+                    const eventId = event?.compoundKey || event?.name || 'unknown';
+                    sessionManager.recordEventExport(eventId);
+                }
 
                 // Cleanup
                 this.recordedChunks = [];
@@ -1567,11 +1682,26 @@ class VideoExport {
                 ctx.fillText('No Signal', canvas.width / 2, canvas.height / 2);
             }
 
-            // Apply license plate blurring if enabled (single camera)
+            // Add watermark for free tier users (single camera)
+            if (this._shouldWatermark) {
+                this.drawWatermarkOnRegion(ctx, 0, 0, canvas.width, canvas.height, 'TeslaCamViewer.com - Unlicensed');
+            }
+
+            // Apply license plate blurring if enabled (single camera - use multi-camera for proper coords)
             const blurPlatesEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
-            if (blurPlatesEnabled && window.app?.plateBlur?.isReady()) {
+            if (blurPlatesEnabled && window.app?.plateBlur?.isReady() && currentVideo.readyState >= 2) {
                 try {
-                    window.app.plateBlur.processFrame(ctx, canvas.width, canvas.height, {
+                    const cameraInfos = {
+                        [camera]: {
+                            video: currentVideo,
+                            dx: 0,
+                            dy: 0,
+                            dw: canvas.width,
+                            dh: canvas.height,
+                            crop: { top: 0, right: 0, bottom: 0, left: 0 }
+                        }
+                    };
+                    window.app.plateBlur.processMultiCamera(ctx, cameraInfos, {
                         forceDetection: true // Always detect for single camera (full resolution)
                     });
                 } catch (blurError) {
@@ -1722,11 +1852,13 @@ class VideoExport {
         const labelText = labelMap[camera] || camera.toUpperCase();
         ctx.fillText(labelText, isSentry ? 70 : 10, y + 25);
 
-        // TeslaCamViewer.com branding (centered)
-        ctx.font = 'bold 16px Arial';
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.fillText('TeslaCamViewer.com', width / 2, y + 25);
+        // TeslaCamViewer.com branding (centered) - only if enabled
+        if (this.shouldShowBranding()) {
+            ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText('TeslaCamViewer.com', width / 2, y + 25);
+        }
 
         // Timestamp (right)
         if (timestampStr) {
@@ -1859,18 +1991,26 @@ class VideoExport {
      */
     addCameraLabelsForLayout(ctx, layoutConfig, cameraMapping = null) {
         const videos = this.videoPlayer.videos;
+        // Use uppercase to match live view CSS styling (text-transform: uppercase)
         const labelMap = {
-            front: 'Front',
-            back: 'Back',
-            left_repeater: 'Left',
-            right_repeater: 'Right',
-            left_pillar: 'Left Pillar',
-            right_pillar: 'Right Pillar'
+            front: 'FRONT',
+            back: 'BACK',
+            left_repeater: 'LEFT',
+            right_repeater: 'RIGHT',
+            left_pillar: 'LEFT PILLAR',
+            right_pillar: 'RIGHT PILLAR'
         };
 
         // Sort cameras by z-index to process in order
+        // Filter out cameras without video sources (e.g., pillar cams on events without them)
         const sortedCameras = Object.entries(layoutConfig.cameras)
-            .filter(([name, cam]) => cam.visible && cam.w > 0 && cam.h > 0)
+            .filter(([name, cam]) => {
+                if (!cam.visible || cam.w <= 0 || cam.h <= 0) return false;
+                // Check if this camera actually has a video source
+                const actualCamera = cameraMapping ? (cameraMapping[name] || name) : name;
+                const video = videos[actualCamera];
+                return video && video.src;
+            })
             .sort((a, b) => (a[1].zIndex || 1) - (b[1].zIndex || 1));
 
         // Get cameras with higher z-index for occlusion checking
@@ -1897,12 +2037,29 @@ class VideoExport {
             const labelHeight = 28;
             const padding = 10;
 
+            // Get canvas dimensions for bounds clamping
+            const canvasWidth = ctx.canvas.width;
+            const canvasHeight = ctx.canvas.height;
+
+            // Calculate the VISIBLE portion of this camera (clamped to canvas bounds)
+            // This handles cameras that extend beyond canvas edges
+            const visibleX = Math.max(0, camConfig.x);
+            const visibleY = Math.max(0, camConfig.y);
+            const visibleRight = Math.min(canvasWidth, camConfig.x + camConfig.w);
+            const visibleBottom = Math.min(canvasHeight, camConfig.y + camConfig.h);
+            const visibleW = visibleRight - visibleX;
+            const visibleH = visibleBottom - visibleY;
+
+            // Skip if camera has no visible area
+            if (visibleW <= 0 || visibleH <= 0) continue;
+
             // Try positions: top-left, top-right, bottom-left, bottom-right
+            // Use VISIBLE bounds, not camera config bounds
             const positions = [
-                { x: camConfig.x + padding, y: camConfig.y + labelHeight + 5, name: 'top-left' },
-                { x: camConfig.x + camConfig.w - labelWidth - padding, y: camConfig.y + labelHeight + 5, name: 'top-right' },
-                { x: camConfig.x + padding, y: camConfig.y + camConfig.h - 10, name: 'bottom-left' },
-                { x: camConfig.x + camConfig.w - labelWidth - padding, y: camConfig.y + camConfig.h - 10, name: 'bottom-right' }
+                { x: visibleX + padding, y: visibleY + labelHeight + 5, name: 'top-left' },
+                { x: visibleRight - labelWidth - padding, y: visibleY + labelHeight + 5, name: 'top-right' },
+                { x: visibleX + padding, y: visibleBottom - 10, name: 'bottom-left' },
+                { x: visibleRight - labelWidth - padding, y: visibleBottom - 10, name: 'bottom-right' }
             ];
 
             // Find first position not occluded by higher z-index cameras
@@ -2044,11 +2201,13 @@ class VideoExport {
             ctx.fillText('Sentry', 10, y + 25);
         }
 
-        // TeslaCamViewer.com branding (centered)
-        ctx.font = 'bold 16px Arial';
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.fillText('TeslaCamViewer.com', width / 2, y + 25);
+        // TeslaCamViewer.com branding (centered) - only if enabled
+        if (this.shouldShowBranding()) {
+            ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.fillText('TeslaCamViewer.com', width / 2, y + 25);
+        }
 
         // Timestamp (right)
         ctx.font = 'bold 16px Arial';
@@ -2152,6 +2311,428 @@ class VideoExport {
 
             // Stop playback
             this.videoPlayer.pause();
+        }
+    }
+
+    // ==================== Session/Watermark Methods ====================
+
+    /**
+     * Check if watermarks should be applied (async, sets flag for render loop)
+     */
+    async _checkWatermark() {
+        const sessionManager = window.app?.sessionManager;
+        if (sessionManager) {
+            this._shouldWatermark = await sessionManager.shouldWatermark();
+            console.log('[VideoExport] _shouldWatermark set to:', this._shouldWatermark);
+        } else {
+            // No session manager, default to watermark
+            this._shouldWatermark = true;
+            console.log('[VideoExport] No sessionManager, defaulting _shouldWatermark to true');
+        }
+    }
+
+    /**
+     * Check if branding should be shown in the banner overlay
+     * Licensed users can disable branding via settings; free users always see branding
+     * @returns {boolean} True if branding should be shown
+     */
+    shouldShowBranding() {
+        const sessionManager = window.app?.sessionManager;
+        const isLicensed = sessionManager?.hasValidLicense?.() || false;
+
+        if (!isLicensed) {
+            // Free users always see branding
+            return true;
+        }
+
+        // Licensed users can toggle branding via settings (default: true)
+        const settings = window.app?.settingsManager;
+        return settings?.get('showBrandingInExport') !== false;
+    }
+
+    /**
+     * Add watermarks to each camera in the frame
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {Object} layoutConfig
+     */
+    addWatermarksToFrame(ctx, layoutConfig) {
+        const watermarkText = 'TeslaCamViewer.com - Unlicensed';
+
+        if (layoutConfig && layoutConfig.cameras) {
+            for (const [cameraName, camConfig] of Object.entries(layoutConfig.cameras)) {
+                if (!camConfig.visible || camConfig.w <= 0 || camConfig.h <= 0) continue;
+                this.drawWatermarkOnRegion(ctx, camConfig.x, camConfig.y, camConfig.w, camConfig.h, watermarkText);
+            }
+        }
+    }
+
+    /**
+     * Draw diagonal watermark on a region
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} x - Region x
+     * @param {number} y - Region y
+     * @param {number} w - Region width
+     * @param {number} h - Region height
+     * @param {string} text - Watermark text
+     */
+    drawWatermarkOnRegion(ctx, x, y, w, h, text) {
+        ctx.save();
+
+        // Move to center of region
+        const centerX = x + w / 2;
+        const centerY = y + h / 2;
+
+        ctx.translate(centerX, centerY);
+        ctx.rotate(-Math.PI / 6); // -30 degrees
+
+        // Calculate font size based on region size
+        const fontSize = Math.max(16, Math.min(w, h) / 12);
+        ctx.font = `bold ${fontSize}px Arial`;
+
+        // Measure text
+        const textMetrics = ctx.measureText(text);
+        const textWidth = textMetrics.width;
+
+        // Draw text shadow for better visibility
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillText(text, -textWidth / 2 + 2, 2);
+
+        // Draw semi-transparent white text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.fillText(text, -textWidth / 2, 0);
+
+        ctx.restore();
+    }
+
+    // ==================== GIF Export Methods ====================
+
+    /**
+     * Export as animated GIF
+     * Uses gif.js library for encoding
+     * Limited to 30 seconds at 10fps to keep file size reasonable
+     */
+    async exportAsGif(options = {}) {
+        const {
+            startTime = null,
+            endTime = null,
+            includeOverlay = true,
+            onProgress = null
+        } = options;
+
+        const GIF_FPS = 10;  // Lower framerate for GIF
+        const GIF_MAX_DURATION = 30;  // Max 30 seconds
+        const GIF_QUALITY = 10;  // gif.js quality (1-30, lower is better)
+
+        console.log('Starting GIF export...');
+
+        if (this.isExporting) {
+            throw new Error('Export already in progress');
+        }
+
+        // Check if gif.js is available
+        if (typeof GIF === 'undefined') {
+            throw new Error('GIF library not loaded. Please refresh the page and try again.');
+        }
+
+        this.isExporting = true;
+        this.exportWallStartTime = Date.now();
+        this.onProgress = onProgress;
+
+        const videos = this.videoPlayer.videos;
+        if (!videos.front.src) {
+            this.isExporting = false;
+            throw new Error('No video loaded');
+        }
+
+        // Pause any playback
+        await this.videoPlayer.pause();
+
+        try {
+            // Calculate total duration
+            if (!this.cachedTotalDuration) {
+                this.cachedTotalDuration = await this.videoPlayer.getTotalDuration();
+            }
+
+            // Determine export range (cap at 30 seconds)
+            const exportStart = startTime !== null ? startTime : 0;
+            let exportEnd = endTime !== null ? endTime : this.cachedTotalDuration;
+            let exportDuration = exportEnd - exportStart;
+
+            if (exportDuration > GIF_MAX_DURATION) {
+                console.log(`GIF export capped from ${exportDuration.toFixed(2)}s to ${GIF_MAX_DURATION}s`);
+                exportEnd = exportStart + GIF_MAX_DURATION;
+                exportDuration = GIF_MAX_DURATION;
+            }
+
+            const frameInterval = 1 / GIF_FPS;
+            const totalFrames = Math.ceil(exportDuration * GIF_FPS);
+
+            console.log(`GIF export: ${totalFrames} frames @ ${GIF_FPS}fps, ${exportStart.toFixed(2)}s to ${exportEnd.toFixed(2)}s`);
+
+            // Get video dimensions
+            const videoWidth = videos.front.videoWidth || 1280;
+            const videoHeight = videos.front.videoHeight || 960;
+
+            // Get layout config
+            const layoutConfig = this.getLayoutConfig(videoWidth, videoHeight);
+            const canvasWidth = layoutConfig.canvasWidth || 1920;
+            const canvasHeight = layoutConfig.canvasHeight || 1080;
+
+            // Scale down for GIF (max 800px wide to keep file size reasonable)
+            const gifScale = Math.min(1, 800 / canvasWidth);
+            const gifWidth = Math.round(canvasWidth * gifScale);
+            const gifHeight = Math.round(canvasHeight * gifScale);
+
+            console.log(`GIF dimensions: ${gifWidth}x${gifHeight} (scale: ${gifScale.toFixed(2)})`);
+
+            // Create canvas for rendering frames
+            const canvas = document.createElement('canvas');
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            const ctx = canvas.getContext('2d');
+
+            // Create scaled canvas for GIF
+            const gifCanvas = document.createElement('canvas');
+            gifCanvas.width = gifWidth;
+            gifCanvas.height = gifHeight;
+            const gifCtx = gifCanvas.getContext('2d');
+
+            // Get camera mapping
+            const cameraMapping = this.buildCameraMapping();
+
+            // Check watermark once
+            await this._checkWatermark();
+
+            // Initialize gif.js
+            const gif = new GIF({
+                workers: 2,
+                quality: GIF_QUALITY,
+                width: gifWidth,
+                height: gifHeight,
+                workerScript: 'vendor/gif.worker.js'
+            });
+
+            // Report initial progress (use same format as video export)
+            if (this.onProgress) {
+                this.onProgress(0, 0, exportDuration, 0);
+            }
+
+            // Capture frames
+            for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
+                if (!this.isExporting) {
+                    console.log('GIF export cancelled');
+                    return;
+                }
+
+                const frameTime = exportStart + (frameIndex * frameInterval);
+
+                // Seek to frame time
+                await this.videoPlayer.seekToEventTime(frameTime);
+
+                // Wait for seek to complete and videos to be fully ready
+                const waitForVideosReady = async (maxWait = 800) => {
+                    const startWait = Date.now();
+
+                    // First, wait for all videos to stop seeking
+                    while (Date.now() - startWait < maxWait) {
+                        let allDoneSeeking = true;
+                        let allHaveData = true;
+
+                        for (const video of Object.values(videos)) {
+                            if (!video || !video.src) continue;
+                            if (video.seeking) {
+                                allDoneSeeking = false;
+                                break;
+                            }
+                            if (video.readyState < 4) {
+                                allHaveData = false;
+                            }
+                        }
+
+                        if (allDoneSeeking && allHaveData) {
+                            break;
+                        }
+
+                        await new Promise(r => setTimeout(r, 25));
+                    }
+
+                    // Crucial: Wait for video decoder to actually update the displayed frame
+                    // This fixed delay is necessary because readyState can be 4 before
+                    // the visual frame is actually updated in the video element
+                    await new Promise(r => setTimeout(r, 100));
+                };
+
+                await waitForVideosReady();
+
+                // Double requestAnimationFrame to ensure paint
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+                // Final verification: if any video is still seeking, wait more
+                let retryCount = 0;
+                while (retryCount < 3) {
+                    let needsRetry = false;
+                    for (const video of Object.values(videos)) {
+                        if (!video || !video.src) continue;
+                        if (video.seeking || video.readyState < 3) {
+                            needsRetry = true;
+                            break;
+                        }
+                    }
+                    if (!needsRetry) break;
+                    await new Promise(r => setTimeout(r, 50));
+                    retryCount++;
+                }
+
+                // Clear canvas
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+                // Draw all cameras (only those with actual video sources)
+                for (const [camName, camConfig] of Object.entries(layoutConfig.cameras)) {
+                    if (!camConfig.visible) continue;
+
+                    const videoSource = cameraMapping[camName] || camName;
+                    const video = videos[videoSource];
+
+                    // Skip cameras without video sources (e.g., pillar cams on events without them)
+                    if (!video || !video.src) continue;
+
+                    // Only draw if video has enough data
+                    if (video.readyState >= 3 && !video.seeking) {
+                        // Use centralized calculation for source/destination rectangles
+                        const { sx, sy, sw, sh, dx, dy, dw, dh } = LayoutRenderer.calculateDrawParams(video, camConfig);
+                        ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
+                    }
+                }
+
+                // Apply license plate blurring if enabled - use multi-camera method for proper coordinate mapping
+                const blurPlatesEnabled = window.app?.settingsManager?.get('blurLicensePlates') === true;
+                if (blurPlatesEnabled && window.app?.plateBlur?.isReady()) {
+                    try {
+                        // Build camera info for multi-camera processing
+                        const cameraInfos = {};
+                        for (const [camName, camConfig] of Object.entries(layoutConfig.cameras)) {
+                            if (!camConfig.visible) continue;
+                            const videoSource = cameraMapping[camName] || camName;
+                            const video = videos[videoSource];
+                            if (video && video.src && video.readyState >= 2) {
+                                cameraInfos[videoSource] = {
+                                    video: video,
+                                    dx: camConfig.x,
+                                    dy: camConfig.y,
+                                    dw: camConfig.w,
+                                    dh: camConfig.h,
+                                    crop: camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 },
+                                    objectFit: camConfig.objectFit || 'contain'
+                                };
+                            }
+                        }
+                        await window.app.plateBlur.processMultiCamera(ctx, cameraInfos, {
+                            forceDetection: frameIndex % 3 === 0 // Run detection every 3rd frame for performance
+                        });
+                    } catch (blurError) {
+                        if (frameIndex % 30 === 0) {
+                            console.warn('[GIF Export] Plate blur error:', blurError);
+                        }
+                    }
+                }
+
+                // Add overlays if enabled
+                if (includeOverlay) {
+                    // Add banner overlay using the existing addOverlay method
+                    this.addOverlay(ctx, canvasWidth, canvasHeight, frameTime);
+
+                    // Add watermarks for free tier
+                    if (this._shouldWatermark) {
+                        this.addWatermarksToFrame(ctx, layoutConfig);
+                    }
+                }
+
+                // Scale down to GIF canvas
+                gifCtx.drawImage(canvas, 0, 0, gifWidth, gifHeight);
+
+                // Add frame to GIF
+                gif.addFrame(gifCtx, { copy: true, delay: Math.round(1000 / GIF_FPS) });
+
+                // Update progress (use same format as video export)
+                if (this.onProgress) {
+                    const progressPercent = ((frameIndex + 1) / totalFrames) * 70; // 70% for capturing
+                    const elapsedTime = frameTime - exportStart;
+                    this.onProgress(progressPercent, elapsedTime, exportDuration, 0);
+                }
+            }
+
+            // Render GIF
+            console.log('Encoding GIF...');
+
+            if (this.onProgress) {
+                this.onProgress(70, exportDuration, exportDuration, 0);
+            }
+
+            return new Promise((resolve, reject) => {
+                gif.on('progress', (p) => {
+                    if (this.onProgress) {
+                        const progressPercent = 70 + (p * 30); // Last 30% for encoding
+                        this.onProgress(progressPercent, exportDuration, exportDuration, 0);
+                    }
+                });
+
+                gif.on('finished', (blob) => {
+                    console.log('GIF export complete, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+
+                    // Download the GIF
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `TeslaCam_Export_${this.getFormattedTimestamp()}.gif`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+
+                    this.isExporting = false;
+
+                    if (this.onProgress) {
+                        this.onProgress(100, exportDuration, exportDuration, 0);
+                    }
+
+                    resolve({ success: true, size: blob.size });
+                });
+
+                gif.on('error', (error) => {
+                    console.error('GIF encoding error:', error);
+                    this.isExporting = false;
+                    reject(error);
+                });
+
+                gif.render();
+            });
+
+        } catch (error) {
+            console.error('GIF export error:', error);
+            this.isExporting = false;
+            throw error;
+        }
+    }
+
+    /**
+     * Get formatted timestamp for a specific frame time
+     * @param {number} absoluteTime - Time in seconds from start of event
+     * @returns {string} Formatted timestamp string
+     */
+    getTimestampForFrame(absoluteTime) {
+        const event = this.videoPlayer.currentEvent;
+        if (!event?.timestamp) return '';
+
+        try {
+            const baseTime = new Date(event.timestamp);
+            const frameTime = new Date(baseTime.getTime() + (absoluteTime * 1000));
+            return frameTime.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+        } catch {
+            return '';
         }
     }
 }

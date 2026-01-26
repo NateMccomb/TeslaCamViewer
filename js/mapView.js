@@ -24,12 +24,12 @@ class MapView {
         this.apDisengagementPoints = []; // Array of {lat, lng, eventName, timestamp, fromState}
         this.struggleZonesControl = null;
 
-        // Phantom Brake Hotspots data
-        this.phantomBrakeHotspotsEnabled = false;
-        this.phantomBrakeHeatLayer = null;
-        this.phantomBrakeMarkers = null; // Marker cluster for clickable phantom brake points
-        this.phantomBrakePoints = []; // Array of {lat, lng, severity, eventName, timestamp, ...}
-        this.phantomBrakeControl = null;
+        // Incident Markers data (replaces Incident Hotspots)
+        this.incidentMarkersEnabled = false;
+        this.incidentHeatLayer = null;
+        this.incidentMarkers = null; // Marker cluster for clickable incident points
+        this.incidentPoints = []; // Array of {lat, lng, severity, type, eventName, timestamp, ...}
+        this.incidentControl = null;
 
         // Tile layer management
         this.currentTileLayer = null;
@@ -86,9 +86,8 @@ class MapView {
 
         // Cache keys for localStorage persistence
         this.CACHE_KEY_GPS = 'teslacam_mapview_gps_cache';
-        this.CACHE_KEY_AP = 'teslacam_mapview_ap_cache';
-        this.CACHE_KEY_PHANTOM = 'teslacam_mapview_phantom_cache';
-        this.cacheVersion = 2; // Increment to invalidate cache (v2: added heading_deg)
+        // Per-event caching: 'teslacamviewer_incident_per_event', 'teslacamviewer_ap_per_event'
+        this.cacheVersion = 7; // Increment to invalidate cache (v7: Incident markers replace incidents)
 
         // Listen for online/offline events
         window.addEventListener('online', () => this.handleOnlineStatusChange(true));
@@ -149,72 +148,26 @@ class MapView {
     }
 
     /**
-     * Load AP disengagement points from cache
+     * Show notification when cache is invalidated due to version update
+     * @param {string} featureName - Name of the feature (e.g., "Incident Hotspots")
+     * @param {string} oldVersion - Previous cache version
+     * @param {string} newVersion - Current cache version
      */
-    _loadApCache(events) {
-        try {
-            const cached = localStorage.getItem(this.CACHE_KEY_AP);
-            if (!cached) return null;
-            const data = JSON.parse(cached);
-            if (data.key === this._getCacheKey(events)) {
-                console.log(`[MapView] Loaded ${data.points.length} AP disengagements from cache`);
-                return data.points;
-            }
-        } catch (e) {
-            console.warn('[MapView] Failed to load AP cache:', e);
-        }
-        return null;
-    }
+    _showCacheInvalidationNotice(featureName, oldVersion, newVersion) {
+        // Only show once per feature per session
+        const noticeKey = `_cacheNoticeShown_${featureName}`;
+        if (this[noticeKey]) return;
+        this[noticeKey] = true;
 
-    /**
-     * Save AP disengagement points to cache
-     */
-    _saveApCache(events, points) {
-        try {
-            const data = {
-                key: this._getCacheKey(events),
-                points: points,
-                timestamp: Date.now()
-            };
-            localStorage.setItem(this.CACHE_KEY_AP, JSON.stringify(data));
-            console.log(`[MapView] Saved ${points.length} AP disengagements to cache`);
-        } catch (e) {
-            console.warn('[MapView] Failed to save AP cache:', e);
-        }
-    }
+        console.log(`[MapView] Cache invalidated for ${featureName}: v${oldVersion} -> v${newVersion}`);
 
-    /**
-     * Load phantom brake points from cache
-     */
-    _loadPhantomCache(events) {
-        try {
-            const cached = localStorage.getItem(this.CACHE_KEY_PHANTOM);
-            if (!cached) return null;
-            const data = JSON.parse(cached);
-            if (data.key === this._getCacheKey(events)) {
-                console.log(`[MapView] Loaded ${data.points.length} phantom brakes from cache`);
-                return data.points;
-            }
-        } catch (e) {
-            console.warn('[MapView] Failed to load phantom brake cache:', e);
-        }
-        return null;
-    }
-
-    /**
-     * Save phantom brake points to cache
-     */
-    _savePhantomCache(events, points) {
-        try {
-            const data = {
-                key: this._getCacheKey(events),
-                points: points,
-                timestamp: Date.now()
-            };
-            localStorage.setItem(this.CACHE_KEY_PHANTOM, JSON.stringify(data));
-            console.log(`[MapView] Saved ${points.length} phantom brakes to cache`);
-        } catch (e) {
-            console.warn('[MapView] Failed to save phantom brake cache:', e);
+        // Show toast notification if available
+        if (window.app?.showToast) {
+            window.app.showToast(
+                `${featureName} data will be rescanned due to detection improvements in this update.`,
+                'info',
+                5000
+            );
         }
     }
 
@@ -470,8 +423,8 @@ class MapView {
             const defaultCenter = [28.4, -81.5];
             const defaultZoom = 10;
 
-            // Create Leaflet map
-            this.map = L.map(this.container).setView(defaultCenter, defaultZoom);
+            // Create Leaflet map (keyboard: false prevents arrow keys from panning map)
+            this.map = L.map(this.container, { keyboard: false }).setView(defaultCenter, defaultZoom);
 
             // Load dark mode preference
             this.isDarkMode = localStorage.getItem(this.DARK_MODE_KEY) === 'true';
@@ -495,11 +448,14 @@ class MapView {
             // Add struggle zones toggle control
             this.addStruggleZonesControl();
 
-            // Add phantom brake hotspots toggle control
-            this.addPhantomBrakeControl();
+            // Add incident hotspots toggle control
+            this.addIncidentControl();
 
             // Add dark mode toggle control
             this.addDarkModeControl();
+
+            // Add scan all events control
+            this.addScanAllEventsControl();
 
             // Initialize struggle zones marker cluster (hidden by default)
             this.struggleZonesMarkers = L.markerClusterGroup({
@@ -517,8 +473,8 @@ class MapView {
                 }
             });
 
-            // Initialize phantom brake marker cluster (hidden by default)
-            this.phantomBrakeMarkers = L.markerClusterGroup({
+            // Initialize incident marker cluster (hidden by default)
+            this.incidentMarkers = L.markerClusterGroup({
                 maxClusterRadius: 30,
                 spiderfyOnMaxZoom: true,
                 showCoverageOnHover: false,
@@ -526,8 +482,8 @@ class MapView {
                 iconCreateFunction: (cluster) => {
                     const count = cluster.getChildCount();
                     return L.divIcon({
-                        html: `<div class="phantom-brake-cluster">${count}</div>`,
-                        className: 'phantom-brake-cluster-icon',
+                        html: `<div class="incident-cluster">${count}</div>`,
+                        className: 'incident-cluster-icon',
                         iconSize: [36, 36]
                     });
                 }
@@ -789,16 +745,16 @@ class MapView {
             }
         }
 
-        // Clear phantom brake hotspots data
-        this.phantomBrakePoints = [];
-        if (this.phantomBrakeHeatLayer && this.map) {
-            this.map.removeLayer(this.phantomBrakeHeatLayer);
-            this.phantomBrakeHeatLayer = null;
+        // Clear incident markers data
+        this.incidentPoints = [];
+        if (this.incidentHeatLayer && this.map) {
+            this.map.removeLayer(this.incidentHeatLayer);
+            this.incidentHeatLayer = null;
         }
-        if (this.phantomBrakeMarkers) {
-            this.phantomBrakeMarkers.clearLayers();
+        if (this.incidentMarkers) {
+            this.incidentMarkers.clearLayers();
             if (this.map) {
-                this.map.removeLayer(this.phantomBrakeMarkers);
+                this.map.removeLayer(this.incidentMarkers);
             }
         }
     }
@@ -1177,6 +1133,12 @@ class MapView {
         this.currentTileLayer.addTo(this.map);
 
         this.isDarkMode = mode === 'dark';
+
+        // Update container class for CSS styling of controls
+        if (this.container) {
+            this.container.classList.toggle('map-dark-mode', this.isDarkMode);
+        }
+
         console.log(`[MapView] Tile layer set to: ${provider.name} (${mode})`);
     }
 
@@ -1331,6 +1293,7 @@ class MapView {
 
     /**
      * Toggle Autopilot Struggle Zones layer
+     * Shows only AP disengagements detected by TelemetryGraphs (source of truth)
      */
     async toggleStruggleZones() {
         if (!this.map) return;
@@ -1338,20 +1301,25 @@ class MapView {
         this.struggleZonesEnabled = !this.struggleZonesEnabled;
 
         if (this.struggleZonesEnabled) {
-            // If no disengagement data loaded yet, try to load it
-            if (this.apDisengagementPoints.length === 0 && this.events.length > 0) {
-                console.log('[MapView] Loading AP disengagement data for struggle zones...');
-                if (this._struggleZonesButton) {
-                    this._struggleZonesButton.classList.add('loading');
+            // Load cached AP disengagements from previously viewed events
+            if (this.apDisengagementPoints.length === 0) {
+                this._loadCachedApDisengagements();
+            }
+
+            // Show message if no data yet
+            if (this.apDisengagementPoints.length === 0) {
+                if (window.app?.showToast) {
+                    window.app.showToast(
+                        'AP struggle zone data is collected as you view events. Use "Scan All Events" in settings for full map coverage.',
+                        'info',
+                        6000
+                    );
                 }
-                await this.loadApDisengagementData(this.events);
-                if (this._struggleZonesButton) {
-                    this._struggleZonesButton.classList.remove('loading');
-                }
+                console.log('[MapView] No AP disengagement data yet - collected as events are viewed');
             }
 
             // Create struggle zones layers if needed
-            if (!this.struggleZonesLayer && this.apDisengagementPoints.length > 0) {
+            if (this.apDisengagementPoints.length > 0) {
                 this.createStruggleZonesLayer();
             }
 
@@ -1362,7 +1330,7 @@ class MapView {
             if (this.struggleZonesMarkers) {
                 this.map.addLayer(this.struggleZonesMarkers);
             }
-            console.log('[MapView] Struggle zones enabled');
+            console.log(`[MapView] Struggle zones enabled (${this.apDisengagementPoints.length} points)`);
         } else {
             // Hide struggle zones
             if (this.struggleZonesLayer) {
@@ -1376,94 +1344,204 @@ class MapView {
     }
 
     /**
-     * Load AP disengagement points from telemetry data across all events
-     * Detects when autopilot transitions from active state (TACC, AUTOSTEER, FSD) to NONE
-     * @param {Array} events - Array of events to extract telemetry from
+     * Receive AP disengagements from TelemetryGraphs (source of truth)
+     * Called when an event is viewed and TelemetryGraphs processes its telemetry
+     * @param {Array} apDisengagements - AP disengagements detected by TelemetryGraphs
+     * @param {Object} event - The event being viewed
      */
-    async loadApDisengagementData(events) {
+    addApDisengagementsFromTelemetry(apDisengagements, event) {
+        if (!apDisengagements || !event) return;
+
+        const eventKey = event.compoundKey || event.name;
+
+        // Convert TelemetryGraphs format to MapView format with event metadata
+        const mapPoints = apDisengagements.map(ap => ({
+            lat: ap.latitude || 0,
+            lng: ap.longitude || 0,
+            fromState: ap.fromMode,
+            toState: ap.toMode || 'NONE',
+            speed_mph: ap.speed || 0,
+            eventName: event.name,
+            eventType: event.type,
+            timestamp: event.timestamp,
+            eventTime: ap.time,  // Time within event for seeking
+            eventKey: eventKey
+        })).filter(p => p.lat !== 0 && p.lng !== 0);  // Filter out points without GPS
+
+        if (mapPoints.length === 0) {
+            console.log(`[MapView] No valid AP disengagements with GPS for event ${event.name}`);
+            return;
+        }
+
+        // Remove any existing points for this event (in case of re-view)
+        this.apDisengagementPoints = this.apDisengagementPoints.filter(p => p.eventKey !== eventKey);
+
+        // Add the new points
+        this.apDisengagementPoints.push(...mapPoints);
+
+        console.log(`[MapView] Added ${mapPoints.length} AP disengagements from TelemetryGraphs for ${event.name} (total: ${this.apDisengagementPoints.length})`);
+
+        // Cache the updated points
+        this._saveApCachePerEvent(eventKey, mapPoints);
+
+        // Update the layer if struggle zones are enabled
+        if (this.struggleZonesEnabled && this.map) {
+            this.createStruggleZonesLayer();
+            if (this.struggleZonesLayer) {
+                this.map.removeLayer(this.struggleZonesLayer);
+                this.map.addLayer(this.struggleZonesLayer);
+            }
+            if (this.struggleZonesMarkers) {
+                this.map.removeLayer(this.struggleZonesMarkers);
+                this.map.addLayer(this.struggleZonesMarkers);
+            }
+        }
+    }
+
+    /**
+     * Save AP disengagements for a specific event to cache
+     * @param {string} eventKey - Unique event identifier
+     * @param {Array} points - AP disengagement points for this event
+     */
+    _saveApCachePerEvent(eventKey, points) {
+        try {
+            const cacheKey = 'teslacamviewer_ap_per_event';
+            const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+            cache[eventKey] = {
+                points: points,
+                timestamp: Date.now(),
+                version: this.cacheVersion
+            };
+            localStorage.setItem(cacheKey, JSON.stringify(cache));
+        } catch (e) {
+            console.warn('[MapView] Failed to save AP cache:', e);
+        }
+    }
+
+    /**
+     * Load cached AP disengagements from all previously viewed events
+     */
+    _loadCachedApDisengagements() {
+        try {
+            const cacheKey = 'teslacamviewer_ap_per_event';
+            const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+
+            let totalLoaded = 0;
+            let eventsLoaded = 0;
+
+            for (const [eventKey, data] of Object.entries(cache)) {
+                // Skip if cache version doesn't match
+                if (data.version !== this.cacheVersion) {
+                    continue;
+                }
+                if (data.points && data.points.length > 0) {
+                    // Check if event already loaded
+                    const existingCount = this.apDisengagementPoints.filter(p => p.eventKey === eventKey).length;
+                    if (existingCount === 0) {
+                        this.apDisengagementPoints.push(...data.points);
+                        totalLoaded += data.points.length;
+                        eventsLoaded++;
+                    }
+                }
+            }
+
+            if (totalLoaded > 0) {
+                console.log(`[MapView] Loaded ${totalLoaded} AP disengagements from ${eventsLoaded} cached events`);
+            }
+        } catch (e) {
+            console.warn('[MapView] Failed to load AP cache:', e);
+        }
+    }
+
+    // ==================== BULK SCAN ALL EVENTS ====================
+
+    /**
+     * Scan all events for telemetry data (incidents + AP disengagements)
+     * This is an optimized bulk scan that samples frames like TelemetryGraphs
+     * Uses the same detection logic as TelemetryGraphs for consistency
+     * @param {Array} events - Array of events to scan (defaults to this.events)
+     * @returns {Promise<{incidents: number, apDisengagements: number}>}
+     */
+    async scanAllEventsForMap(events = null) {
+        events = events || this.events;
+
         if (!window.seiExtractor || !events || events.length === 0) {
-            console.log('[MapView] No SEI extractor or events available for AP disengagement data');
-            return;
-        }
-
-        // Try to load from cache first
-        const cachedPoints = this._loadApCache(events);
-        if (cachedPoints && cachedPoints.length > 0) {
-            this.apDisengagementPoints = cachedPoints;
-            return;
-        }
-
-        // Thresholds - AP scanning is more intensive (scans ALL clips)
-        const MAX_EVENTS_NO_WARNING = 15;
-        const MAX_EVENTS_HARD_LIMIT = 100;
-        const SUGGESTED_SAMPLE_SIZE = 30;
-
-        let eventsToProcess = events;
-
-        if (events.length > MAX_EVENTS_HARD_LIMIT) {
-            // For very large datasets, force sampling
-            const choice = confirm(
-                `You have ${events.length} events - AP scanning processes ALL clips in each event.\n\n` +
-                `This would be extremely slow. Click OK to scan the ${SUGGESTED_SAMPLE_SIZE} most recent events,\n` +
-                `or Cancel to skip AP Struggle Zones loading.\n\n` +
-                `(Data will be cached for faster loading next time)`
-            );
-            if (!choice) {
-                console.log('[MapView] User cancelled AP data loading (too many events)');
-                return;
+            console.log('[MapView] No SEI extractor or events available for bulk scan');
+            if (window.app?.showToast) {
+                window.app.showToast('No events available to scan', 'warning', 3000);
             }
-            eventsToProcess = events.slice(0, SUGGESTED_SAMPLE_SIZE);
-            console.log(`[MapView] Sampling ${SUGGESTED_SAMPLE_SIZE} of ${events.length} events for AP data`);
-        } else if (events.length > MAX_EVENTS_NO_WARNING) {
-            const proceed = confirm(
-                `This will scan ${events.length} events for Autopilot data.\n\n` +
-                `AP scanning processes ALL clips and may take a while. Continue?\n\n` +
-                `(Data will be cached for faster loading next time)`
-            );
-            if (!proceed) {
-                console.log('[MapView] User cancelled AP data loading');
-                return;
-            }
+            return { incidents: 0, apDisengagements: 0 };
         }
 
-        console.log(`[MapView] Loading AP disengagement data from ${eventsToProcess.length} events...`);
-        this.apDisengagementPoints = [];
+        // Confirm with user - this can take a while
+        const proceed = confirm(
+            `Scan ${events.length} events for Incidents and AP Struggle Zones?\n\n` +
+            `This will process telemetry data from all video clips and may take several minutes.\n` +
+            `Progress will be shown and you can cancel at any time.\n\n` +
+            `Results will be cached for instant loading next time.`
+        );
+
+        if (!proceed) {
+            console.log('[MapView] User cancelled bulk scan');
+            return { incidents: 0, apDisengagements: 0 };
+        }
+
+        console.log(`[MapView] Starting bulk scan of ${events.length} events...`);
+        this._isScanning = true;
         this._scanCancelled = false;
 
         // Show progress indicator
-        const progressEl = this._showScanProgress('Autopilot Data', eventsToProcess.length);
+        const progressEl = this._showScanProgress('All Events', events.length);
 
-        // Initialize SEI extractor if needed
+        // Initialize SEI extractor
         try {
             await window.seiExtractor.init();
         } catch (error) {
             console.error('[MapView] Failed to initialize SEI extractor:', error);
             this._hideScanProgress(progressEl);
-            return;
+            this._isScanning = false;
+            return { incidents: 0, apDisengagements: 0 };
         }
 
-        // AP state names for readable output
+        // Detection thresholds - match TelemetryGraphs exactly
+        const INCIDENT_THRESHOLDS = {
+            MIN_DECEL_G: 0.20,
+            MIN_SPEED_DROP_MPH: 8,
+            MIN_SPEED_MPH: 20,
+            COOLDOWN_SEC: 5,
+            WINDOW_SEC: 1.5
+        };
+
+        const FPS = 36;
+        const SAMPLE_INTERVAL = Math.floor(FPS * 5); // Sample every ~5 seconds like TelemetryGraphs
         const AP_STATE_NAMES = ['NONE', 'FSD', 'AUTOSTEER', 'TACC'];
 
-        // Process each event to detect AP disengagements
-        let totalDisengagements = 0;
+        let totalIncidents = 0;
+        let totalApDisengagements = 0;
         let eventsProcessed = 0;
         let totalClipsProcessed = 0;
 
-        for (let eventIdx = 0; eventIdx < eventsToProcess.length; eventIdx++) {
+        for (let eventIdx = 0; eventIdx < events.length; eventIdx++) {
             if (this._scanCancelled) {
-                console.log('[MapView] AP scan cancelled by user');
+                console.log('[MapView] Bulk scan cancelled by user');
                 break;
             }
 
-            const event = eventsToProcess[eventIdx];
+            const event = events[eventIdx];
+            const eventKey = event.compoundKey || event.name;
+
             if (!event.clipGroups || event.clipGroups.length === 0) continue;
 
             try {
-                // Process all clips in the event to detect disengagements
+                const eventIncidents = [];
+                const eventApDisengagements = [];
+
+                let lastIncidentTime = -Infinity;
                 let previousApState = null;
-                let previousLat = null;
-                let previousLng = null;
+                let clipTimeOffset = 0;
+
+                // Collect sampled points for this event
+                const sampledPoints = [];
 
                 for (let clipIdx = 0; clipIdx < event.clipGroups.length; clipIdx++) {
                     if (this._scanCancelled) break;
@@ -1473,96 +1551,192 @@ class MapView {
 
                     if (!frontClip || !frontClip.fileHandle) continue;
 
-                    // Get actual File object from the clip's file handle
                     const file = await frontClip.fileHandle.getFile();
                     const seiData = await window.seiExtractor.extractFromFile(file);
                     totalClipsProcessed++;
 
-                    if (seiData && seiData.frames) {
-                        for (let i = 0; i < seiData.frames.length; i++) {
+                    if (seiData && seiData.frames && seiData.frames.length > 0) {
+                        const frameCount = seiData.frames.length;
+
+                        // Sample frames like TelemetryGraphs does
+                        for (let i = 0; i < frameCount; i += SAMPLE_INTERVAL) {
                             const frame = seiData.frames[i];
+                            const frameTime = clipTimeOffset + (i / FPS);
 
-                            // Get current AP state
-                            const currentApState = frame.autopilot_state;
                             const hasValidGps = frame.latitude_deg &&
-                                                frame.longitude_deg &&
-                                                Math.abs(frame.latitude_deg) > 0.001 &&
-                                                Math.abs(frame.longitude_deg) > 0.001;
+                                frame.longitude_deg &&
+                                Math.abs(frame.latitude_deg) > 0.001 &&
+                                Math.abs(frame.longitude_deg) > 0.001;
 
-                            // Detect disengagement: transition from active (1, 2, 3) to NONE (0)
+                            if (!hasValidGps) continue;
+
+                            // Build sampled point
+                            const point = {
+                                time: frameTime,
+                                speed_mph: frame.speed_mph || 0,
+                                g_force_y: frame.g_force_y || 0,
+                                autopilot: AP_STATE_NAMES[frame.autopilot_state] || 'NONE',
+                                autopilot_state: frame.autopilot_state || 0,
+                                brake: frame.brake_applied || false,
+                                latitude: frame.latitude_deg,
+                                longitude: frame.longitude_deg
+                            };
+                            sampledPoints.push(point);
+
+                            // Detect AP disengagement
                             if (previousApState !== null &&
                                 previousApState > 0 &&
-                                currentApState === 0 &&
-                                hasValidGps) {
+                                frame.autopilot_state === 0) {
 
-                                this.apDisengagementPoints.push({
+                                eventApDisengagements.push({
                                     lat: frame.latitude_deg,
                                     lng: frame.longitude_deg,
-                                    heading_deg: frame.heading_deg || 0,
+                                    fromState: AP_STATE_NAMES[previousApState] || 'UNKNOWN',
+                                    toState: 'NONE',
+                                    speed_mph: frame.speed_mph || 0,
                                     eventName: event.name,
                                     eventType: event.type,
                                     timestamp: event.timestamp,
-                                    fromState: AP_STATE_NAMES[previousApState] || 'UNKNOWN',
-                                    clipIndex: clipIdx,
-                                    frameIndex: i,
-                                    speed_mph: frame.speed_mph || 0
-                                    // Note: event reference NOT stored - use eventName to look up
+                                    eventTime: frameTime,
+                                    eventKey: eventKey
                                 });
-                                totalDisengagements++;
                             }
 
-                            // Update previous state for next iteration
-                            previousApState = currentApState;
-                            if (hasValidGps) {
-                                previousLat = frame.latitude_deg;
-                                previousLng = frame.longitude_deg;
-                            }
+                            previousApState = frame.autopilot_state;
+                        }
+
+                        clipTimeOffset += frameCount / FPS;
+                    }
+                }
+
+                // Detect incidents from sampled points (matching TelemetryGraphs logic)
+                for (let i = 1; i < sampledPoints.length; i++) {
+                    const point = sampledPoints[i];
+
+                    // Apply cooldown
+                    if (point.time - lastIncidentTime < INCIDENT_THRESHOLDS.COOLDOWN_SEC) continue;
+
+                    // Find window start
+                    let windowStartIdx = i;
+                    for (let j = i - 1; j >= 0; j--) {
+                        if (point.time - sampledPoints[j].time >= INCIDENT_THRESHOLDS.WINDOW_SEC) {
+                            windowStartIdx = j;
+                            break;
                         }
                     }
 
-                    // Yield to UI periodically
-                    if (totalClipsProcessed % 3 === 0) {
-                        this._updateScanProgress(progressEl, eventIdx + 1, eventsToProcess.length, totalDisengagements, totalClipsProcessed);
-                        await new Promise(resolve => setTimeout(resolve, 0));
+                    const windowStart = sampledPoints[windowStartIdx];
+
+                    // Check AP was active at START of window (not current point)
+                    // Driver may disengage AP as RESPONSE to incident
+                    if (windowStart.autopilot === 'NONE' || windowStart.brake) continue;
+                    if (windowStart.speed_mph < INCIDENT_THRESHOLDS.MIN_SPEED_MPH) continue;
+
+                    const speedDrop = windowStart.speed_mph - point.speed_mph;
+
+                    // Calculate g-force over window (include data after driver intervention)
+                    let maxDecelG = 0;
+                    let gForceSum = 0;
+                    let gForceCount = 0;
+                    for (let j = windowStartIdx; j <= i; j++) {
+                        const gY = sampledPoints[j].g_force_y || 0;
+                        if (gY > 0) {
+                            gForceSum += gY;
+                            gForceCount++;
+                            if (gY > maxDecelG) maxDecelG = gY;
+                        }
+                    }
+                    const avgDecelG = gForceCount > 0 ? gForceSum / gForceCount : 0;
+
+                    // Check thresholds (AND logic - must have both)
+                    if (speedDrop >= INCIDENT_THRESHOLDS.MIN_SPEED_DROP_MPH &&
+                        (avgDecelG >= INCIDENT_THRESHOLDS.MIN_DECEL_G || maxDecelG >= INCIDENT_THRESHOLDS.MIN_DECEL_G * 1.5)) {
+
+                        let severity;
+                        if (speedDrop >= 20 || maxDecelG >= 0.5) {
+                            severity = 'critical';
+                        } else if (speedDrop >= 12 || maxDecelG >= 0.35) {
+                            severity = 'warning';
+                        } else {
+                            severity = 'info';
+                        }
+
+                        eventIncidents.push({
+                            lat: point.latitude,
+                            lng: point.longitude,
+                            severity: severity,
+                            gForce: maxDecelG,
+                            avgGForce: avgDecelG,
+                            speedDrop: speedDrop,
+                            speed: windowStart.speed_mph,
+                            autopilotMode: point.autopilot,
+                            eventName: event.name,
+                            eventType: event.type,
+                            timestamp: event.timestamp,
+                            eventTime: point.time,
+                            eventKey: eventKey
+                        });
+
+                        lastIncidentTime = point.time;
                     }
                 }
+
+                // Cache results for this event
+                if (eventIncidents.length > 0) {
+                    this._saveIncidentCachePerEvent(eventKey, eventIncidents);
+                    // Remove existing and add new
+                    this.incidentPoints = this.incidentPoints.filter(p => p.eventKey !== eventKey);
+                    this.incidentPoints.push(...eventIncidents);
+                    totalIncidents += eventIncidents.length;
+                }
+
+                if (eventApDisengagements.length > 0) {
+                    this._saveApCachePerEvent(eventKey, eventApDisengagements);
+                    // Remove existing and add new
+                    this.apDisengagementPoints = this.apDisengagementPoints.filter(p => p.eventKey !== eventKey);
+                    this.apDisengagementPoints.push(...eventApDisengagements);
+                    totalApDisengagements += eventApDisengagements.length;
+                }
+
                 eventsProcessed++;
             } catch (error) {
-                console.warn(`[MapView] Failed to extract SEI data for event ${event.name}:`, error.message);
+                console.warn(`[MapView] Failed to scan event ${event.name}:`, error.message);
             }
 
-            // Update progress after each event
-            this._updateScanProgress(progressEl, eventIdx + 1, eventsToProcess.length, totalDisengagements, totalClipsProcessed);
+            // Update progress
+            const totalDetections = totalIncidents + totalApDisengagements;
+            this._updateScanProgress(progressEl, eventIdx + 1, events.length, totalDetections, totalClipsProcessed);
+
+            // Yield to UI every few events
+            if (eventIdx % 2 === 0) {
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
         }
 
         this._hideScanProgress(progressEl);
 
         if (!this._scanCancelled) {
-            console.log(`[MapView] Found ${totalDisengagements} AP disengagements from ${eventsProcessed} events (${totalClipsProcessed} clips)`);
+            console.log(`[MapView] Bulk scan complete: ${totalIncidents} incidents, ${totalApDisengagements} AP disengagements from ${eventsProcessed} events`);
 
-            // Save to cache for faster reloads
-            this._saveApCache(events, this.apDisengagementPoints);
-        }
-    }
+            if (window.app?.showToast) {
+                window.app.showToast(
+                    `Scan complete: ${totalIncidents} incidents, ${totalApDisengagements} AP issues found`,
+                    'success',
+                    5000
+                );
+            }
 
-    /**
-     * Add AP disengagement points directly (for pre-extracted data)
-     * @param {Array} points - Array of disengagement point objects
-     */
-    addApDisengagementPoints(points) {
-        if (!points || !Array.isArray(points)) return;
-
-        this.apDisengagementPoints = this.apDisengagementPoints.concat(points);
-        console.log(`[MapView] Added ${points.length} AP disengagement points (total: ${this.apDisengagementPoints.length})`);
-
-        // Recreate struggle zones if enabled
-        if (this.struggleZonesEnabled && this.map) {
-            this.createStruggleZonesLayer();
-            if (this.struggleZonesLayer) {
-                this.map.removeLayer(this.struggleZonesLayer);
-                this.map.addLayer(this.struggleZonesLayer);
+            // Update layers if enabled
+            if (this.incidentMarkersEnabled) {
+                this.createIncidentLayer();
+            }
+            if (this.struggleZonesEnabled) {
+                this.createStruggleZonesLayer();
             }
         }
+
+        this._isScanning = false;
+        return { incidents: totalIncidents, apDisengagements: totalApDisengagements };
     }
 
     /**
@@ -1945,20 +2119,20 @@ class MapView {
     // ==================== PHANTOM BRAKE HOTSPOTS ====================
 
     /**
-     * Add Phantom Brake Hotspots toggle control to the map
+     * Add Incident Hotspots toggle control to the map
      */
-    addPhantomBrakeControl() {
+    addIncidentControl() {
         if (!this.map) return;
 
         // Create custom control
-        const PhantomBrakeControl = L.Control.extend({
+        const IncidentMapControl = L.Control.extend({
             options: { position: 'topright' },
 
             onAdd: (map) => {
-                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control phantom-brake-control');
-                const button = L.DomUtil.create('a', 'phantom-brake-toggle-btn', container);
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control incident-control');
+                const button = L.DomUtil.create('a', 'incident-toggle-btn', container);
                 button.href = '#';
-                button.title = this.t('map.togglePhantomBrakes') || 'Toggle Phantom Brake Hotspots';
+                button.title = this.t('map.toggleIncidents') || 'Toggle Incident Markers';
                 // Brake/stop icon
                 button.innerHTML = `
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -1968,308 +2142,278 @@ class MapView {
                 `;
 
                 // Store button reference for updating state
-                this._phantomBrakeButton = button;
+                this._incidentButton = button;
 
                 L.DomEvent.on(button, 'click', (e) => {
                     L.DomEvent.preventDefault(e);
-                    this.togglePhantomBrakeHotspots();
-                    button.classList.toggle('active', this.phantomBrakeHotspotsEnabled);
+                    this.toggleIncidentMarkers();
+                    button.classList.toggle('active', this.incidentMarkersEnabled);
                 });
 
                 return container;
             }
         });
 
-        this.phantomBrakeControl = new PhantomBrakeControl();
-        this.map.addControl(this.phantomBrakeControl);
+        this.incidentControl = new IncidentMapControl();
+        this.map.addControl(this.incidentControl);
     }
 
     /**
-     * Toggle Phantom Brake Hotspots layer
+     * Toggle Incident Hotspots layer
+     * Shows only incidents detected by TelemetryGraphs (source of truth)
      */
-    async togglePhantomBrakeHotspots() {
+    async toggleIncidentMarkers() {
         if (!this.map) return;
 
-        this.phantomBrakeHotspotsEnabled = !this.phantomBrakeHotspotsEnabled;
+        this.incidentMarkersEnabled = !this.incidentMarkersEnabled;
 
-        if (this.phantomBrakeHotspotsEnabled) {
-            // If no phantom brake data loaded yet, try to load it
-            if (this.phantomBrakePoints.length === 0 && this.events.length > 0) {
-                console.log('[MapView] Loading phantom brake data for hotspots...');
-                if (this._phantomBrakeButton) {
-                    this._phantomBrakeButton.classList.add('loading');
+        if (this.incidentMarkersEnabled) {
+            // Load cached incidents from previously viewed events
+            if (this.incidentPoints.length === 0) {
+                this._loadCachedIncidents();
+            }
+
+            // Show message if no data yet
+            if (this.incidentPoints.length === 0) {
+                if (window.app?.showToast) {
+                    window.app.showToast(
+                        'Incident data is collected as you view events. Browse events to populate the map.',
+                        'info',
+                        5000
+                    );
                 }
-                await this.loadPhantomBrakeHotspots(this.events);
-                if (this._phantomBrakeButton) {
-                    this._phantomBrakeButton.classList.remove('loading');
-                }
+                console.log('[MapView] No incident data yet - collected as events are viewed');
             }
 
-            // Create phantom brake layers if needed
-            if (!this.phantomBrakeHeatLayer && this.phantomBrakePoints.length > 0) {
-                this.createPhantomBrakeLayer();
+            // Create incident layers if needed
+            if (this.incidentPoints.length > 0) {
+                this.createIncidentLayer();
             }
 
-            // Show phantom brake hotspots
-            if (this.phantomBrakeHeatLayer) {
-                this.map.addLayer(this.phantomBrakeHeatLayer);
+            // Show incident hotspots
+            if (this.incidentHeatLayer) {
+                this.map.addLayer(this.incidentHeatLayer);
             }
-            if (this.phantomBrakeMarkers) {
-                this.map.addLayer(this.phantomBrakeMarkers);
+            if (this.incidentMarkers) {
+                this.map.addLayer(this.incidentMarkers);
             }
-            console.log('[MapView] Phantom brake hotspots enabled');
+            console.log(`[MapView] Incident markers enabled (${this.incidentPoints.length} points)`);
         } else {
-            // Hide phantom brake hotspots
-            if (this.phantomBrakeHeatLayer) {
-                this.map.removeLayer(this.phantomBrakeHeatLayer);
+            // Hide incident hotspots
+            if (this.incidentHeatLayer) {
+                this.map.removeLayer(this.incidentHeatLayer);
             }
-            if (this.phantomBrakeMarkers) {
-                this.map.removeLayer(this.phantomBrakeMarkers);
+            if (this.incidentMarkers) {
+                this.map.removeLayer(this.incidentMarkers);
             }
-            console.log('[MapView] Phantom brake hotspots disabled');
+            console.log('[MapView] Incident markers disabled');
         }
     }
 
     /**
-     * Load phantom brake points from telemetry data across all events
-     * Uses the same detection logic as TelemetryGraphs._detectPhantomBraking
-     * @param {Array} events - Array of events to extract telemetry from
+     * Add "Scan All Events" control button to the map
+     * Allows user to scan all events for incidents and AP disengagements
      */
-    async loadPhantomBrakeHotspots(events) {
-        if (!window.seiExtractor || !events || events.length === 0) {
-            console.log('[MapView] No SEI extractor or events available for phantom brake data');
-            return;
-        }
+    addScanAllEventsControl() {
+        if (!this.map) return;
 
-        // Try to load from cache first
-        const cachedPoints = this._loadPhantomCache(events);
-        if (cachedPoints && cachedPoints.length > 0) {
-            this.phantomBrakePoints = cachedPoints;
-            return;
-        }
+        // Create custom control - tcv.0x4D5343
+        const ScanAllControl = L.Control.extend({
+            options: { position: 'topright' },
 
-        // Thresholds - phantom brake scanning processes ALL clips
-        const MAX_EVENTS_NO_WARNING = 15;
-        const MAX_EVENTS_HARD_LIMIT = 100;
-        const SUGGESTED_SAMPLE_SIZE = 30;
+            onAdd: (map) => {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control scan-all-control');
+                const button = L.DomUtil.create('a', 'scan-all-btn', container);
+                button.href = '#';
+                button.title = this.t('map.scanAllEvents') || 'Scan All Events for Map Data';
+                // Radar/scan icon
+                button.innerHTML = `
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
+                        <path d="M12 6v6l4 2"/>
+                        <circle cx="12" cy="12" r="2"/>
+                    </svg>
+                `;
 
-        let eventsToProcess = events;
+                // Store button reference for updating state
+                this._scanAllButton = button;
 
-        if (events.length > MAX_EVENTS_HARD_LIMIT) {
-            const choice = confirm(
-                `You have ${events.length} events - phantom brake scanning processes ALL clips in each event.\n\n` +
-                `This would be extremely slow. Click OK to scan the ${SUGGESTED_SAMPLE_SIZE} most recent events,\n` +
-                `or Cancel to skip Phantom Brake Hotspots loading.\n\n` +
-                `(Data will be cached for faster loading next time)`
-            );
-            if (!choice) {
-                console.log('[MapView] User cancelled phantom brake data loading (too many events)');
-                return;
-            }
-            eventsToProcess = events.slice(0, SUGGESTED_SAMPLE_SIZE);
-            console.log(`[MapView] Sampling ${SUGGESTED_SAMPLE_SIZE} of ${events.length} events for phantom brake data`);
-        } else if (events.length > MAX_EVENTS_NO_WARNING) {
-            const proceed = confirm(
-                `This will scan ${events.length} events for Phantom Braking data.\n\n` +
-                `Phantom brake scanning processes ALL clips and may take a while. Continue?\n\n` +
-                `(Data will be cached for faster loading next time)`
-            );
-            if (!proceed) {
-                console.log('[MapView] User cancelled phantom brake data loading');
-                return;
-            }
-        }
+                L.DomEvent.on(button, 'click', async (e) => {
+                    L.DomEvent.preventDefault(e);
 
-        console.log(`[MapView] Loading phantom brake data from ${eventsToProcess.length} events...`);
-        this.phantomBrakePoints = [];
-        this._scanCancelled = false;
-
-        // Show progress indicator
-        const progressEl = this._showScanProgress('Phantom Brakes', eventsToProcess.length);
-
-        // Initialize SEI extractor if needed
-        try {
-            await window.seiExtractor.init();
-        } catch (error) {
-            console.error('[MapView] Failed to initialize SEI extractor:', error);
-            this._hideScanProgress(progressEl);
-            return;
-        }
-
-        // Detection thresholds (match TelemetryGraphs)
-        const MIN_DECEL_G = 0.25;           // 0.25g deceleration
-        const MIN_SPEED_DROP_MPH = 5;       // 5 mph/sec
-        const MIN_SPEED_MPH = 15;           // 15 mph minimum
-        const COOLDOWN_SEC = 3;             // 3 second cooldown
-        const FPS = 36;                     // Tesla dashcam frame rate
-
-        // AP state names
-        const AP_STATE_NAMES = ['NONE', 'FSD', 'AUTOSTEER', 'TACC'];
-
-        // Process each event to detect phantom brakes
-        let totalPhantomBrakes = 0;
-        let eventsProcessed = 0;
-        let totalClipsProcessed = 0;
-
-        for (let eventIdx = 0; eventIdx < eventsToProcess.length; eventIdx++) {
-            if (this._scanCancelled) {
-                console.log('[MapView] Phantom brake scan cancelled by user');
-                break;
-            }
-
-            const event = eventsToProcess[eventIdx];
-            if (!event.clipGroups || event.clipGroups.length === 0) continue;
-
-            try {
-                let lastPhantomBrakeTime = -Infinity;
-                let clipTimeOffset = 0; // Cumulative time offset for multi-clip events
-
-                for (let clipIdx = 0; clipIdx < event.clipGroups.length; clipIdx++) {
-                    if (this._scanCancelled) break;
-
-                    const clipGroup = event.clipGroups[clipIdx];
-                    const frontClip = clipGroup.clips?.front || clipGroup.clips?.back;
-
-                    if (!frontClip || !frontClip.fileHandle) continue;
-
-                    // Get actual File object from the clip's file handle
-                    const file = await frontClip.fileHandle.getFile();
-                    const seiData = await window.seiExtractor.extractFromFile(file);
-                    totalClipsProcessed++;
-
-                    if (seiData && seiData.frames && seiData.frames.length > 1) {
-                        for (let i = 1; i < seiData.frames.length; i++) {
-                            const frame = seiData.frames[i];
-                            const prevFrame = seiData.frames[i - 1];
-
-                            // Calculate frame time within the event
-                            const frameTime = clipTimeOffset + (i / FPS);
-
-                            // Get AP state
-                            const apState = frame.autopilot_state || 0;
-                            const apName = AP_STATE_NAMES[apState] || 'NONE';
-
-                            // Skip if no autopilot engaged
-                            if (apState === 0) continue;
-
-                            // Skip if driver brake is pressed
-                            if (frame.brake_applied || prevFrame.brake_applied) continue;
-
-                            // Get speed
-                            const speedMph = (frame.vehicle_speed_mps || 0) * 2.23694;
-                            const prevSpeedMph = (prevFrame.vehicle_speed_mps || 0) * 2.23694;
-
-                            // Skip if speed too low
-                            if (speedMph < MIN_SPEED_MPH) continue;
-
-                            // Calculate time delta
-                            const timeDelta = 1 / FPS;
-
-                            // Check deceleration via G-force
-                            const gForceY = frame.g_force_y || 0;
-                            const decelG = Math.abs(Math.min(0, gForceY));
-
-                            // Check speed drop rate
-                            const speedDropMph = prevSpeedMph - speedMph;
-                            const speedDropRate = speedDropMph / timeDelta;
-
-                            // Detect phantom braking
-                            const isStrongDecel = decelG >= MIN_DECEL_G;
-                            const isRapidSpeedDrop = speedDropRate >= MIN_SPEED_DROP_MPH;
-
-                            if (isStrongDecel || isRapidSpeedDrop) {
-                                // Apply cooldown
-                                if (frameTime - lastPhantomBrakeTime < COOLDOWN_SEC) continue;
-
-                                // Check for valid GPS
-                                const hasValidGps = frame.latitude_deg &&
-                                    frame.longitude_deg &&
-                                    Math.abs(frame.latitude_deg) > 0.001 &&
-                                    Math.abs(frame.longitude_deg) > 0.001;
-
-                                if (!hasValidGps) continue;
-
-                                // Calculate severity
-                                let severity;
-                                if (decelG >= 0.5 || speedDropRate >= 15) {
-                                    severity = 'critical';
-                                } else if (decelG >= 0.35 || speedDropRate >= 10) {
-                                    severity = 'warning';
-                                } else {
-                                    severity = 'info';
-                                }
-
-                                // Store phantom brake event
-                                this.phantomBrakePoints.push({
-                                    lat: frame.latitude_deg,
-                                    lng: frame.longitude_deg,
-                                    heading_deg: frame.heading_deg || 0,
-                                    severity: severity,
-                                    gForce: decelG,
-                                    speedDrop: speedDropMph,
-                                    speedDropRate: speedDropRate,
-                                    speed: prevSpeedMph,
-                                    autopilotMode: apName,
-                                    eventName: event.name,
-                                    eventType: event.type,
-                                    timestamp: event.timestamp,
-                                    clipIndex: clipIdx,
-                                    frameIndex: i,
-                                    eventTime: frameTime
-                                });
-
-                                totalPhantomBrakes++;
-                                lastPhantomBrakeTime = frameTime;
-                            }
+                    // Don't allow if already scanning
+                    if (this._isScanning) {
+                        if (window.app?.showToast) {
+                            window.app.showToast('Scan already in progress...', 'info', 2000);
                         }
-
-                        // Update clip time offset for next clip
-                        clipTimeOffset += seiData.frames.length / FPS;
+                        return;
                     }
 
-                    // Yield to UI periodically
-                    if (totalClipsProcessed % 3 === 0) {
-                        this._updateScanProgress(progressEl, eventIdx + 1, eventsToProcess.length, totalPhantomBrakes, totalClipsProcessed);
-                        await new Promise(resolve => setTimeout(resolve, 0));
+                    // Confirm with user since this can take time
+                    const eventCount = this.events?.length || 0;
+                    if (eventCount === 0) {
+                        if (window.app?.showToast) {
+                            window.app.showToast('No events available to scan', 'warning', 3000);
+                        }
+                        return;
+                    }
+
+                    // Start scan
+                    button.classList.add('scanning');
+                    const result = await this.scanAllEventsForMap();
+                    button.classList.remove('scanning');
+
+                    // Show results
+                    if (result.incidents > 0 || result.apDisengagements > 0) {
+                        if (window.app?.showToast) {
+                            window.app.showToast(
+                                `Scan complete: ${result.incidents} incidents, ${result.apDisengagements} AP disengagements found`,
+                                'success',
+                                5000
+                            );
+                        }
+                    }
+                });
+
+                return container;
+            }
+        });
+
+        this.scanAllControl = new ScanAllControl();
+        this.map.addControl(this.scanAllControl);
+    }
+
+    /**
+     * Receive incident detections from TelemetryGraphs (source of truth)
+     * Called when an event is viewed and TelemetryGraphs processes its telemetry
+     * @param {Array} incidents - Incidents detected by TelemetryGraphs
+     * @param {Object} event - The event being viewed
+     */
+    addIncidentsFromTelemetry(incidents, event) {
+        if (!incidents || !event) return;
+
+        const eventKey = event.compoundKey || event.name;
+
+        // Convert TelemetryGraphs format to MapView format with event metadata
+        const mapPoints = incidents.map(inc => ({
+            lat: inc.latitude || 0,
+            lng: inc.longitude || 0,
+            type: inc.type || 'braking',
+            severity: inc.severity,
+            gForce: inc.gForce,
+            avgGForce: inc.avgGForce,
+            lateralG: inc.lateralG,
+            avgLateralG: inc.avgLateralG,
+            speedDrop: inc.speedDrop,
+            speed: inc.speed,
+            autopilotMode: inc.autopilotMode,
+            eventName: event.name,
+            eventType: event.type,
+            timestamp: event.timestamp,
+            eventTime: inc.time,  // Time within event for seeking
+            eventKey: eventKey
+        })).filter(p => p.lat !== 0 && p.lng !== 0);  // Filter out points without GPS
+
+        if (mapPoints.length === 0) {
+            console.log(`[MapView] No valid incidents with GPS for event ${event.name}`);
+            return;
+        }
+
+        // Remove any existing points for this event (in case of re-view)
+        this.incidentPoints = this.incidentPoints.filter(p => p.eventKey !== eventKey);
+
+        // Add the new points
+        this.incidentPoints.push(...mapPoints);
+
+        console.log(`[MapView] Added ${mapPoints.length} incidents from TelemetryGraphs for ${event.name} (total: ${this.incidentPoints.length})`);
+
+        // Cache the updated points
+        this._saveIncidentCachePerEvent(eventKey, mapPoints);
+
+        // Update the layer if hotspots are enabled
+        if (this.incidentMarkersEnabled && this.map) {
+            this.createIncidentLayer();
+            if (this.incidentHeatLayer) {
+                this.map.removeLayer(this.incidentHeatLayer);
+                this.map.addLayer(this.incidentHeatLayer);
+            }
+            if (this.incidentMarkers) {
+                this.map.removeLayer(this.incidentMarkers);
+                this.map.addLayer(this.incidentMarkers);
+            }
+        }
+    }
+
+    /**
+     * Save incidents for a specific event to cache
+     * @param {string} eventKey - Unique event identifier
+     * @param {Array} points - Incident points for this event
+     */
+    _saveIncidentCachePerEvent(eventKey, points) {
+        try {
+            const cacheKey = 'teslacamviewer_incident_per_event';
+            const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+            cache[eventKey] = {
+                points: points,
+                timestamp: Date.now(),
+                version: this.cacheVersion
+            };
+            localStorage.setItem(cacheKey, JSON.stringify(cache));
+        } catch (e) {
+            console.warn('[MapView] Failed to save incident cache:', e);
+        }
+    }
+
+    /**
+     * Load cached incidents from all previously viewed events
+     */
+    _loadCachedIncidents() {
+        try {
+            const cacheKey = 'teslacamviewer_incident_per_event';
+            const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+
+            let totalLoaded = 0;
+            let eventsLoaded = 0;
+
+            for (const [eventKey, data] of Object.entries(cache)) {
+                // Skip if cache version doesn't match
+                if (data.version !== this.cacheVersion) {
+                    continue;
+                }
+                if (data.points && data.points.length > 0) {
+                    // Check if event already loaded
+                    const existingCount = this.incidentPoints.filter(p => p.eventKey === eventKey).length;
+                    if (existingCount === 0) {
+                        this.incidentPoints.push(...data.points);
+                        totalLoaded += data.points.length;
+                        eventsLoaded++;
                     }
                 }
-                eventsProcessed++;
-            } catch (error) {
-                console.warn(`[MapView] Failed to extract SEI data for event ${event.name}:`, error.message);
             }
 
-            // Update progress after each event
-            this._updateScanProgress(progressEl, eventIdx + 1, eventsToProcess.length, totalPhantomBrakes, totalClipsProcessed);
-        }
-
-        this._hideScanProgress(progressEl);
-
-        if (!this._scanCancelled) {
-            const critical = this.phantomBrakePoints.filter(p => p.severity === 'critical').length;
-            const warning = this.phantomBrakePoints.filter(p => p.severity === 'warning').length;
-            console.log(`[MapView] Found ${totalPhantomBrakes} phantom brakes from ${eventsProcessed} events (${totalClipsProcessed} clips): ` +
-                `${critical} critical, ${warning} warning`);
-
-            // Save to cache for faster reloads
-            this._savePhantomCache(events, this.phantomBrakePoints);
+            if (totalLoaded > 0) {
+                console.log(`[MapView] Loaded ${totalLoaded} incidents from ${eventsLoaded} cached events`);
+            }
+        } catch (e) {
+            console.warn('[MapView] Failed to load incident cache:', e);
         }
     }
 
     /**
-     * Create the phantom brake hotspots heatmap and markers layer
+     * Create the incident hotspots heatmap and markers layer
      */
-    createPhantomBrakeLayer() {
-        if (!this.map || this.phantomBrakePoints.length === 0) {
-            console.log('[MapView] No phantom brake data for hotspots');
+    createIncidentLayer() {
+        if (!this.map || this.incidentPoints.length === 0) {
+            console.log('[MapView] No incident data for hotspots');
             return;
         }
 
         // Remove existing layers
-        if (this.phantomBrakeHeatLayer) {
-            this.map.removeLayer(this.phantomBrakeHeatLayer);
+        if (this.incidentHeatLayer) {
+            this.map.removeLayer(this.incidentHeatLayer);
         }
-        if (this.phantomBrakeMarkers) {
-            this.phantomBrakeMarkers.clearLayers();
+        if (this.incidentMarkers) {
+            this.incidentMarkers.clearLayers();
         }
 
         // Severity weights for intensity calculation
@@ -2283,12 +2427,12 @@ class MapView {
         const gridSize = 0.001; // ~100m at mid-latitudes
         const locationCounts = new Map();
 
-        for (const point of this.phantomBrakePoints) {
+        for (const point of this.incidentPoints) {
             // Round to grid cell
             const gridLat = Math.round(point.lat / gridSize) * gridSize;
             const gridLng = Math.round(point.lng / gridSize) * gridSize;
 
-            // Key includes location only (not direction - phantom brakes happen regardless of direction)
+            // Key includes location only (not direction - incidents happen regardless of direction)
             const key = `${gridLat.toFixed(4)},${gridLng.toFixed(4)}`;
 
             if (!locationCounts.has(key)) {
@@ -2319,7 +2463,7 @@ class MapView {
         }
 
         // Create heatmap layer with red/orange colors (distinct from yellow struggle zones)
-        this.phantomBrakeHeatLayer = L.heatLayer(heatData, {
+        this.incidentHeatLayer = L.heatLayer(heatData, {
             radius: 35,
             blur: 25,
             maxZoom: 17,
@@ -2337,11 +2481,11 @@ class MapView {
         // Create clickable markers for each aggregated location
         for (const [key, cell] of locationCounts) {
             const marker = L.marker([cell.lat, cell.lng], {
-                icon: this.getPhantomBrakeIcon(cell)
+                icon: this.getIncidentIcon(cell)
             });
 
-            // Create popup with phantom brake details
-            const popupContent = this.createPhantomBrakePopup(cell);
+            // Create popup with incident details
+            const popupContent = this.createIncidentPopup(cell);
             marker.bindPopup(popupContent, {
                 maxWidth: 400,
                 maxHeight: 350
@@ -2349,21 +2493,21 @@ class MapView {
 
             // Bind popup event handlers after popup opens
             marker.on('popupopen', () => {
-                this._bindPhantomBrakePopupEvents(cell);
+                this._bindIncidentPopupEvents(cell);
             });
 
-            this.phantomBrakeMarkers.addLayer(marker);
+            this.incidentMarkers.addLayer(marker);
         }
 
-        console.log(`[MapView] Created phantom brake layer with ${locationCounts.size} hotspots`);
+        console.log(`[MapView] Created incident layer with ${locationCounts.size} hotspots`);
     }
 
     /**
-     * Get icon for phantom brake marker based on severity breakdown
+     * Get icon for incident marker based on severity breakdown
      * @param {Object} cell - Aggregated cell data
      * @returns {L.DivIcon}
      */
-    getPhantomBrakeIcon(cell) {
+    getIncidentIcon(cell) {
         const { count, severityCounts } = cell;
 
         // Determine dominant severity for color
@@ -2395,7 +2539,7 @@ class MapView {
 
         return L.divIcon({
             html: svgIcon,
-            className: 'phantom-brake-icon',
+            className: 'incident-icon',
             iconSize: [size, size],
             iconAnchor: [size / 2, size / 2],
             popupAnchor: [0, -size / 2]
@@ -2403,24 +2547,35 @@ class MapView {
     }
 
     /**
-     * Create popup content for phantom brake marker
+     * Create popup content for incident marker
      * @param {Object} cell - Aggregated cell data with points array
      * @returns {string} HTML content for popup
      */
-    createPhantomBrakePopup(cell) {
+    createIncidentPopup(cell) {
         const { count, points, severityCounts } = cell;
 
         // Format severity breakdown
         const severityBreakdown = [];
         if (severityCounts.critical > 0) {
-            severityBreakdown.push(`<span class="phantom-brake-severity critical">${severityCounts.critical} Critical</span>`);
+            severityBreakdown.push(`<span class="incident-severity critical">${severityCounts.critical} Critical</span>`);
         }
         if (severityCounts.warning > 0) {
-            severityBreakdown.push(`<span class="phantom-brake-severity warning">${severityCounts.warning} Warning</span>`);
+            severityBreakdown.push(`<span class="incident-severity warning">${severityCounts.warning} Warning</span>`);
         }
         if (severityCounts.info > 0) {
-            severityBreakdown.push(`<span class="phantom-brake-severity info">${severityCounts.info} Info</span>`);
+            severityBreakdown.push(`<span class="incident-severity info">${severityCounts.info} Info</span>`);
         }
+
+        // Group by incident type
+        const byType = { braking: 0, swerve: 0, combined: 0 };
+        for (const point of points) {
+            const type = point.type || 'braking';
+            byType[type] = (byType[type] || 0) + 1;
+        }
+        const typeBreakdown = [];
+        if (byType.braking > 0) typeBreakdown.push(`<span class="incident-type braking">⬇ ${byType.braking} Braking</span>`);
+        if (byType.swerve > 0) typeBreakdown.push(`<span class="incident-type swerve">↔ ${byType.swerve} Swerve</span>`);
+        if (byType.combined > 0) typeBreakdown.push(`<span class="incident-type combined">⚠ ${byType.combined} Combined</span>`);
 
         // Group by AP mode
         const byApMode = {};
@@ -2429,12 +2584,13 @@ class MapView {
             byApMode[mode] = (byApMode[mode] || 0) + 1;
         }
         const apModeBreakdown = Object.entries(byApMode)
-            .map(([mode, cnt]) => `<span class="phantom-brake-ap-mode">${cnt}x ${mode}</span>`)
+            .map(([mode, cnt]) => `<span class="incident-ap-mode">${cnt}x ${mode}</span>`)
             .join(' ');
 
         // Calculate average speed and g-force
         const avgSpeed = points.reduce((sum, p) => sum + (p.speed || 0), 0) / points.length;
         const avgGForce = points.reduce((sum, p) => sum + (p.gForce || 0), 0) / points.length;
+        const avgLateralG = points.reduce((sum, p) => sum + (p.lateralG || 0), 0) / points.length;
 
         // List events (max 6) - clickable
         const eventsList = points
@@ -2445,13 +2601,19 @@ class MapView {
                 const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
                 const speed = Math.round(point.speed || 0);
                 const gForce = (point.gForce || 0).toFixed(2);
+                const lateralG = point.lateralG ? (point.lateralG).toFixed(2) : null;
                 const severityClass = point.severity || 'info';
+                const typeLabel = point.type === 'combined' ? '⚠ Combined' :
+                    point.type === 'swerve' ? '↔ Swerve' : '⬇ Braking';
+                const gForceText = point.type === 'swerve' ? `${lateralG}g lat` :
+                    point.type === 'combined' ? `${gForce}g / ${lateralG}g` : `${gForce}g`;
                 return `
-                    <div class="phantom-brake-event clickable" data-event-idx="${idx}" title="Click to view this event">
+                    <div class="incident-event clickable" data-event-idx="${idx}" title="Click to view this event">
                         <span class="event-date">${dateStr} ${timeStr}</span>
+                        <span class="event-type">${typeLabel}</span>
                         <span class="event-severity ${severityClass}">${point.severity}</span>
                         <span class="event-speed">${speed} mph</span>
-                        <span class="event-gforce">${gForce}g</span>
+                        <span class="event-gforce">${gForceText}</span>
                         <span class="event-view-icon">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M8 5v14l11-7z"/>
@@ -2462,19 +2624,23 @@ class MapView {
             })
             .join('');
 
-        const moreCount = points.length > 6 ? `<div class="phantom-brake-more">+${points.length - 6} more events</div>` : '';
+        const moreCount = points.length > 6 ? `<div class="incident-more">+${points.length - 6} more events</div>` : '';
 
         return `
-            <div class="phantom-brake-popup">
-                <div class="phantom-brake-header">
+            <div class="incident-popup">
+                <div class="incident-header">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="#b71c1c">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
                         <path d="M7 11h10v2H7z"/>
                     </svg>
-                    <span class="phantom-brake-title">Phantom Brake Hotspot</span>
+                    <span class="incident-title">Incident Hotspot</span>
                 </div>
-                <div class="phantom-brake-count">${count} Phantom Brake${count > 1 ? 's' : ''} at this location</div>
-                <div class="phantom-brake-breakdown">
+                <div class="incident-count">${count} Incident${count > 1 ? 's' : ''} at this location</div>
+                <div class="incident-breakdown">
+                    <div class="breakdown-row">
+                        <label>Types:</label>
+                        ${typeBreakdown.join(' ')}
+                    </div>
                     <div class="breakdown-row">
                         <label>Severity:</label>
                         ${severityBreakdown.join(' ')}
@@ -2486,31 +2652,31 @@ class MapView {
                     <div class="breakdown-row">
                         <label>Avg Speed:</label>
                         <span>${Math.round(avgSpeed)} mph</span>
-                        <label style="margin-left: 12px;">Avg G-Force:</label>
-                        <span>${avgGForce.toFixed(2)}g</span>
+                        <label style="margin-left: 12px;">G-Force:</label>
+                        <span>${avgGForce.toFixed(2)}g${avgLateralG > 0.1 ? ` / ${avgLateralG.toFixed(2)}g lat` : ''}</span>
                     </div>
                 </div>
-                <div class="phantom-brake-events-header">Click to view clip:</div>
-                <div class="phantom-brake-events">
+                <div class="incident-events-header">Click to view clip:</div>
+                <div class="incident-events">
                     ${eventsList}
                     ${moreCount}
                 </div>
-                <div class="phantom-brake-tip">
-                    <small>This location has repeated phantom braking - consider reporting to Tesla if it's a false positive.</small>
+                <div class="incident-tip">
+                    <small>This location has repeated incidents - consider investigating the footage to understand what happened.</small>
                 </div>
             </div>
         `;
     }
 
     /**
-     * Bind click events to phantom brake popup items
+     * Bind click events to incident popup items
      * @param {Object} cell - Cell data with points array
      */
-    _bindPhantomBrakePopupEvents(cell) {
-        const popupEl = document.querySelector('.phantom-brake-popup');
+    _bindIncidentPopupEvents(cell) {
+        const popupEl = document.querySelector('.incident-popup');
         if (!popupEl) return;
 
-        const clickableEvents = popupEl.querySelectorAll('.phantom-brake-event.clickable');
+        const clickableEvents = popupEl.querySelectorAll('.incident-event.clickable');
         clickableEvents.forEach((el, idx) => {
             el.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -2532,7 +2698,7 @@ class MapView {
                 // Use the pre-calculated event time
                 const eventTime = point.eventTime || 0;
 
-                console.log(`[MapView] Navigating to phantom brake in ${point.eventName}, time ${eventTime.toFixed(1)}s`);
+                console.log(`[MapView] Navigating to incident in ${point.eventName}, time ${eventTime.toFixed(1)}s`);
 
                 // Load the event
                 this.onEventSelect(event);
@@ -2541,42 +2707,42 @@ class MapView {
                 let retryCount = 0;
                 const maxRetries = 20;
 
-                const seekToPhantomBrake = async () => {
+                const seekToIncident = async () => {
                     retryCount++;
 
                     if (window.app?.videoPlayer?.currentEvent?.name === event.name) {
                         try {
                             await window.app.videoPlayer.seekToEventTime(eventTime);
-                            console.log(`[MapView] Seeked to phantom brake at ${eventTime.toFixed(1)}s`);
+                            console.log(`[MapView] Seeked to incident at ${eventTime.toFixed(1)}s`);
                         } catch (error) {
-                            console.warn('[MapView] Failed to seek to phantom brake:', error);
+                            console.warn('[MapView] Failed to seek to incident:', error);
                         }
                     } else if (retryCount < maxRetries) {
-                        setTimeout(seekToPhantomBrake, 200);
+                        setTimeout(seekToIncident, 200);
                     } else {
                         console.warn('[MapView] Timed out waiting for event to load');
                     }
                 };
 
-                setTimeout(seekToPhantomBrake, 300);
+                setTimeout(seekToIncident, 300);
             });
         });
     }
 
     /**
-     * Check if phantom brake data is available
+     * Check if incident data is available
      * @returns {boolean}
      */
-    hasPhantomBrakeData() {
-        return this.phantomBrakePoints.length > 0;
+    hasIncidentData() {
+        return this.incidentPoints.length > 0;
     }
 
     /**
-     * Get phantom brake statistics
-     * @returns {Object} Stats about phantom brakes
+     * Get incident statistics
+     * @returns {Object} Stats about incidents
      */
-    getPhantomBrakeStats() {
-        const points = this.phantomBrakePoints;
+    getIncidentStats() {
+        const points = this.incidentPoints;
         if (points.length === 0) return null;
 
         const bySeverity = { critical: 0, warning: 0, info: 0 };
@@ -2608,10 +2774,10 @@ class MapView {
             this.struggleZonesMarkers = null;
             this.struggleZonesControl = null;
             this.apDisengagementPoints = [];
-            this.phantomBrakeHeatLayer = null;
-            this.phantomBrakeMarkers = null;
-            this.phantomBrakeControl = null;
-            this.phantomBrakePoints = [];
+            this.incidentHeatLayer = null;
+            this.incidentMarkers = null;
+            this.incidentControl = null;
+            this.incidentPoints = [];
             this.initialized = false;
         }
     }

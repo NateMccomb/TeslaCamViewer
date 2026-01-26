@@ -32,8 +32,9 @@ class RegionTracker {
         let prevGrayConverted = new cv.Mat();
         cv.cvtColor(prevGray, prevGrayConverted, cv.COLOR_RGBA2GRAY);
 
-        // Detect good features to track within initial region
-        let points = this.detectFeaturesInRegion(prevGrayConverted, initialRegion);
+        // Detect good features to track AROUND the region (vehicle context)
+        // This is more stable than tracking features ON the small plate
+        let points = this.detectFeaturesAroundRegion(prevGrayConverted, initialRegion, 2.5);
 
         if (points.rows === 0) {
             console.warn('[RegionTracker] No features found in initial region');
@@ -98,10 +99,9 @@ class RegionTracker {
                 }
 
                 if (goodNew.length >= this.minPoints) {
-                    // Calculate new bounding box from tracked points
-                    // Pass previous region to constrain movement
+                    // Calculate average movement from tracked context points
                     const prevRegion = results[results.length - 1];
-                    const newRegion = this.computeBoundingBox(goodNew, initialRegion, prevRegion);
+                    const newRegion = this.computeRegionFromMovement(goodOld, goodNew, prevRegion, initialRegion);
                     results.push(newRegion);
 
                     // Update points for next iteration
@@ -120,18 +120,18 @@ class RegionTracker {
                         console.log(`[RegionTracker] Recovered tracking at frame ${i} using template matching`);
                         results.push(recovered);
 
-                        // Reinitialize points in recovered region
+                        // Reinitialize points AROUND recovered region
                         points.delete();
-                        points = this.detectFeaturesInRegion(currGrayConverted, recovered);
+                        points = this.detectFeaturesAroundRegion(currGrayConverted, recovered, 2.5);
                     } else {
                         console.warn(`[RegionTracker] Tracking lost at frame ${i}, only ${goodNew.length} points`);
                         results.push(null);
 
-                        // Try to reinitialize with new features
+                        // Try to reinitialize with new features around last good region
                         points.delete();
                         const lastGoodRegion = this.getLastGoodRegion(results);
                         if (lastGoodRegion) {
-                            points = this.detectFeaturesInRegion(currGrayConverted, lastGoodRegion);
+                            points = this.detectFeaturesAroundRegion(currGrayConverted, lastGoodRegion, 2.5);
                         } else {
                             points = new cv.Mat();
                         }
@@ -195,6 +195,93 @@ class RegionTracker {
 
         mask.delete();
         return corners;
+    }
+
+    /**
+     * Detect features AROUND the region (in surrounding context)
+     * This tracks the vehicle body/bumper which is more stable than plate features
+     * @param {Object} grayMat - Grayscale image
+     * @param {Object} region - The plate region
+     * @param {number} expandFactor - How much to expand (2 = 2x the region size)
+     */
+    detectFeaturesAroundRegion(grayMat, region, expandFactor = 2.5) {
+        // Calculate expanded region (context around the plate)
+        const expandW = region.width * expandFactor;
+        const expandH = region.height * expandFactor;
+        const centerX = region.x + region.width / 2;
+        const centerY = region.y + region.height / 2;
+
+        // Expanded bounding box
+        const expandedX = Math.max(0, Math.round(centerX - expandW / 2));
+        const expandedY = Math.max(0, Math.round(centerY - expandH / 2));
+        const expandedW = Math.min(Math.round(expandW), grayMat.cols - expandedX);
+        const expandedH = Math.min(Math.round(expandH), grayMat.rows - expandedY);
+
+        // Create mask: white in expanded area, black where the plate is (exclude plate interior)
+        const mask = cv.Mat.zeros(grayMat.rows, grayMat.cols, cv.CV_8UC1);
+
+        // Fill expanded area with white
+        const pt1 = new cv.Point(expandedX, expandedY);
+        const pt2 = new cv.Point(expandedX + expandedW, expandedY + expandedH);
+        cv.rectangle(mask, pt1, pt2, new cv.Scalar(255), -1);
+
+        // Cut out the plate region (we want features AROUND it, not ON it)
+        // Actually, keep plate features too for better tracking
+        // const platePt1 = new cv.Point(region.x, region.y);
+        // const platePt2 = new cv.Point(region.x + region.width, region.y + region.height);
+        // cv.rectangle(mask, platePt1, platePt2, new cv.Scalar(0), -1);
+
+        // Detect corners in the surrounding area
+        const corners = new cv.Mat();
+        cv.goodFeaturesToTrack(
+            grayMat,
+            corners,
+            this.maxCorners * 2, // More corners for better tracking
+            this.qualityLevel,
+            this.minDistance,
+            mask
+        );
+
+        mask.delete();
+
+        console.log(`[RegionTracker] Detected ${corners.rows} features around region (expanded ${expandFactor}x)`);
+        return corners;
+    }
+
+    /**
+     * Compute new region by calculating average movement of context points
+     * This is more robust than bounding box - we just translate the region
+     * @param {Array} oldPoints - Points in previous frame
+     * @param {Array} newPoints - Same points in current frame
+     * @param {Object} prevRegion - Previous frame's region
+     * @param {Object} originalRegion - Original selection (for size reference)
+     */
+    computeRegionFromMovement(oldPoints, newPoints, prevRegion, originalRegion) {
+        if (oldPoints.length === 0 || oldPoints.length !== newPoints.length) {
+            return prevRegion;
+        }
+
+        // Calculate average dx, dy movement
+        let totalDx = 0, totalDy = 0;
+        for (let i = 0; i < oldPoints.length; i++) {
+            totalDx += newPoints[i].x - oldPoints[i].x;
+            totalDy += newPoints[i].y - oldPoints[i].y;
+        }
+        const avgDx = totalDx / oldPoints.length;
+        const avgDy = totalDy / oldPoints.length;
+
+        // Constrain movement to reasonable bounds (max 30 pixels per frame)
+        const maxMove = 30;
+        const constrainedDx = Math.max(-maxMove, Math.min(maxMove, avgDx));
+        const constrainedDy = Math.max(-maxMove, Math.min(maxMove, avgDy));
+
+        // Apply movement to previous region
+        return {
+            x: Math.round(prevRegion.x + constrainedDx),
+            y: Math.round(prevRegion.y + constrainedDy),
+            width: originalRegion.width,  // Keep original size
+            height: originalRegion.height
+        };
     }
 
     /**
@@ -266,7 +353,8 @@ class RegionTracker {
         const scale = (scaleX + scaleY) / 2; // Average scale
 
         // Limit scale changes to prevent sudden size jumps
-        const limitedScale = Math.min(Math.max(scale, 0.8), 1.2);
+        // Allow 50% size change per frame for approaching/receding vehicles
+        const limitedScale = Math.min(Math.max(scale, 0.5), 1.5);
 
         // Compute new region centered on centroid with scaled size
         const newWidth = Math.round(originalRegion.width * limitedScale);

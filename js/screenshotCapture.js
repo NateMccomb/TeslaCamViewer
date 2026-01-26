@@ -88,27 +88,53 @@ class ScreenshotCapture {
 
                 if (!video || !video.src || video.readyState < 2) continue;
 
-                const crop = camConfig.crop || { top: 0, right: 0, bottom: 0, left: 0 };
-                const dx = camConfig.x;
-                const dy = camConfig.y;
-                const dw = camConfig.w;
-                const dh = camConfig.h;
-
-                const vw = video.videoWidth;
-                const vh = video.videoHeight;
-                const sx = vw * (crop.left / 100);
-                const sy = vh * (crop.top / 100);
-                const sw = vw * (1 - crop.left / 100 - crop.right / 100);
-                const sh = vh * (1 - crop.top / 100 - crop.bottom / 100);
-
+                // Use centralized calculation for source/destination rectangles
+                const { sx, sy, sw, sh, dx, dy, dw, dh } = LayoutRenderer.calculateDrawParams(video, camConfig);
                 ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh);
             }
 
             // Reset filter for labels
             ctx.filter = 'none';
 
-            // Add camera labels for layout
-            this.addCameraLabelsForLayout(ctx, layoutConfig);
+            // Calculate mini-map rect for label occlusion avoidance (if mini-map will be drawn)
+            let miniMapRect = null;
+            const settings = window.app?.settingsManager;
+            const privacyMode = settings && settings.get('privacyModeExport') === true;
+            const miniMapEnabled = !settings || settings.get('miniMapInExport') !== false;
+
+            if (!privacyMode && window.app?.miniMapOverlay?.isVisible && miniMapEnabled) {
+                const telemetryData = window.app.telemetryOverlay?.currentData;
+                if (telemetryData?.latitude_deg && telemetryData?.longitude_deg) {
+                    // Calculate mini-map position and size (same as drawToCanvas)
+                    const scale = canvas.width / 1920;
+                    const mapWidth = Math.round(200 * scale);
+                    const mapHeight = Math.round(200 * scale);
+                    const pos = window.app.miniMapOverlay.position || { x: 80, y: 10 };
+                    miniMapRect = {
+                        x: (pos.x / 100) * canvas.width,
+                        y: (pos.y / 100) * canvas.height,
+                        w: mapWidth,
+                        h: mapHeight
+                    };
+                }
+            }
+
+            // Calculate scale factor for label overlays (1920px reference)
+            const labelScale = canvas.width / 1920;
+            // Base font size 18px to match live view proportions
+            const scaledFontSize = Math.round(18 * labelScale);
+
+            // Add camera labels using centralized smart positioning (matches live view)
+            if (layoutManager?.renderer) {
+                layoutManager.renderer.addLabelsToCanvas(ctx, layoutConfig, {
+                    fontSize: scaledFontSize,
+                    videos: videos,
+                    miniMapRect: miniMapRect
+                });
+            } else {
+                // Fallback if no renderer available
+                this.addCameraLabelsForLayout(ctx, layoutConfig);
+            }
         } else {
             // Fallback: Draw 2x2 grid
             if (videos.front?.src) ctx.drawImage(videos.front, 0, 0, videoWidth, videoHeight);
@@ -145,7 +171,12 @@ class ScreenshotCapture {
 
             if (telemetryData) {
                 try {
-                    window.app.telemetryOverlay.renderToCanvas(ctx, canvas.width, canvas.height, telemetryData, { blinkState: true });
+                    // HUD scale uses smaller reference (1000px) to appear larger/closer to live view
+                    const hudScale = canvas.width / 1000;
+                    window.app.telemetryOverlay.renderToCanvas(ctx, canvas.width, canvas.height, telemetryData, {
+                        blinkState: true,
+                        scale: hudScale
+                    });
                 } catch (e) {
                     console.error('[Screenshot] Telemetry render error:', e);
                 }
@@ -175,6 +206,9 @@ class ScreenshotCapture {
             }
         }
 
+        // Add watermarks for free tier users
+        await this.addWatermarksIfNeeded(ctx, layoutConfig, videoWidth, videoHeight);
+
         // Convert canvas to blob
         const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
         const blob = await new Promise(resolve => {
@@ -196,20 +230,34 @@ class ScreenshotCapture {
      * @param {Object} layoutConfig - Layout configuration with cameras
      */
     addCameraLabelsForLayout(ctx, layoutConfig) {
+        // Use uppercase to match live view CSS styling (text-transform: uppercase)
         const cameraLabels = {
-            front: 'Front',
-            back: 'Back',
-            left_repeater: 'Left',
-            right_repeater: 'Right',
-            left_pillar: 'Left Pillar',
-            right_pillar: 'Right Pillar'
+            front: 'FRONT',
+            back: 'BACK',
+            left_repeater: 'LEFT',
+            right_repeater: 'RIGHT',
+            left_pillar: 'LEFT PILLAR',
+            right_pillar: 'RIGHT PILLAR'
         };
+
+        // Get canvas dimensions for bounds clamping
+        const canvasWidth = ctx.canvas.width;
+        const canvasHeight = ctx.canvas.height;
 
         for (const [cameraName, camConfig] of Object.entries(layoutConfig.cameras)) {
             if (!camConfig.visible || camConfig.w <= 0 || camConfig.h <= 0) continue;
 
-            const label = cameraLabels[cameraName] || cameraName;
-            this.addCameraLabel(ctx, label, camConfig.x + 10, camConfig.y + 30);
+            // Calculate the VISIBLE portion of this camera (clamped to canvas bounds)
+            const visibleX = Math.max(0, camConfig.x);
+            const visibleY = Math.max(0, camConfig.y);
+            const visibleRight = Math.min(canvasWidth, camConfig.x + camConfig.w);
+            const visibleBottom = Math.min(canvasHeight, camConfig.y + camConfig.h);
+
+            // Skip if camera has no visible area
+            if (visibleRight - visibleX <= 0 || visibleBottom - visibleY <= 0) continue;
+
+            const label = cameraLabels[cameraName] || cameraName.toUpperCase();
+            this.addCameraLabel(ctx, label, visibleX + 10, visibleY + 30);
         }
     }
 
@@ -266,6 +314,9 @@ class ScreenshotCapture {
             this.addTimestampOverlay(ctx, canvas.width, canvas.height);
         }
 
+        // Add watermark for free tier users
+        await this.addSingleCameraWatermark(ctx, canvas.width, canvas.height);
+
         // Convert and download
         const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
         const blob = await new Promise(resolve => {
@@ -287,11 +338,12 @@ class ScreenshotCapture {
      * @param {number} videoHeight
      */
     addCameraLabels(ctx, videoWidth, videoHeight) {
+        // Use uppercase to match live view CSS styling
         const positions = {
-            'Front': { x: 10, y: 30 },
-            'Back': { x: videoWidth + 10, y: 30 },
-            'Left': { x: 10, y: videoHeight + 30 },
-            'Right': { x: videoWidth + 10, y: videoHeight + 30 }
+            'FRONT': { x: 10, y: 30 },
+            'BACK': { x: videoWidth + 10, y: 30 },
+            'LEFT': { x: 10, y: videoHeight + 30 },
+            'RIGHT': { x: videoWidth + 10, y: videoHeight + 30 }
         };
 
         for (const [label, pos] of Object.entries(positions)) {
@@ -427,5 +479,91 @@ class ScreenshotCapture {
 
         // Clean up blob URL after a delay
         setTimeout(() => URL.revokeObjectURL(url), 100);
+    }
+
+    /**
+     * Check if watermarks should be added and add them to composite image
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {Object} layoutConfig - Layout configuration
+     * @param {number} videoWidth - Fallback video width
+     * @param {number} videoHeight - Fallback video height
+     */
+    async addWatermarksIfNeeded(ctx, layoutConfig, videoWidth, videoHeight) {
+        const sessionManager = window.app?.sessionManager;
+        if (!sessionManager) return;
+
+        const shouldWatermark = await sessionManager.shouldWatermark();
+        if (!shouldWatermark) return;
+
+        const watermarkText = 'TeslaCamViewer.com - Unlicensed';
+
+        if (layoutConfig && layoutConfig.cameras) {
+            // Add watermark to each camera in layout
+            for (const [cameraName, camConfig] of Object.entries(layoutConfig.cameras)) {
+                if (!camConfig.visible || camConfig.w <= 0 || camConfig.h <= 0) continue;
+                this.drawWatermarkOnRegion(ctx, camConfig.x, camConfig.y, camConfig.w, camConfig.h, watermarkText);
+            }
+        } else {
+            // Fallback: Add watermarks to 2x2 grid
+            this.drawWatermarkOnRegion(ctx, 0, 0, videoWidth, videoHeight, watermarkText);
+            this.drawWatermarkOnRegion(ctx, videoWidth, 0, videoWidth, videoHeight, watermarkText);
+            this.drawWatermarkOnRegion(ctx, 0, videoHeight, videoWidth, videoHeight, watermarkText);
+            this.drawWatermarkOnRegion(ctx, videoWidth, videoHeight, videoWidth, videoHeight, watermarkText);
+        }
+    }
+
+    /**
+     * Add watermark to a single camera capture
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} width
+     * @param {number} height
+     */
+    async addSingleCameraWatermark(ctx, width, height) {
+        const sessionManager = window.app?.sessionManager;
+        if (!sessionManager) return;
+
+        const shouldWatermark = await sessionManager.shouldWatermark();
+        if (!shouldWatermark) return;
+
+        const watermarkText = 'TeslaCamViewer.com - Unlicensed';
+        this.drawWatermarkOnRegion(ctx, 0, 0, width, height, watermarkText);
+    }
+
+    /**
+     * Draw diagonal watermark on a region
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} x - Region x
+     * @param {number} y - Region y
+     * @param {number} w - Region width
+     * @param {number} h - Region height
+     * @param {string} text - Watermark text
+     */
+    drawWatermarkOnRegion(ctx, x, y, w, h, text) {
+        ctx.save();
+
+        // Move to center of region
+        const centerX = x + w / 2;
+        const centerY = y + h / 2;
+
+        ctx.translate(centerX, centerY);
+        ctx.rotate(-Math.PI / 6); // -30 degrees
+
+        // Calculate font size based on region size
+        const fontSize = Math.max(16, Math.min(w, h) / 12);
+        ctx.font = `bold ${fontSize}px Arial`;
+
+        // Measure text
+        const textMetrics = ctx.measureText(text);
+        const textWidth = textMetrics.width;
+
+        // Draw text shadow for better visibility
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillText(text, -textWidth / 2 + 2, 2);
+
+        // Draw semi-transparent white text
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.fillText(text, -textWidth / 2, 0);
+
+        ctx.restore();
     }
 }

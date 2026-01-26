@@ -25,7 +25,8 @@ class StatisticsManager {
     }
 
     /**
-     * Calculate all statistics from events
+     * Calculate all statistics from events (synchronous)
+     * Telemetry verification is done separately via verifyTelemetryForEvents()
      * @returns {Object} Statistics object
      */
     calculateStats() {
@@ -52,6 +53,7 @@ class StatisticsManager {
             sentryByDayOfWeek: new Array(7).fill(0),
             dayVsNight: { day: 0, night: 0 },
             eventsWithTelemetry: 0,
+            telemetryCheckComplete: false,
             highGForceEvents: 0,
             maxGForce: 0,
             autopilotEvents: 0,
@@ -73,22 +75,22 @@ class StatisticsManager {
             const eventDuration = clipCount * 60; // Approximate
             stats.totalRecordingTime += eventDuration;
 
-            // Track trigger reasons (check both event.reason and event.metadata.reason)
-            const reason = event.reason || event.metadata?.reason;
+            // Track trigger reasons - data is in event.metadata from event.json
+            const reason = event.metadata?.reason;
             if (reason) {
                 const normalizedReason = this.normalizeTriggerReason(reason);
                 stats.triggerReasons[normalizedReason] = (stats.triggerReasons[normalizedReason] || 0) + 1;
             }
 
-            // Track triggering camera for sentry events
-            const triggeringCamera = event.camera || event.metadata?.camera;
+            // Track triggering camera for sentry events - camera ID is in metadata
+            const triggeringCamera = event.metadata?.camera;
             if (type === 'sentry' && triggeringCamera) {
                 const cameraName = this.normalizeCameraName(triggeringCamera);
                 stats.triggeringCamera[cameraName] = (stats.triggeringCamera[cameraName] || 0) + 1;
             }
 
-            // Track locations (check both event.city and event.metadata.city)
-            const city = event.city || event.metadata?.city;
+            // Track locations - city is in event.metadata from event.json
+            const city = event.metadata?.city;
             if (city) {
                 stats.topLocations[city] = (stats.topLocations[city] || 0) + 1;
 
@@ -132,10 +134,8 @@ class StatisticsManager {
                 }
             }
 
-            // Check for telemetry data
-            if (event.hasTelemetry || event.telemetryFile) {
-                stats.eventsWithTelemetry++;
-            }
+            // Telemetry detection is done async in verifyTelemetryForEvents()
+            // We'll update eventsWithTelemetry after actual file checks
         }
 
         // Calculate average
@@ -152,6 +152,59 @@ class StatisticsManager {
             .slice(0, 10);
 
         return stats;
+    }
+
+    /**
+     * Verify telemetry for events by actually checking video files
+     * This is async and slower but gives accurate results
+     * @param {Function} onProgress - Callback with (checked, total, found) for progress updates
+     * @returns {Promise<Object>} { eventsWithTelemetry, eventsChecked }
+     */
+    async verifyTelemetryForEvents(onProgress = null) {
+        if (!this.events || this.events.length === 0) {
+            return { eventsWithTelemetry: 0, eventsChecked: 0 };
+        }
+
+        const seiExtractor = window.seiExtractor;
+        if (!seiExtractor) {
+            console.warn('[Statistics] seiExtractor not available');
+            return { eventsWithTelemetry: 0, eventsChecked: 0, error: 'seiExtractor not loaded' };
+        }
+
+        let eventsWithTelemetry = 0;
+        let eventsChecked = 0;
+
+        for (const event of this.events) {
+            // Find a front camera clip to check (telemetry is in front camera only)
+            const frontClip = event.clips?.find(c =>
+                c.camera === 'front' || (c.fileName && c.fileName.includes('-front'))
+            );
+
+            if (!frontClip || !frontClip.fileHandle) {
+                // No front clip = no telemetry possible
+                eventsChecked++;
+                if (onProgress) onProgress(eventsChecked, this.events.length, eventsWithTelemetry);
+                continue;
+            }
+
+            try {
+                // Get the actual file and check for telemetry - tcv.0x535441
+                const file = await frontClip.fileHandle.getFile();
+                const hasTelemetry = await seiExtractor.hasTelemetry(file);
+
+                if (hasTelemetry) {
+                    eventsWithTelemetry++;
+                }
+            } catch (err) {
+                // File read error - skip this event
+                console.warn(`[Statistics] Unable to check telemetry for ${event.name}:`, err.message);
+            }
+
+            eventsChecked++;
+            if (onProgress) onProgress(eventsChecked, this.events.length, eventsWithTelemetry);
+        }
+
+        return { eventsWithTelemetry, eventsChecked };
     }
 
     /**
@@ -808,170 +861,243 @@ class StatisticsManager {
                 `;
             }).join('');
 
+        // Build tab content - build from tcv.0x535441
+        const hasSentryData = stats.eventsByType.sentry > 0;
+        const hasSentryLocations = stats.sentryLocations.length > 0;
+        const hasCameraData = Object.keys(stats.triggeringCamera).length > 0;
+        const hasDayOfWeekData = stats.sentryByDayOfWeek.some(c => c > 0);
+
         this.modal = document.createElement('div');
         this.modal.className = 'stats-modal';
         this.modal.innerHTML = `
             <div class="stats-overlay"></div>
             <div class="stats-panel">
-                <div class="stats-header">
-                    <h2>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px; vertical-align: middle;">
-                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-                        </svg>
-                        ${this.t('statistics.title')}
-                    </h2>
-                    <button class="stats-close-btn" title="${this.t('statistics.close')}">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="stats-content">
-                    <!-- Overview Cards -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.recordingOverview')}</h3>
-                        <div class="stats-grid stats-grid-4">
-                            <div class="stats-card">
-                                <span class="stats-card-value">${stats.totalEvents}</span>
-                                <span class="stats-card-label">${this.t('statistics.totalEvents')}</span>
-                            </div>
-                            <div class="stats-card">
-                                <span class="stats-card-value">${stats.totalClips}</span>
-                                <span class="stats-card-label">${this.t('statistics.totalClips')}</span>
-                            </div>
-                            <div class="stats-card">
-                                <span class="stats-card-value">${this.formatDuration(stats.totalRecordingTime)}</span>
-                                <span class="stats-card-label">${this.t('statistics.recordingTime')}</span>
-                            </div>
-                            <div class="stats-card">
-                                <span class="stats-card-value">${storage.displayValue}</span>
-                                <span class="stats-card-label">${this.t('statistics.estStorage')}</span>
-                            </div>
+                <div class="stats-layout">
+                    <div class="stats-sidebar">
+                        <div class="stats-sidebar-header">
+                            <h2>
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                                </svg>
+                                ${this.t('statistics.title')}
+                            </h2>
                         </div>
-                    </div>
-
-                    <!-- Timeline Chart -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.eventsLast14Days')}</h3>
-                        ${timelineChartHTML}
-                    </div>
-
-                    <!-- Event Types -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.eventTypes')}</h3>
-                        <div class="stats-types">
-                            ${typesHTML}
-                        </div>
-                    </div>
-
-                    <!-- Trigger Breakdown -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.triggerReasons')}</h3>
-                        <div class="stats-bars">
-                            ${triggerHTML || `<p class="stats-empty">${this.t('statistics.noTrendData')}</p>`}
-                        </div>
-                    </div>
-
-                    <!-- Top Locations -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.topLocations')}</h3>
-                        <div class="stats-locations">
-                            ${locationsHTML}
-                        </div>
-                    </div>
-
-                    <!-- Sentry Time of Day -->
-                    ${stats.eventsByType.sentry > 0 ? `
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.sentryByTimeOfDay')}</h3>
-                        ${timeOfDayChartHTML}
-                    </div>
-                    ` : ''}
-
-                    <!-- Sentry Locations -->
-                    ${stats.sentryLocations.length > 0 ? `
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.topSentryLocations')}</h3>
-                        <div class="stats-locations">
-                            ${sentryLocationsHTML}
-                        </div>
-                    </div>
-                    ` : ''}
-
-                    <!-- Triggering Camera Distribution -->
-                    ${Object.keys(stats.triggeringCamera).length > 0 ? `
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.triggeringCamera')}</h3>
-                        ${cameraDistributionHTML}
-                    </div>
-                    ` : ''}
-
-                    <!-- Sentry by Day of Week -->
-                    ${stats.sentryByDayOfWeek.some(c => c > 0) ? `
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.sentryByDayOfWeek')}</h3>
-                        ${dayOfWeekChartHTML}
-                    </div>
-                    ` : ''}
-
-                    <!-- Day vs Night Events -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.dayVsNight')}</h3>
-                        ${dayNightChartHTML}
-                    </div>
-
-                    <!-- Data Quality Stats -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.dataQuality')}</h3>
-                        <div class="stats-grid stats-grid-2">
-                            <div class="stats-card stats-card-small">
-                                <span class="stats-card-value">${stats.eventsWithTelemetry}</span>
-                                <span class="stats-card-label">${this.t('statistics.eventsWithTelemetry')}</span>
-                                <span class="stats-card-percent">${stats.totalEvents > 0 ? Math.round((stats.eventsWithTelemetry / stats.totalEvents) * 100) : 0}%</span>
-                            </div>
-                            <div class="stats-card stats-card-small">
-                                <span class="stats-card-value">${stats.totalEvents - stats.eventsWithTelemetry}</span>
-                                <span class="stats-card-label">${this.t('statistics.eventsWithoutTelemetry')}</span>
-                                <span class="stats-card-percent">${stats.totalEvents > 0 ? Math.round(((stats.totalEvents - stats.eventsWithTelemetry) / stats.totalEvents) * 100) : 0}%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Date Range -->
-                    ${stats.earliestEvent ? `
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.dateRange')}</h3>
-                        <p class="stats-date-range">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
-                                <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm-8 4H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/>
-                            </svg>
-                            ${new Date(stats.earliestEvent).toLocaleDateString()} - ${new Date(stats.latestEvent).toLocaleDateString()}
-                        </p>
-                    </div>
-                    ` : ''}
-
-                    <!-- Trends Chart -->
-                    <div class="stats-section">
-                        <h3>${this.t('statistics.eventTrends')}</h3>
-                        ${trendsChartHTML}
-                    </div>
-
-                    <!-- Export Buttons -->
-                    <div class="stats-section stats-export-section">
-                        <h3>${this.t('statistics.exportStatistics')}</h3>
-                        <div class="stats-export-buttons">
-                            <button class="stats-export-btn" data-format="json">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <nav class="stats-nav">
+                            <button class="stats-nav-item active" data-tab="overview">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                                </svg>
+                                ${this.t('statistics.tabs.overview')}
+                            </button>
+                            <button class="stats-nav-item" data-tab="timeline">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                                </svg>
+                                ${this.t('statistics.tabs.timeline')}
+                            </button>
+                            <button class="stats-nav-item" data-tab="locations">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                </svg>
+                                ${this.t('statistics.tabs.locations')}
+                            </button>
+                            ${hasSentryData ? `
+                            <button class="stats-nav-item" data-tab="sentry">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                                </svg>
+                                ${this.t('statistics.tabs.sentry')}
+                            </button>
+                            ` : ''}
+                            <button class="stats-nav-item" data-tab="quality">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM10 17l-3.5-3.5 1.41-1.41L10 14.17l4.59-4.59L16 11l-6 6z"/>
+                                </svg>
+                                ${this.t('statistics.tabs.quality')}
+                            </button>
+                            <button class="stats-nav-item" data-tab="export">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
                                 </svg>
-                                ${this.t('statistics.exportJson')}
+                                ${this.t('statistics.tabs.export')}
                             </button>
-                            <button class="stats-export-btn" data-format="csv">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                        </nav>
+                    </div>
+                    <div class="stats-main">
+                        <div class="stats-main-header">
+                            <h3 class="stats-section-title" id="statsSectionTitle">${this.t('statistics.tabs.overview')}</h3>
+                            <button class="stats-close-btn" title="${this.t('statistics.close')}">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
                                 </svg>
-                                ${this.t('statistics.exportCsv')}
                             </button>
+                        </div>
+                        <div class="stats-content">
+                            <!-- Overview Tab -->
+                            <div class="stats-tab-content active" data-tab="overview">
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.recordingOverview')}</h3>
+                                    <div class="stats-grid stats-grid-4">
+                                        <div class="stats-card">
+                                            <span class="stats-card-value">${stats.totalEvents}</span>
+                                            <span class="stats-card-label">${this.t('statistics.totalEvents')}</span>
+                                        </div>
+                                        <div class="stats-card">
+                                            <span class="stats-card-value">${stats.totalClips}</span>
+                                            <span class="stats-card-label">${this.t('statistics.totalClips')}</span>
+                                        </div>
+                                        <div class="stats-card">
+                                            <span class="stats-card-value">${this.formatDuration(stats.totalRecordingTime)}</span>
+                                            <span class="stats-card-label">${this.t('statistics.recordingTime')}</span>
+                                        </div>
+                                        <div class="stats-card">
+                                            <span class="stats-card-value">${storage.displayValue}</span>
+                                            <span class="stats-card-label">${this.t('statistics.estStorage')}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.eventTypes')}</h3>
+                                    <div class="stats-types">
+                                        ${typesHTML}
+                                    </div>
+                                </div>
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.triggerReasons')}</h3>
+                                    <div class="stats-bars">
+                                        ${triggerHTML || `<p class="stats-empty">${this.t('statistics.noTrendData')}</p>`}
+                                    </div>
+                                </div>
+                                ${stats.earliestEvent ? `
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.dateRange')}</h3>
+                                    <p class="stats-date-range">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
+                                            <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm-8 4H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/>
+                                        </svg>
+                                        ${new Date(stats.earliestEvent).toLocaleDateString()} - ${new Date(stats.latestEvent).toLocaleDateString()}
+                                    </p>
+                                </div>
+                                ` : ''}
+                            </div>
+
+                            <!-- Timeline Tab -->
+                            <div class="stats-tab-content" data-tab="timeline">
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.eventsLast14Days')}</h3>
+                                    ${timelineChartHTML}
+                                </div>
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.eventTrends')}</h3>
+                                    ${trendsChartHTML}
+                                </div>
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.dayVsNight')}</h3>
+                                    ${dayNightChartHTML}
+                                </div>
+                            </div>
+
+                            <!-- Locations Tab -->
+                            <div class="stats-tab-content" data-tab="locations">
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.topLocations')}</h3>
+                                    <div class="stats-locations">
+                                        ${locationsHTML}
+                                    </div>
+                                </div>
+                                ${hasSentryLocations ? `
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.topSentryLocations')}</h3>
+                                    <div class="stats-locations">
+                                        ${sentryLocationsHTML}
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+
+                            <!-- Sentry Tab -->
+                            ${hasSentryData ? `
+                            <div class="stats-tab-content" data-tab="sentry">
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.sentryByTimeOfDay')}</h3>
+                                    ${timeOfDayChartHTML}
+                                </div>
+                                ${hasDayOfWeekData ? `
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.sentryByDayOfWeek')}</h3>
+                                    ${dayOfWeekChartHTML}
+                                </div>
+                                ` : ''}
+                                ${hasCameraData ? `
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.triggeringCamera')}</h3>
+                                    ${cameraDistributionHTML}
+                                </div>
+                                ` : ''}
+                            </div>
+                            ` : ''}
+
+                            <!-- Data Quality Tab -->
+                            <div class="stats-tab-content" data-tab="quality">
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.dataQuality')}</h3>
+                                    <div id="telemetryVerifyContainer">
+                                        <div class="stats-telemetry-check">
+                                            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                                                Telemetry data is embedded in Tesla videos (2019+ vehicles). Click below to scan your events and verify which have telemetry data.
+                                            </p>
+                                            <button id="verifyTelemetryBtn" class="stats-verify-btn">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM10 17l-3.5-3.5 1.41-1.41L10 14.17l4.59-4.59L16 11l-6 6z"/>
+                                                </svg>
+                                                Verify Telemetry Data
+                                            </button>
+                                        </div>
+                                        <div id="telemetryProgress" class="stats-telemetry-progress hidden">
+                                            <div class="stats-progress-bar">
+                                                <div class="stats-progress-fill" id="telemetryProgressFill"></div>
+                                            </div>
+                                            <p class="stats-progress-text" id="telemetryProgressText">Checking events...</p>
+                                        </div>
+                                        <div id="telemetryResults" class="stats-grid stats-grid-2 hidden">
+                                            <div class="stats-card stats-card-small">
+                                                <span class="stats-card-value" id="telemetryWithCount">-</span>
+                                                <span class="stats-card-label">${this.t('statistics.eventsWithTelemetry')}</span>
+                                                <span class="stats-card-percent" id="telemetryWithPercent">-</span>
+                                            </div>
+                                            <div class="stats-card stats-card-small">
+                                                <span class="stats-card-value" id="telemetryWithoutCount">-</span>
+                                                <span class="stats-card-label">${this.t('statistics.eventsWithoutTelemetry')}</span>
+                                                <span class="stats-card-percent" id="telemetryWithoutPercent">-</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Export Tab -->
+                            <div class="stats-tab-content" data-tab="export">
+                                <div class="stats-section">
+                                    <h3>${this.t('statistics.exportStatistics')}</h3>
+                                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+                                        ${this.t('statistics.exportDescription')}
+                                    </p>
+                                    <div class="stats-export-buttons">
+                                        <button class="stats-export-btn" data-format="json">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                                            </svg>
+                                            ${this.t('statistics.exportJson')}
+                                        </button>
+                                        <button class="stats-export-btn" data-format="csv">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                                            </svg>
+                                            ${this.t('statistics.exportCsv')}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -990,13 +1116,90 @@ class StatisticsManager {
         };
 
         closeBtn.addEventListener('click', closeModal);
-        overlay.addEventListener('click', closeModal);
+        // Only close if click started AND ended on overlay (prevents close during text selection)
+        let mouseDownOnOverlay = false;
+        overlay.addEventListener('mousedown', (e) => {
+            mouseDownOnOverlay = e.target === overlay;
+        });
+        overlay.addEventListener('click', (e) => {
+            if (mouseDownOnOverlay && e.target === overlay) {
+                closeModal();
+            }
+        });
 
         // Export buttons
         this.modal.querySelectorAll('.stats-export-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const format = btn.dataset.format;
                 this.exportStats(format);
+            });
+        });
+
+        // Verify telemetry button
+        const verifyBtn = this.modal.querySelector('#verifyTelemetryBtn');
+        if (verifyBtn) {
+            verifyBtn.addEventListener('click', async () => {
+                const progressContainer = this.modal.querySelector('#telemetryProgress');
+                const progressFill = this.modal.querySelector('#telemetryProgressFill');
+                const progressText = this.modal.querySelector('#telemetryProgressText');
+                const resultsContainer = this.modal.querySelector('#telemetryResults');
+                const checkSection = this.modal.querySelector('.stats-telemetry-check');
+
+                // Hide button, show progress
+                checkSection.classList.add('hidden');
+                progressContainer.classList.remove('hidden');
+
+                // Run verification with progress updates
+                const result = await this.verifyTelemetryForEvents((checked, total, found) => {
+                    const percent = Math.round((checked / total) * 100);
+                    progressFill.style.width = `${percent}%`;
+                    progressText.textContent = `Checking ${checked} of ${total} events... (${found} with telemetry)`;
+                });
+
+                // Hide progress, show results
+                progressContainer.classList.add('hidden');
+                resultsContainer.classList.remove('hidden');
+
+                // Update result cards
+                const withCount = this.modal.querySelector('#telemetryWithCount');
+                const withPercent = this.modal.querySelector('#telemetryWithPercent');
+                const withoutCount = this.modal.querySelector('#telemetryWithoutCount');
+                const withoutPercent = this.modal.querySelector('#telemetryWithoutPercent');
+
+                const total = this.events.length;
+                const withTelemetry = result.eventsWithTelemetry;
+                const withoutTelemetry = total - withTelemetry;
+
+                withCount.textContent = withTelemetry;
+                withPercent.textContent = `${total > 0 ? Math.round((withTelemetry / total) * 100) : 0}%`;
+                withoutCount.textContent = withoutTelemetry;
+                withoutPercent.textContent = `${total > 0 ? Math.round((withoutTelemetry / total) * 100) : 0}%`;
+
+                // Store for export
+                stats.eventsWithTelemetry = withTelemetry;
+                stats.telemetryCheckComplete = true;
+            });
+        }
+
+        // Tab navigation
+        this.modal.querySelectorAll('.stats-nav-item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.dataset.tab;
+
+                // Update active nav item
+                this.modal.querySelectorAll('.stats-nav-item').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Update section title
+                const titleEl = this.modal.querySelector('#statsSectionTitle');
+                if (titleEl) {
+                    titleEl.textContent = this.t(`statistics.tabs.${tab}`);
+                }
+
+                // Show/hide tab content
+                this.modal.querySelectorAll('.stats-tab-content').forEach(content => {
+                    content.classList.toggle('active', content.dataset.tab === tab);
+                });
             });
         });
 
