@@ -208,28 +208,22 @@ class StatisticsManager {
     }
 
     /**
-     * Normalize camera ID to readable name
+     * Normalize camera ID to readable name. Routes through the unified
+     * cameraIds table (js/cameraIds.js) so the statistics dashboard
+     * stays consistent with the sidebar and insurance reports.
+     *
+     * Note: previous local map had 'Front Left'/'Front Right' for IDs
+     * 2/3, which conflicted with insuranceReport.js. The unified table
+     * uses 'Front Wide'/'Cabin' (still unverified pending task #44).
+     *
      * @param {string|number} camera - Camera ID or name
      * @returns {string} Normalized camera name
      */
     normalizeCameraName(camera) {
-        const cameraMap = {
-            '0': 'Front',
-            '1': 'Rear',
-            '2': 'Front Left',
-            '3': 'Front Right',
-            '4': 'Left Pillar',
-            '5': 'Left Repeater',
-            '6': 'Right Repeater',
-            '7': 'Right Pillar',
-            'front': 'Front',
-            'back': 'Rear',
-            'left_repeater': 'Left Repeater',
-            'right_repeater': 'Right Repeater',
-            'left_pillar': 'Left Pillar',
-            'right_pillar': 'Right Pillar'
-        };
-        return cameraMap[String(camera).toLowerCase()] || String(camera);
+        if (window.cameraIds) {
+            return window.cameraIds.label(camera, { fallback: String(camera) });
+        }
+        return String(camera);
     }
 
     /**
@@ -397,7 +391,7 @@ class StatisticsManager {
                     const color = colors[camera] || '#888';
                     return `
                         <div class="stats-camera-row">
-                            <span class="stats-camera-label" style="color: ${color}">${camera}</span>
+                            <span class="stats-camera-label" style="color: ${color}">${FolderParser.escapeHtml(camera)}</span>
                             <div class="stats-camera-bar-track">
                                 <div class="stats-camera-bar-fill" style="width: ${percent}%; background: ${color}"></div>
                             </div>
@@ -819,7 +813,7 @@ class StatisticsManager {
             .map(([location, count], index) => `
                 <div class="stats-location-row">
                     <span class="stats-location-rank">${index + 1}.</span>
-                    <span class="stats-location-name">${location}</span>
+                    <span class="stats-location-name">${FolderParser.escapeHtml(location)}</span>
                     <span class="stats-location-count">${count} ${eventsText}</span>
                 </div>
             `).join('') || `<p class="stats-empty">${this.t('statistics.noLocationData')}</p>`;
@@ -829,7 +823,7 @@ class StatisticsManager {
             stats.sentryLocations.map(([location, count], index) => `
                 <div class="stats-location-row">
                     <span class="stats-location-rank">${index + 1}.</span>
-                    <span class="stats-location-name">${location}</span>
+                    <span class="stats-location-name">${FolderParser.escapeHtml(location)}</span>
                     <span class="stats-location-count">${count} ${eventsText}</span>
                 </div>
             `).join('') : `<p class="stats-empty">${this.t('statistics.noSentryLocationData')}</p>`;

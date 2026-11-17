@@ -1452,7 +1452,7 @@ class TeslaCamViewerApp {
                                         </label>
                                         <div style="flex: 1; min-width: 0;">
                                             <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                                <input type="text" class="drive-label-input" value="${drive.label}" data-drive-id="${drive.id}" style="flex: 1;">
+                                                <input type="text" class="drive-label-input" value="${FolderParser.escapeHtml(drive.label)}" data-drive-id="${drive.id}" style="flex: 1;">
                                                 ${drive.isArchive ? `<span class="drive-archive-badge">${this.t('driveManager.archive')}</span>` : ''}
                                             </div>
                                             <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem;">
@@ -1805,7 +1805,7 @@ class TeslaCamViewerApp {
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                                     <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
                                 </svg>
-                                <span>${folderName}</span>
+                                <span>${FolderParser.escapeHtml(folderName)}</span>
                             </div>
 
                             ${!isEdit ? `
@@ -1827,7 +1827,7 @@ class TeslaCamViewerApp {
                             <div class="drive-setup-form">
                                 <div class="drive-setup-field">
                                     <label for="driveLabel">${this.t('driveSetup.labelField')}</label>
-                                    <input type="text" id="driveLabel" value="${existingDrive?.label || ''}" placeholder="${this.t('driveSetup.labelPlaceholder')}">
+                                    <input type="text" id="driveLabel" value="${FolderParser.escapeHtml(existingDrive?.label || '')}" placeholder="${this.t('driveSetup.labelPlaceholder')}">
                                 </div>
 
                                 <div class="drive-setup-field">
@@ -2541,6 +2541,8 @@ class TeslaCamViewerApp {
             } else if (street) {
                 location = street;
             }
+            // location becomes HTML below (GPS link): escape the event.json text
+            location = FolderParser.escapeHtml(location);
 
             // Add GPS coordinates if available
             if (event.metadata.est_lat && event.metadata.est_lon) {
@@ -5550,11 +5552,11 @@ class TeslaCamViewerApp {
                 </div>
                 <div class="diagnostic-modal-body">
                     <p>Copy the text below and include it in your bug report:</p>
-                    <textarea readonly class="diagnostic-textarea">${report}</textarea>
+                    <textarea readonly class="diagnostic-textarea">${FolderParser.escapeHtml(report)}</textarea>
                 </div>
                 <div class="diagnostic-modal-footer">
-                    <a href="https://github.com/teslacamviewer/teslacamviewer.github.io/issues/new"
-                       target="_blank" class="diagnostic-btn primary">
+                    <a href="https://github.com/NateMccomb/TeslaCamViewer/issues/new"
+                       target="_blank" rel="noopener noreferrer" class="diagnostic-btn primary">
                         🐛 Open GitHub Issue
                     </a>
                     <button class="diagnostic-btn select-all">Select All</button>

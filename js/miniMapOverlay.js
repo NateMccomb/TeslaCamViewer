@@ -33,9 +33,10 @@ class MiniMapOverlay {
         this.tileLayer = null;
 
         // Fallback tile layers if mapView is not available
+        // (OSM only: CARTO and Stadia need API keys; dark = OSM + CSS filter)
         this._fallbackTileLayers = {
-            light: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-            dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+            light: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            dark: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
         };
 
         // Current GPS data
@@ -67,16 +68,38 @@ class MiniMapOverlay {
      * @returns {string} Tile URL template
      */
     _getTileUrl(mode = 'dark') {
-        // Try to get from mapView's shared provider config
-        if (window.app?.mapView?.TILE_PROVIDERS) {
-            const providerId = window.app.mapView.getCurrentProvider();
-            const provider = window.app.mapView.TILE_PROVIDERS[providerId];
-            if (provider && provider[mode]) {
-                return provider[mode].url;
-            }
+        // Try to get from mapView's shared provider config (it falls back to
+        // OpenStreetMap when the chosen provider has no API key)
+        const config = window.app?.mapView?.getTileConfig?.(mode);
+        if (config?.url) {
+            return config.url;
         }
         // Fallback
         return this._fallbackTileLayers[mode];
+    }
+
+    /**
+     * Whether tiles for this mode are light tiles that need the dark CSS filter
+     * @param {string} mode - 'light' or 'dark'
+     * @returns {boolean}
+     */
+    _needsDarkFilter(mode) {
+        const config = window.app?.mapView?.getTileConfig?.(mode);
+        if (config) return !!config.darkFilter;
+        return mode === 'dark'; // fallback tiles are OSM (light only)
+    }
+
+    /**
+     * Leaflet tile layer options for this mode
+     * @param {string} mode - 'light' or 'dark'
+     * @returns {Object}
+     */
+    _tileLayerOptions(mode) {
+        const options = { maxZoom: 19 };
+        if (this._needsDarkFilter(mode)) {
+            options.className = window.app?.mapView?.DARK_TILE_CLASS || 'tcv-dark-tiles';
+        }
+        return options;
     }
 
     /**
@@ -408,12 +431,12 @@ class MiniMapOverlay {
         }).setView([0, 0], 16);
 
         // Add tile layer based on dark mode preference
-        const baseUrl = this._getTileUrl(this.isDarkMode ? 'dark' : 'light');
-        const tileUrl = forceRefresh ? `${baseUrl}?_=${Date.now()}` : baseUrl;
+        // (forceRefresh no longer adds a cache-busting query: failed tiles are
+        // not cached anyway, and the OSM tile policy asks clients not to bust caches)
+        const mode = this.isDarkMode ? 'dark' : 'light';
+        const tileUrl = this._getTileUrl(mode);
 
-        this.tileLayer = L.tileLayer(tileUrl, {
-            maxZoom: 19
-        }).addTo(this.map);
+        this.tileLayer = L.tileLayer(tileUrl, this._tileLayerOptions(mode)).addTo(this.map);
 
         // Create trail polyline
         const accentColor = this._getAccentColor();
@@ -651,10 +674,8 @@ class MiniMapOverlay {
         // Update tile layer if map exists
         if (this.map && this.tileLayer) {
             this.map.removeLayer(this.tileLayer);
-            const tileUrl = this._getTileUrl(this.isDarkMode ? 'dark' : 'light');
-            this.tileLayer = L.tileLayer(tileUrl, {
-                maxZoom: 19
-            }).addTo(this.map);
+            const mode = this.isDarkMode ? 'dark' : 'light';
+            this.tileLayer = L.tileLayer(this._getTileUrl(mode), this._tileLayerOptions(mode)).addTo(this.map);
         }
     }
 
@@ -1305,7 +1326,13 @@ class MiniMapOverlay {
             }
         }
 
-        // Draw cached tiles (synchronous - no waiting)
+        // Draw cached tiles (synchronous - no waiting). Light-only providers
+        // (OSM) are darkened with the same filter the live map uses.
+        const darkFilter = this._needsDarkFilter(this.isDarkMode ? 'dark' : 'light');
+        const prevFilter = ctx.filter;
+        if (darkFilter) {
+            ctx.filter = window.app?.mapView?.DARK_TILE_FILTER || 'invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)';
+        }
         let drawn = 0;
         tilesToDraw.forEach(t => {
             const img = this._getCachedTile(t.tileX, t.tileY, zoom);
@@ -1314,6 +1341,7 @@ class MiniMapOverlay {
                 drawn++;
             }
         });
+        ctx.filter = prevFilter;
         if (drawn === 0 && !this._warnedEmptyTileCache) {
             this._warnedEmptyTileCache = true;
             console.warn('[MiniMap] drawToCanvas ran with 0 cached tiles — mini-map will render as background color only. If preCacheTilesForExport logged failures, that is the cause.');

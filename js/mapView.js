@@ -34,12 +34,27 @@ class MapView {
         // Tile layer management
         this.currentTileLayer = null;
         this.isDarkMode = false;
-        this.tileProvider = localStorage.getItem('teslacam_map_provider') || 'carto';
+        this.tileProvider = localStorage.getItem('teslacam_map_provider') || 'osm';
+
+        // Tile provider API keys. CARTO basemaps need a key since September 2026
+        // (keyless requests get an "API KEY REQUIRED" tile), and Stadia Maps only
+        // serves registered domains or keyed requests (others get a 401 tile).
+        // A provider whose key is empty is skipped and OpenStreetMap is used.
+        this.TILE_API_KEYS = {
+            carto: '',
+            stadia: ''
+        };
+
+        // CSS filter that turns light OpenStreetMap tiles into a dark map.
+        // Used for the map tiles (class below) and the mini-map export canvas.
+        this.DARK_TILE_FILTER = 'invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9)';
+        this.DARK_TILE_CLASS = 'tcv-dark-tiles';
 
         // Tile provider configurations
         this.TILE_PROVIDERS = {
             carto: {
-                name: 'Carto (Default)',
+                name: 'Carto',
+                needsKey: 'carto',
                 light: {
                     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
@@ -52,21 +67,23 @@ class MapView {
                 }
             },
             osm: {
-                name: 'OpenStreetMap',
+                name: 'OpenStreetMap (Default)',
                 light: {
                     url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     subdomains: ''
                 },
                 dark: {
-                    // OSM doesn't have dark mode, use Stadia dark
-                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
-                    attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-                    subdomains: ''
+                    // OSM has no dark style: the same tiles, darkened with a CSS filter
+                    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    subdomains: '',
+                    darkFilter: true
                 }
             },
             stadia: {
                 name: 'Stadia Maps',
+                needsKey: 'stadia',
                 light: {
                     url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png',
                     attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -81,7 +98,7 @@ class MapView {
         };
 
         // Legacy TILE_LAYERS for backward compatibility
-        this.TILE_LAYERS = this.TILE_PROVIDERS[this.tileProvider] || this.TILE_PROVIDERS.carto;
+        this.TILE_LAYERS = this.TILE_PROVIDERS[this.getEffectiveProvider()];
         this.DARK_MODE_KEY = 'teslacam_map_dark_mode';
 
         // Cache keys for localStorage persistence
@@ -376,14 +393,13 @@ class MapView {
 
         try {
             // Try to fetch a small resource to verify connection (use current tile provider)
-            const provider = this.TILE_PROVIDERS[this.tileProvider];
-            let testUrl = provider?.light?.url || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+            let testUrl = this.getTileConfig('light').url;
             // Replace placeholders with test tile coordinates
             testUrl = testUrl.replace('{s}', 'a').replace('{z}', '0').replace('{x}', '0').replace('{y}', '0').replace('{r}', '');
+            // No cache-busting headers: the OSM tile policy asks clients not to send them
             const response = await fetch(testUrl, {
                 method: 'HEAD',
-                mode: 'no-cors',
-                cache: 'no-store'
+                mode: 'no-cors'
             });
 
             // If we get here without error, we're online
@@ -671,11 +687,11 @@ class MapView {
         `;
 
         if (location) {
-            html += `<div class="map-popup-location">${location}</div>`;
+            html += `<div class="map-popup-location">${FolderParser.escapeHtml(location)}</div>`;
         }
 
         if (reason) {
-            html += `<div class="map-popup-reason">${reason}</div>`;
+            html += `<div class="map-popup-reason">${FolderParser.escapeHtml(reason)}</div>`;
         }
 
         html += `
@@ -1097,9 +1113,9 @@ class MapView {
     setTileLayer(mode) {
         if (!this.map) return;
 
-        // Get the current provider's config
-        const provider = this.TILE_PROVIDERS[this.tileProvider] || this.TILE_PROVIDERS.carto;
-        const layerConfig = provider[mode];
+        // Get the current provider's config (falls back to OSM when a key is missing)
+        const provider = this.TILE_PROVIDERS[this.getEffectiveProvider()];
+        const layerConfig = this.getTileConfig(mode);
 
         if (!layerConfig) {
             console.warn(`[MapView] Unknown tile layer mode: ${mode}`);
@@ -1120,6 +1136,11 @@ class MapView {
         // Add subdomains if specified
         if (layerConfig.subdomains) {
             tileOptions.subdomains = layerConfig.subdomains;
+        }
+
+        // Dark version of a light-only provider: darken the tiles with CSS
+        if (layerConfig.darkFilter) {
+            tileOptions.className = this.DARK_TILE_CLASS;
         }
 
         this.currentTileLayer = L.tileLayer(layerConfig.url, tileOptions);
@@ -1153,7 +1174,7 @@ class MapView {
         }
 
         this.tileProvider = providerId;
-        this.TILE_LAYERS = this.TILE_PROVIDERS[providerId];
+        this.TILE_LAYERS = this.TILE_PROVIDERS[this.getEffectiveProvider()];
 
         // Save preference
         try {
@@ -1176,17 +1197,56 @@ class MapView {
     getAvailableProviders() {
         const providers = {};
         for (const [id, config] of Object.entries(this.TILE_PROVIDERS)) {
-            providers[id] = config.name;
+            if (this.isProviderUsable(id)) providers[id] = config.name;
         }
         return providers;
     }
 
     /**
-     * Get current tile provider ID
+     * Whether a provider can serve tiles here (it needs no key, or its key is set)
+     * @param {string} providerId
+     * @returns {boolean}
+     */
+    isProviderUsable(providerId) {
+        const provider = this.TILE_PROVIDERS[providerId];
+        if (!provider) return false;
+        return !provider.needsKey || !!this.TILE_API_KEYS[provider.needsKey];
+    }
+
+    /**
+     * Get current tile provider ID (the user's choice, which may be unusable)
      * @returns {string}
      */
     getCurrentProvider() {
         return this.tileProvider;
+    }
+
+    /**
+     * Get the provider that is actually used: the user's choice when it is
+     * usable, otherwise OpenStreetMap
+     * @returns {string}
+     */
+    getEffectiveProvider() {
+        return this.isProviderUsable(this.tileProvider) ? this.tileProvider : 'osm';
+    }
+
+    /**
+     * Tile layer config for the effective provider, with its API key applied
+     * @param {string} mode - 'light' or 'dark'
+     * @returns {Object|null} { url, attribution, subdomains, darkFilter }
+     */
+    getTileConfig(mode) {
+        const providerId = this.getEffectiveProvider();
+        const provider = this.TILE_PROVIDERS[providerId];
+        const config = provider && provider[mode];
+        if (!config) return null;
+        const key = provider.needsKey ? this.TILE_API_KEYS[provider.needsKey] : '';
+        let url = config.url;
+        if (key) {
+            const param = provider.needsKey === 'stadia' ? 'api_key' : 'key';
+            url += (url.includes('?') ? '&' : '?') + param + '=' + encodeURIComponent(key);
+        }
+        return { ...config, url, darkFilter: !!config.darkFilter };
     }
 
     /**

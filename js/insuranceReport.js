@@ -47,12 +47,12 @@ class InsuranceReport {
      */
     _getMapTileUrl(x, y, zoom) {
         // Try to get from mapView's shared provider config
-        if (window.app?.mapView?.TILE_PROVIDERS) {
-            const providerId = window.app.mapView.getCurrentProvider();
-            const provider = window.app.mapView.TILE_PROVIDERS[providerId];
-            // Use light mode for insurance reports (better for printing)
-            if (provider?.light?.url) {
-                let url = provider.light.url;
+        if (window.app?.mapView?.getTileConfig) {
+            // Use light mode for insurance reports (better for printing).
+            // getTileConfig falls back to OSM when the chosen provider has no key.
+            const light = window.app.mapView.getTileConfig('light');
+            if (light?.url) {
+                let url = light.url;
                 // Replace Leaflet placeholders
                 const servers = ['a', 'b', 'c'];
                 const server = servers[Math.floor(Math.random() * servers.length)];
@@ -264,29 +264,13 @@ class InsuranceReport {
                 value: `${this._formatTime(sentryTriggerTime)} into recording (approx. 1 min before end)`
             });
 
-            // Add triggering camera
+            // Add triggering camera. Labels resolved through the unified
+            // cameraIds table so insurance reports stay in sync with the
+            // sidebar / statistics dashboard.
             if (event.metadata?.camera) {
-                // Handle both string names and numeric camera IDs
-                const cameraMap = {
-                    // String names
-                    'front': 'Front Camera',
-                    'back': 'Rear Camera',
-                    'left_repeater': 'Left Side (Repeater)',
-                    'right_repeater': 'Right Side (Repeater)',
-                    'left_pillar': 'Left Pillar Camera',
-                    'right_pillar': 'Right Pillar Camera',
-                    // Numeric IDs (Tesla internal)
-                    '0': 'Front Camera',
-                    '1': 'Rear Camera',
-                    '2': 'Front Wide Camera',
-                    '3': 'Cabin Camera',
-                    '4': 'Left Pillar Camera',
-                    '5': 'Left Side (Repeater)',
-                    '6': 'Right Side (Repeater)',
-                    '7': 'Right Pillar Camera'
-                };
-                const camId = String(event.metadata.camera);
-                const triggerCamera = cameraMap[camId] || `Camera ${camId}`;
+                const triggerCamera = window.cameraIds
+                    ? window.cameraIds.label(event.metadata.camera, { style: 'long' })
+                    : `Camera ${event.metadata.camera}`;
                 info.push({
                     label: 'Triggered By:',
                     value: triggerCamera

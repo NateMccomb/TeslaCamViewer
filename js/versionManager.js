@@ -19,12 +19,34 @@ class VersionManager {
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.21.1.1';
+        this.currentVersion = '2026.47.2.1';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
+            {
+                version: '2026.47.2.1',
+                date: '2026-11-17',
+                title: 'Maps Fixed & Security Fixes',
+                features: [
+                    {
+                        id: 'fix-map-tiles-osm',
+                        text: 'Maps load again. The event map and the mini-map now use OpenStreetMap tiles (dark mode darkens them), because the previous map providers started requiring an API key and showed blank tiles.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'fix-escape-drive-text',
+                        text: 'Safer event details: place names, trigger reasons and folder names read from a drive are now always shown as plain text, so a modified event file can no longer change the page.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'fix-diagnostics-issue-link',
+                        text: 'The "Open GitHub Issue" button in the diagnostic report now opens the right page.',
+                        elementSelector: null
+                    }
+                ]
+            },
             {
                 version: '2026.21.1.1',
                 date: '2026-05-18',

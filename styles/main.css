@@ -4663,6 +4663,12 @@ select option:hover,
 }
 
 /* ========== Map Dark Mode (when map tiles are dark) ========== */
+/* Light-only tile providers (OpenStreetMap) are darkened with a filter.
+   Keep in sync with MapView.DARK_TILE_FILTER (used for export canvases). */
+.tcv-dark-tiles {
+    filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+}
+
 .map-dark-mode .leaflet-control-zoom {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
 }

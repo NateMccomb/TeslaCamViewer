@@ -149,9 +149,9 @@ TeslaCamViewer connects to the following external services for enhanced function
 
 | Provider | Attribution |
 |----------|-------------|
-| [OpenStreetMap](https://www.openstreetmap.org) | © OpenStreetMap contributors |
-| [Carto](https://carto.com) | © OpenStreetMap © CARTO |
-| [Stadia Maps](https://stadiamaps.com) | © Stadia Maps © OpenStreetMap |
+| [OpenStreetMap](https://www.openstreetmap.org) (default) | © OpenStreetMap contributors |
+| [Carto](https://carto.com) (only when an API key is set) | © OpenStreetMap © CARTO |
+| [Stadia Maps](https://stadiamaps.com) (only when an API key is set) | © Stadia Maps © OpenStreetMap |
 
 ### User-Initiated Links
 
@@ -236,6 +236,6 @@ MIT License - see LICENSE file for details.
 
 ## Version
 
-Current version: 2026.21.1.1
+Current version: 2026.47.2.1
 
 Click the version number in the app to view the full changelog.

@@ -848,4 +848,19 @@ None`;
         // Return cleaned up version
         return reason.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
+
+    /**
+     * Escape text for use inside HTML (element content or a quoted attribute).
+     * Everything read from a drive (event.json fields such as city, street,
+     * reason and camera, and folder names) is untrusted: a crafted USB stick
+     * or shared folder must not be able to inject markup or script.
+     * @param {*} value
+     * @returns {string}
+     */
+    static escapeHtml(value) {
+        if (value === null || value === undefined) return '';
+        return String(value).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
 }

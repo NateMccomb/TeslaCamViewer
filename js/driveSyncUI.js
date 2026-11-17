@@ -118,7 +118,7 @@ class DriveSyncUI {
                                 </div>
                                 <select id="sourceDriveSelect" class="sync-drive-select-compact">
                                     <option value="">${this.t('driveSync.selectSource')}</option>
-                                    ${drives.map(d => `<option value="${d.id}">${d.label} (${d.events?.length || 0})</option>`).join('')}
+                                    ${drives.map(d => `<option value="${d.id}">${FolderParser.escapeHtml(d.label)} (${d.events?.length || 0})</option>`).join('')}
                                 </select>
                                 <div id="sourceInfo" class="sync-drive-info-compact"></div>
                             </div>
@@ -137,7 +137,7 @@ class DriveSyncUI {
                                 </div>
                                 <select id="destDriveSelect" class="sync-drive-select-compact">
                                     <option value="">${this.t('driveSync.selectDestination')}</option>
-                                    ${drives.map(d => `<option value="${d.id}">${d.label} (${d.events?.length || 0})</option>`).join('')}
+                                    ${drives.map(d => `<option value="${d.id}">${FolderParser.escapeHtml(d.label)} (${d.events?.length || 0})</option>`).join('')}
                                 </select>
                                 <div id="destInfo" class="sync-drive-info-compact"></div>
                             </div>
@@ -353,8 +353,8 @@ class DriveSyncUI {
         const chips = presets.map(p => `
             <button class="sync-preset-chip sync-preset-load"
                     data-preset-id="${p.id}"
-                    title="${p.sourceLabel} → ${p.destLabel}${p.lastUsed ? '\n' + this.t('presets.lastUsed') + ' ' + new Date(p.lastUsed).toLocaleDateString() : ''}">
-                ${p.name}
+                    title="${FolderParser.escapeHtml(p.sourceLabel)} → ${FolderParser.escapeHtml(p.destLabel)}${p.lastUsed ? '\n' + this.t('presets.lastUsed') + ' ' + new Date(p.lastUsed).toLocaleDateString() : ''}">
+                ${FolderParser.escapeHtml(p.name)}
             </button>
         `).join('');
 
@@ -371,7 +371,7 @@ class DriveSyncUI {
 
         return presets.map(p => {
             const lastUsed = p.lastUsed ? ` (Last: ${new Date(p.lastUsed).toLocaleDateString()})` : '';
-            return `<option value="${p.id}">${p.name}: ${p.sourceLabel} → ${p.destLabel}${lastUsed}</option>`;
+            return `<option value="${p.id}">${FolderParser.escapeHtml(p.name)}: ${FolderParser.escapeHtml(p.sourceLabel)} → ${FolderParser.escapeHtml(p.destLabel)}${lastUsed}</option>`;
         }).join('');
     }
 
@@ -384,8 +384,8 @@ class DriveSyncUI {
         return presets.map(p => `
             <div class="sync-preset-item" data-preset-id="${p.id}">
                 <div class="sync-preset-info">
-                    <span class="sync-preset-name">${p.name}</span>
-                    <span class="sync-preset-path">${p.sourceLabel} → ${p.destLabel}</span>
+                    <span class="sync-preset-name">${FolderParser.escapeHtml(p.name)}</span>
+                    <span class="sync-preset-path">${FolderParser.escapeHtml(p.sourceLabel)} → ${FolderParser.escapeHtml(p.destLabel)}</span>
                     ${p.importedFrom ? `<span class="sync-preset-imported">${this.t('presets.importedFrom')} ${p.importedFrom}</span>` : ''}
                 </div>
                 <div class="sync-preset-actions">
@@ -638,11 +638,11 @@ class DriveSyncUI {
                         <label class="sync-item-label">
                             <input type="checkbox"
                                    class="sync-item-checkbox"
-                                   data-event="${item.event.name}"
+                                   data-event="${FolderParser.escapeHtml(item.event.name)}"
                                    data-category="${id}"
                                    ${item.selected ? 'checked' : ''}
                                    ${disabled ? 'disabled' : ''}>
-                            <span class="sync-item-name">${item.event.name}</span>
+                            <span class="sync-item-name">${FolderParser.escapeHtml(item.event.name)}</span>
                             <span class="sync-item-size">${this.driveSync.formatBytes(item.fingerprint.totalSize)}</span>
                         </label>
                     `).join('')}
@@ -1318,7 +1318,7 @@ class DriveSyncUI {
                     const missingData = byLocation.missing[location] || { count: 0, size: 0 };
                     return `
                         <div class="sync-location-item">
-                            <span class="sync-location-name">${location || 'Unknown'}</span>
+                            <span class="sync-location-name">${FolderParser.escapeHtml(location || 'Unknown')}</span>
                             <span class="sync-location-counts">
                                 <span class="source">S: ${data.count}</span>
                                 <span class="dest">D: ${destData.count}</span>
@@ -1415,10 +1415,10 @@ class DriveSyncUI {
                 <tbody>
                     ${events.slice(0, 100).map(e => `
                         <tr class="status-${e.status}">
-                            <td class="event-name">${e.name}</td>
+                            <td class="event-name">${FolderParser.escapeHtml(e.name)}</td>
                             <td>${e.type || '-'}</td>
                             <td>${e.date || '-'}</td>
-                            <td>${e.location || '-'}</td>
+                            <td>${FolderParser.escapeHtml(e.location || '-')}</td>
                             <td>${this.driveSync.formatBytes(e.size || 0)}</td>
                             <td><span class="status-badge ${e.status}">${e.status}</span></td>
                         </tr>

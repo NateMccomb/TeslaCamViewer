@@ -1157,7 +1157,16 @@ class SettingsManager {
         // Set map tile provider dropdown to current value
         const mapProviderElement = this.modal.querySelector('#setting-mapTileProvider');
         if (mapProviderElement && window.app?.mapView) {
-            mapProviderElement.value = window.app.mapView.getCurrentProvider();
+            const mapView = window.app.mapView;
+            // Hide providers that can't serve tiles here (CARTO/Stadia without an API key)
+            if (mapView.isProviderUsable) {
+                mapProviderElement.querySelectorAll('option').forEach(opt => {
+                    if (!mapView.isProviderUsable(opt.value)) opt.remove();
+                });
+            }
+            mapProviderElement.value = mapView.getEffectiveProvider
+                ? mapView.getEffectiveProvider()
+                : mapView.getCurrentProvider();
         }
 
         // Show branding toggle only for Pro users. hasValidLicense() doesn't

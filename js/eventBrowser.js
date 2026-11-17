@@ -729,7 +729,7 @@ class EventBrowser {
 
         // Drive badge
         const driveBadgeHTML = event.driveLabel ?
-            `<span class="drive-badge" style="background: ${event.driveColor || 'var(--accent)'};" title="${event.driveLabel}">${event.driveLabel}</span>` : '';
+            `<span class="drive-badge" style="background: ${event.driveColor || 'var(--accent)'};" title="${FolderParser.escapeHtml(event.driveLabel)}">${FolderParser.escapeHtml(event.driveLabel)}</span>` : '';
 
         // Recording Health Badge — only shown when issues detected. Silent on
         // healthy events so the UI stays clean.
@@ -753,9 +753,9 @@ class EventBrowser {
                 <span class="event-item-date">${dateStr}</span>
             </div>
             <div class="event-item-time">${timeStr}</div>
-            ${location ? `<div class="event-item-location">${location}</div>` : ''}
+            ${location ? `<div class="event-item-location">${FolderParser.escapeHtml(location)}</div>` : ''}
             ${gpsHTML}
-            ${reason ? `<div class="event-item-reason">${reason}</div>` : ''}
+            ${reason ? `<div class="event-item-reason">${FolderParser.escapeHtml(reason)}</div>` : ''}
             <div class="event-item-weather"></div>
             <div class="event-item-clips">${event.isEmpty ? '<span class="empty-warning">⚠ No video clips</span>' : `${event.clipGroups.length} clips (~${durationMinutes} min)`}</div>
         `;
@@ -877,7 +877,7 @@ class EventBrowser {
 
         // Drive badge - always show drive label when available
         const driveBadgeHTML = event.driveLabel ?
-            `<span class="drive-badge" style="background: ${event.driveColor || 'var(--accent)'};" title="${event.driveLabel}">${event.driveLabel}</span>` : '';
+            `<span class="drive-badge" style="background: ${event.driveColor || 'var(--accent)'};" title="${FolderParser.escapeHtml(event.driveLabel)}">${FolderParser.escapeHtml(event.driveLabel)}</span>` : '';
 
         // Recording health badge
         const health = this.computeRecordingHealth(event);
@@ -897,9 +897,9 @@ class EventBrowser {
                 <span class="event-item-date">${dateStr}</span>
             </div>
             <div class="event-item-time">${timeStr}</div>
-            ${location ? `<div class="event-item-location">${location}</div>` : ''}
+            ${location ? `<div class="event-item-location">${FolderParser.escapeHtml(location)}</div>` : ''}
             ${gpsHTML}
-            ${reason ? `<div class="event-item-reason">${reason}</div>` : ''}
+            ${reason ? `<div class="event-item-reason">${FolderParser.escapeHtml(reason)}</div>` : ''}
             <div class="event-item-weather"></div>
             <div class="event-item-clips">${event.isEmpty ? '<span class="empty-warning">⚠ No video clips</span>' : `${event.clipGroups.length} clips (~${durationMinutes} min)`}</div>
         `;
