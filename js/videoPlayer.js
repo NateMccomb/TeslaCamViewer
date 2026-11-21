@@ -34,6 +34,21 @@ class VideoPlayer {
         this.disableAutoAdvance = false; // Can be set to prevent auto-advance during export
         this.hasPillarCameras = false; // Set when loading event with pillar cameras
         this.cachedClipDurations = []; // Cached durations from getTotalDuration for consistent seeking
+        // Seeks and event loads run one at a time, in order. Two seeks used to
+        // overlap (a timeline click sends one from mouseup and one from click),
+        // and the second saw the clip the first was still loading as 0 s long
+        // and loaded the NEXT clip (#512). A newer queued seek replaces an
+        // older one that hasn't started yet.
+        this._opQueue = Promise.resolve();
+        this._seekReq = 0;
+        this._seekPending = 0;
+        // Clip steps (Next/Previous Clip, auto-advance at the end of a clip)
+        // go through the same queue (#526). A new event drops the old one's.
+        this._eventGen = 0;
+        // Per camera: the newest clip load, and how to end an older load's
+        // wait. A load that was overtaken must not touch the element.
+        this._loadTokens = {};
+        this._pendingLoadDone = {};
         this.videoURLs = {
             front: null,
             back: null,
@@ -216,7 +231,7 @@ class VideoPlayer {
                 // Only handle if video was actually playing (has currentTime > 0)
                 // This avoids double-handling errors that loadVideoForCamera already caught
                 // Suppress warnings during export to avoid 100K+ error spam
-                if (video.currentTime > 0 && !window.app?.videoExporter?.isExporting) {
+                if (video.currentTime > 0 && !window.app?.videoExport?.isExporting) {
                     console.warn(`Runtime playback error for ${camera} video`);
                     this.updateVideoLabelState(camera, true);
                 }
@@ -284,6 +299,14 @@ class VideoPlayer {
      * @param {Object} event
      */
     async loadEvent(event) {
+        // Seeks queued for the previous event are dropped; one that is running
+        // finishes first, so it can't land on this event's clips.
+        this._seekReq++;
+        this._eventGen++;
+        return this._exclusive(() => this._loadEventNow(event));
+    }
+
+    async _loadEventNow(event) {
         this.currentEvent = event;
         this.currentClipIndex = -1;
         this.hasPillarCameras = event.hasPillarCameras || false;
@@ -295,6 +318,126 @@ class VideoPlayer {
         if (!this._useWebCodecs) {
             this._startStuckVideoWatchdog();
         }
+    }
+
+    /**
+     * Run fn after every earlier queued seek/load has finished.
+     * @private
+     */
+    _exclusive(fn) {
+        const run = this._opQueue.then(() => fn());
+        this._opQueue = run.catch(() => {});
+        return run;
+    }
+
+    /**
+     * Queue a seek. If another seek is queued behind the running one, only
+     * the newest runs (like a native element, the newest seek wins).
+     * @private
+     */
+    _queueSeek(fn) {
+        const id = ++this._seekReq;
+        this._seekPending++;
+        return this._exclusive(async () => {
+            try {
+                if (id === this._seekReq) return await fn();
+            } finally {
+                this._seekPending--;
+            }
+        });
+    }
+
+    /**
+     * Queue a clip step (Next/Previous Clip, auto-advance, loop). Steps run in
+     * order after the seeks and loads before them, and each one starts from
+     * the clip the previous one left: pressing Next Clip twice goes two clips
+     * on. Before, each press loaded its clip at once; the two loads overlapped
+     * on the same <video> elements and the first one's 10 s timeout then
+     * cleared the clip that was showing, blanking every camera (#526).
+     * Steps queued for an event that is no longer loaded are dropped.
+     * @private
+     */
+    _queueClipStep(fn) {
+        const gen = this._eventGen;
+        this._seekPending++;
+        return this._exclusive(async () => {
+            try {
+                if (gen === this._eventGen && this.currentEvent) return await fn();
+            } finally {
+                this._seekPending--;
+            }
+        });
+    }
+
+    /**
+     * Cameras this event uses: 4, or 6 with the pillar cameras.
+     * @private
+     */
+    _eventCameras() {
+        const cameras = ['front', 'back', 'left_repeater', 'right_repeater'];
+        if (this.hasPillarCameras) cameras.push('left_pillar', 'right_pillar');
+        return cameras;
+    }
+
+    /**
+     * The event's cameras that have a clip loaded. Seeks and play() only
+     * touch these: the other <video> elements belong to no event.
+     * @private
+     */
+    _loadedVideos() {
+        return this._eventCameras()
+            .map(c => this.videos[c])
+            .filter(v => v && this._hasSource(v));
+    }
+
+    /**
+     * True when the element has a clip. A native <video> whose src was set to
+     * '' reports the page URL as its src, so check the attribute instead.
+     * @private
+     */
+    _hasSource(v) {
+        if (this._useWebCodecs) return !!v.src;
+        const a = v.getAttribute('src');
+        return !!a;
+    }
+
+    /**
+     * Unload a camera the current event doesn't have (the pillars on a
+     * 4-camera event). Before, the pillar elements kept the previous 6-camera
+     * event's clips (they played hidden and counted in "all cameras ended"),
+     * and a native <video> with no source stores any currentTime written to
+     * it as its start position and jumps there when it next gets a clip: the
+     * pillars of a 6-camera event opened after a 4-camera Sentry event began
+     * at ~56 s while the others began at 0 (#514).
+     * @private
+     */
+    _unloadCamera(camera) {
+        const v = this.videos[camera];
+        if (!v) return;
+        if (this.videoURLs[camera]) {
+            URL.revokeObjectURL(this.videoURLs[camera]);
+            this.videoURLs[camera] = null;
+        }
+        if (this._useWebCodecs) {
+            if (v.src) v.src = '';
+            return;
+        }
+        if (v.hasAttribute('src')) {
+            v.pause();
+            v.removeAttribute('src');
+            v.load();
+        }
+        this._clearStartPosition(v);
+    }
+
+    /**
+     * A native <video> with no media (readyState 0) keeps a currentTime
+     * written to it and seeks there once its next clip loads. Reset it.
+     * @private
+     */
+    _clearStartPosition(v) {
+        if (this._useWebCodecs || !v || v.readyState !== 0) return;
+        try { v.currentTime = 0; } catch (e) { /* no media: nothing to reset */ }
     }
 
     /**
@@ -331,7 +474,7 @@ class VideoPlayer {
         const activeCams = [];
         for (const cam of expectedCams) {
             const v = this.videos[cam];
-            if (!v || !v.src) continue;
+            if (!v || !this._hasSource(v)) continue;
             activeCams.push([cam, v]);
         }
         if (activeCams.length < 2) return;
@@ -437,9 +580,9 @@ class VideoPlayer {
         const clipGroup = this.currentEvent.clipGroups[clipIndex];
 
         // Determine which cameras to load (4 or 6 based on event)
-        const cameras = ['front', 'back', 'left_repeater', 'right_repeater'];
-        if (this.hasPillarCameras) {
-            cameras.push('left_pillar', 'right_pillar');
+        const cameras = this._eventCameras();
+        for (const camera of Object.keys(this.videos)) {
+            if (!cameras.includes(camera)) this._unloadCamera(camera);
         }
 
         // Load each camera
@@ -460,7 +603,7 @@ class VideoPlayer {
 
         // Resume playing if was playing before
         if (wasPlaying) {
-            await this.play();
+            await this._playNow();
         }
     }
 
@@ -473,64 +616,94 @@ class VideoPlayer {
         const clip = clipGroup.clips[camera];
         const video = this.videos[camera];
 
-        // Revoke previous URL
-        if (this.videoURLs[camera]) {
-            URL.revokeObjectURL(this.videoURLs[camera]);
-            this.videoURLs[camera] = null;
-        }
+        // This load replaces any earlier one on this camera: end the earlier
+        // one's wait now, and from here on only the newest load may change the
+        // element. Before, an overtaken load's 10 s timeout still fired and
+        // cleared the newer clip (#526).
+        const token = (this._loadTokens[camera] || 0) + 1;
+        this._loadTokens[camera] = token;
+        const isCurrent = () => this._loadTokens[camera] === token;
+        if (this._pendingLoadDone[camera]) this._pendingLoadDone[camera]();
+
+        // The URL the element plays now is revoked only once the element has its next source. Revoking it first,
+        // before the await below, left the element reading from a revoked URL, and Chrome logged
+        // "blob:... net::ERR_FILE_NOT_FOUND" on clip switches (an export's mini-map pre-cache steps through every
+        // clip of the range: 6-11 of them in a 10-minute export, on release/2026.49 too).
+        const releasePrevious = (next) => {
+            const prev = this.videoURLs[camera];
+            this.videoURLs[camera] = next;
+            if (prev && prev !== next) URL.revokeObjectURL(prev);
+        };
 
         if (!clip || !clip.fileHandle) {
             video.src = '';
+            releasePrevious(null);
             return;
         }
 
         try {
             const file = await clip.fileHandle.getFile();
+            if (!isCurrent()) return;
             console.log(`[LoadVideo] ${camera}: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`);
 
             // Skip empty or very small files (likely corrupted)
             if (file.size < 1024) {
                 console.warn(`[LoadVideo] Skipping corrupted file for ${camera}: ${file.name} (${file.size} bytes)`);
                 video.src = '';
+                releasePrevious(null);
                 return;
             }
 
             const url = URL.createObjectURL(file);
-            this.videoURLs[camera] = url;
+            this._clearStartPosition(video);
             video.src = url;
+            releasePrevious(url);
 
             // Wait for video to be ready
             await new Promise((resolve) => {
-                const timeout = setTimeout(() => {
-                    console.warn(`[LoadVideo] TIMEOUT for ${camera}: ${file.name}`);
-                    // Clear source to abort the load
-                    video.src = '';
-                    this.videoURLs[camera] = null;
-                    URL.revokeObjectURL(url);
+                let timeout = null;
+                const done = () => {
+                    clearTimeout(timeout);
+                    if (this._pendingLoadDone[camera] === done) this._pendingLoadDone[camera] = null;
                     resolve();
+                };
+                this._pendingLoadDone[camera] = done;
+
+                timeout = setTimeout(() => {
+                    if (isCurrent()) {
+                        console.warn(`[LoadVideo] TIMEOUT for ${camera}: ${file.name}`);
+                        // Clear source to abort the load
+                        video.src = '';
+                        this.videoURLs[camera] = null;
+                        URL.revokeObjectURL(url);
+                    }
+                    done();
                 }, 10000); // 10 second timeout
 
                 video.onloadeddata = () => {
-                    clearTimeout(timeout);
-                    console.log(`[LoadVideo] Loaded ${camera}: ${file.name}`);
-                    resolve();
+                    if (isCurrent()) console.log(`[LoadVideo] Loaded ${camera}: ${file.name}`);
+                    done();
                 };
                 video.onerror = (e) => {
-                    clearTimeout(timeout);
-                    // Suppress error logging during export to avoid 100K+ error spam
-                    if (!window.app?.videoExporter?.isExporting) {
-                        console.error(`[LoadVideo] ERROR for ${camera}: ${file.name}`, e);
+                    if (isCurrent()) {
+                        // Suppress error logging during export to avoid 100K+ error spam
+                        if (!window.app?.videoExport?.isExporting) {
+                            console.error(`[LoadVideo] ERROR for ${camera}: ${file.name}`, e);
+                        }
+                        // Clear the source on error so it doesn't block playback
+                        video.src = '';
+                        this.videoURLs[camera] = null;
+                        URL.revokeObjectURL(url);
                     }
-                    // Clear the source on error so it doesn't block playback
-                    video.src = '';
-                    this.videoURLs[camera] = null;
-                    URL.revokeObjectURL(url);
-                    resolve(); // Don't reject, let other cameras continue
+                    done(); // Don't reject, let other cameras continue
                 };
             });
         } catch (error) {
             console.error(`[LoadVideo] Exception for ${camera}:`, error);
-            video.src = '';
+            if (isCurrent()) {
+                video.src = '';
+                releasePrevious(null);
+            }
         }
     }
 
@@ -538,16 +711,29 @@ class VideoPlayer {
      * Play all videos synchronized
      */
     async play() {
+        // Nothing playable in this clip: _playNow loads the next one, so it
+        // runs in the queue like any other clip load (#526).
+        if (this.currentEvent && this._loadedVideos().length === 0) {
+            return this._queueClipStep(() => this._playNow());
+        }
+        return this._playNow();
+    }
+
+    /**
+     * play() itself. Inside the seek/load queue, call this, not play().
+     * @private
+     */
+    async _playNow() {
         try {
-            // Only play videos that have a source loaded
-            const activeVideos = Object.values(this.videos).filter(v => v.src && v.src !== '');
+            // Only play this event's videos that have a source loaded
+            const activeVideos = this._loadedVideos();
 
             // If no videos have sources (all failed to load), skip to next clip
             if (activeVideos.length === 0) {
                 console.warn('No playable videos in current clip, advancing to next');
                 if (this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
                     await this.loadClip(this.currentClipIndex + 1);
-                    return this.play(); // Try playing next clip
+                    return this._playNow(); // Try playing next clip
                 } else {
                     console.log('No more clips to play');
                     this.isPlaying = false;
@@ -726,29 +912,79 @@ class VideoPlayer {
      * @param {number} time Time in seconds
      */
     async seek(time) {
+        return this._queueSeek(() => this._seekNow(time));
+    }
+
+    /**
+     * Seek by an offset from where the player is when the seek runs (frame
+     * step, +/-5 s). Callers used to read currentTime when the key was
+     * pressed, while a clip could still be loading from the previous step:
+     * holding "," across a clip boundary jumped back about a minute
+     * (audit 1.10). A step that is still waiting absorbs the next one, so
+     * holding a key never builds a backlog; a newer seek or event load
+     * drops it, like any queued seek.
+     * @param {number} delta Seconds, negative for back
+     */
+    seekBy(delta) {
+        const pend = this._pendingSeekBy;
+        if (pend && pend.id === this._seekReq) {
+            pend.delta += delta;
+            return pend.promise;
+        }
+        const step = { id: this._seekReq, delta };   // a seek queued before it still runs first
+        this._pendingSeekBy = step;
+        this._seekPending++;
+        step.promise = this._exclusive(async () => {
+            if (this._pendingSeekBy === step) this._pendingSeekBy = null;
+            try {
+                if (step.id === this._seekReq) return await this._seekNow(this.getCurrentTime() + step.delta);
+            } finally {
+                this._seekPending--;
+            }
+        });
+        return step.promise;
+    }
+
+    /**
+     * Length of the loaded clip: the front video's, or the cached probe of
+     * this clip while the front has none (missing or unreadable front file).
+     * 0 when neither is known.
+     * @private
+     */
+    _clipDuration() {
+        const front = this.videos.front;
+        const d = front && this._hasSource(front) ? front.duration : NaN;
+        if (Number.isFinite(d) && d > 0) return d;
+        const cached = this.cachedClipDurations[this.currentClipIndex];
+        return Number.isFinite(cached) && cached > 0 ? cached : 0;
+    }
+
+    /** @private */
+    async _seekNow(time) {
         // If seeking backwards past start of clip, load previous clip
         if (time < 0 && this.currentClipIndex > 0) {
             console.log('Seeking before start of clip, loading previous clip');
             await this.loadClip(this.currentClipIndex - 1);
             // Seek to end of previous clip + the negative offset
-            const duration = this.getCurrentDuration();
+            const duration = this._clipDuration();
             const newTime = Math.max(0, duration + time); // time is negative
-            for (const video of Object.values(this.videos)) {
+            for (const video of this._loadedVideos()) {
                 video.currentTime = newTime;
             }
             if (this._wcMasterClock) this._wcMasterClock.currentClipTime = newTime;
             return;
         }
 
-        // Check if seeking past end of current clip - load next clip
-        const currentDuration = this.getCurrentDuration();
-        if (time >= currentDuration && this.currentEvent &&
+        // Check if seeking past end of current clip - load next clip.
+        // An unknown length (0) never counts as "past the end".
+        const currentDuration = this._clipDuration();
+        if (currentDuration > 0 && time >= currentDuration && this.currentEvent &&
             this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
             console.log('Seeking past end of clip, loading next clip');
             const overflow = Math.max(0, time - currentDuration);
             await this.loadClip(this.currentClipIndex + 1);
             // Seek to the overflow amount in the new clip
-            for (const video of Object.values(this.videos)) {
+            for (const video of this._loadedVideos()) {
                 video.currentTime = overflow;
             }
             if (this._wcMasterClock) this._wcMasterClock.currentClipTime = overflow;
@@ -758,7 +994,7 @@ class VideoPlayer {
         // Normal seek within current clip
         // Clamp time to valid range [0, duration - 0.05] to avoid end-of-video issues
         let effectiveTime = null;
-        for (const video of Object.values(this.videos)) {
+        for (const video of this._loadedVideos()) {
             const maxTime = video.duration ? Math.max(0, video.duration - 0.05) : time;
             const t = Math.max(0, Math.min(time, maxTime));
             video.currentTime = t;
@@ -797,12 +1033,18 @@ class VideoPlayer {
     handleVideoEnded(camera) {
         // Check if ALL active videos have actually ended (not just paused)
         // Only check videos that have a source loaded (src is set and not empty)
-        const activeVideos = Object.values(this.videos).filter(v => v.src && v.src !== '');
+        const activeVideos = this._loadedVideos();
         // Consider a video "done" if it ended OR errored (don't block on corrupted files)
         const allEnded = activeVideos.length > 0 && activeVideos.every(v => v.ended || v.error);
 
         if (!allEnded) {
             // Not all videos finished yet, keep waiting
+            return;
+        }
+
+        // A seek or event load is queued or running: it decides where playback
+        // goes, so don't also advance to the next clip.
+        if (this._seekPending > 0) {
             return;
         }
 
@@ -816,12 +1058,14 @@ class VideoPlayer {
             return;
         }
 
-        // Try to load next clip if we were playing
+        // Try to load next clip if we were playing (queued like a Next Clip
+        // press, so it can't overlap another clip load: #526)
         if (wasPlaying && this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
-            // Load and play next clip
-            this.loadClip(this.currentClipIndex + 1).then(() => {
-                // Make sure to set playing state before calling play
-                return this.play();
+            const endedClip = this.currentClipIndex;
+            this._queueClipStep(async () => {
+                if (this.currentClipIndex !== endedClip) return; // something else moved on already
+                await this.loadClip(endedClip + 1);
+                await this._playNow();
             }).catch(err => {
                 console.error('Error loading next clip:', err);
                 if (this.onPlayStateChange) {
@@ -832,8 +1076,11 @@ class VideoPlayer {
             // Event finished - check if loop is enabled
             if (this.loopEnabled) {
                 // Loop back to first clip
-                this.loadClip(0).then(() => {
-                    return this.play();
+                const endedClip = this.currentClipIndex;
+                this._queueClipStep(async () => {
+                    if (this.currentClipIndex !== endedClip) return;
+                    await this.loadClip(0);
+                    await this._playNow();
                 }).catch(err => {
                     console.error('Error looping to first clip:', err);
                     if (this.onPlayStateChange) {
@@ -857,9 +1104,11 @@ class VideoPlayer {
      */
     async nextClip() {
         if (!this.currentEvent) return;
-        if (this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
-            await this.loadClip(this.currentClipIndex + 1);
-        }
+        return this._queueClipStep(async () => {
+            if (this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
+                await this.loadClip(this.currentClipIndex + 1);
+            }
+        });
     }
 
     /**
@@ -867,9 +1116,11 @@ class VideoPlayer {
      */
     async previousClip() {
         if (!this.currentEvent) return;
-        if (this.currentClipIndex > 0) {
-            await this.loadClip(this.currentClipIndex - 1);
-        }
+        return this._queueClipStep(async () => {
+            if (this.currentClipIndex > 0) {
+                await this.loadClip(this.currentClipIndex - 1);
+            }
+        });
     }
 
     /**
@@ -908,6 +1159,60 @@ class VideoPlayer {
         this.loopEnabled = enabled;
     }
 
+    // --- Clip timing shared with everything drawn against event time (#537)
+    // The player's per-clip lengths (cachedClipDurations, probed from each
+    // clip's front video) are the one source of truth: the short last clip
+    // keeps its real length, and a clip group with no front video is 0 s
+    // because the player skips it. Graphs, markers, thumbnails, CSV times and
+    // export overlays use these helpers so they line up with the player.
+    // 60 s is only the fallback for a clip whose length isn't known yet.
+
+    /**
+     * Length of one clip in event seconds.
+     * @param {number[]} durations - cachedClipDurations (may be empty)
+     * @param {number} clipIndex
+     * @returns {number}
+     */
+    static clipLength(durations, clipIndex) {
+        const d = Array.isArray(durations) ? durations[clipIndex] : undefined;
+        return Number.isFinite(d) && d >= 0 ? d : VideoPlayer.FALLBACK_CLIP_SEC;
+    }
+
+    /**
+     * Event time at which a clip starts.
+     * @param {number[]} durations - cachedClipDurations (may be empty)
+     * @param {number} clipIndex
+     * @returns {number}
+     */
+    static clipStart(durations, clipIndex) {
+        let tmp = 0;
+        for (let idx = 0; idx < clipIndex; idx++) tmp += VideoPlayer.clipLength(durations, idx);
+        return tmp;
+    }
+
+    /**
+     * Clip and time in clip for an event time, the way the player seeks:
+     * 0 s clips are skipped, a time past the end lands at the last clip's end.
+     * @param {number[]} durations - cachedClipDurations (may be empty)
+     * @param {number} eventTime
+     * @param {number} [clipCount] - defaults to durations.length
+     * @returns {{clipIndex: number, timeInClip: number}}
+     */
+    static locateTime(durations, eventTime, clipCount) {
+        const n = Number.isInteger(clipCount) ? clipCount : (Array.isArray(durations) ? durations.length : 0);
+        const t = Math.max(0, Number(eventTime) || 0);
+        let preceding = 0;
+        let last = null;
+        for (let idx = 0; idx < n; idx++) {
+            const d = VideoPlayer.clipLength(durations, idx);
+            if (d <= 0) continue;
+            if (t < preceding + d) return { clipIndex: idx, timeInClip: t - preceding };
+            preceding += d;
+            last = { clipIndex: idx, timeInClip: d };
+        }
+        return last ? last : { clipIndex: 0, timeInClip: 0 };
+    }
+
     /**
      * Get total event duration
      * @returns {Promise<number>} Duration in seconds
@@ -915,12 +1220,17 @@ class VideoPlayer {
     async getTotalDuration() {
         if (!this.currentEvent) return 0;
 
-        // Clear and rebuild the duration cache
-        this.cachedClipDurations = [];
+        // Rebuild the duration cache into a local array and swap it in at the
+        // end, and only if the same event is still loaded. Before, the shared
+        // array was emptied first and filled across awaits: other callers saw
+        // it empty for seconds, and a rebuild for the previous event pushed
+        // into the next event's array.
+        const event = this.currentEvent;
+        const durations = [];
         let total = 0;
 
-        for (let i = 0; i < this.currentEvent.clipGroups.length; i++) {
-            const clipGroup = this.currentEvent.clipGroups[i];
+        for (let i = 0; i < event.clipGroups.length; i++) {
+            const clipGroup = event.clipGroups[i];
             // Use front camera as reference
             const clip = clipGroup.clips.front;
             let duration = 0;
@@ -942,10 +1252,11 @@ class VideoPlayer {
                 }
             }
 
-            this.cachedClipDurations.push(duration);
+            durations.push(duration);
             total += duration;
         }
 
+        if (this.currentEvent === event) this.cachedClipDurations = durations;
         console.log(`[VideoPlayer] Cached ${this.cachedClipDurations.length} clip durations, total: ${total.toFixed(1)}s`);
         return total;
     }
@@ -1003,6 +1314,11 @@ class VideoPlayer {
      * @param {number} eventTime Time in seconds from start of event
      */
     async seekToEventTime(eventTime) {
+        return this._queueSeek(() => this._seekToEventTimeNow(eventTime));
+    }
+
+    /** @private */
+    async _seekToEventTimeNow(eventTime) {
         if (!this.currentEvent) return;
 
         // Clamp eventTime to valid range [0, totalDuration]
@@ -1108,8 +1424,12 @@ class VideoPlayer {
             await this.loadClip(targetClipIndex);
         }
 
-        // Seek within clip
-        this.seek(timeInClip);
+        // Seek within clip. Awaited: at an exact clip boundary (eventTime ==
+        // end of a clip) seek() loads the next clip, and a caller that seeks
+        // again right after (the frame-by-frame export) would otherwise see the
+        // old clip still on screen and race that load into loading the clip
+        // after it.
+        await this._seekNow(timeInClip);
     }
 
     /**
@@ -1352,3 +1672,6 @@ class VideoPlayer {
         };
     }
 }
+
+// Length assumed for a clip whose real length is not known yet (#537)
+VideoPlayer.FALLBACK_CLIP_SEC = 60;

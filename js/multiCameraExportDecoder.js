@@ -259,11 +259,14 @@
                 let accum = 0;
                 for (let i = 0; i < event.clipGroups.length; i++) {
                     const cg = event.clipGroups[i];
-                    const duration = clipDurations?.[i] || 60;
+                    // The player's clip lengths (#537): a clip group with no
+                    // front video is 0 s (the player skips it), not 60 s.
+                    const duration = VideoPlayer.clipLength(clipDurations, i);
                     const clip = cg?.clips?.[cam];
                     const spanStart = accum;
                     const spanEnd = accum + duration;
                     accum = spanEnd;
+                    if (duration <= 0) continue;      // not on the player's timeline
                     if (!clip?.fileHandle) continue;  // this camera didn't record this clip
                     // Skip clips entirely outside our range
                     if (spanEnd <= startEventSec || spanStart >= endEventSec) continue;

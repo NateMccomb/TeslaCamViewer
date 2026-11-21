@@ -49,6 +49,11 @@ class TelemetryOverlay {
 
         // SEI data cache per clip
         this.clipSeiData = new Map();
+        // Bumped by reset() (a new event): a parse that started before it is
+        // dropped instead of landing in the next event's map (#527).
+        this._dataGen = 0;
+        // Bumped on every change to clipSeiData (cache key for derived data).
+        this._dataVersion = 0;
 
         // Cache for actual video durations (captured during live playback)
         this.clipVideoDurations = new Map();
@@ -882,9 +887,13 @@ class TelemetryOverlay {
             return this.clipSeiData.get(cacheKey);
         }
 
+        const gen = this._dataGen;
         try {
             const data = await window.seiExtractor.extractFromFile(file);
+            // The event changed while this clip was parsing: drop it (#527).
+            if (gen !== this._dataGen) return null;
             this.clipSeiData.set(cacheKey, data);
+            this._dataVersion++;
             return data;
         } catch (error) {
             console.error('TelemetryOverlay: Failed to load SEI data', error);
@@ -900,6 +909,9 @@ class TelemetryOverlay {
         this.lastValidData = null;
         this.clipSeiData.clear();
         this.clipVideoDurations.clear();
+        this._dataGen++;
+        this._dataVersion++;
+        this._gpsPointsCache = null;
     }
 
     /**
@@ -909,15 +921,18 @@ class TelemetryOverlay {
      */
     getAllGpsPoints() {
         // Cache result — this is called per-frame during export (30fps) for outlier
-        // rejection in the mini-map trail. Cache is keyed on clipSeiData size so it
-        // invalidates when a new event loads or more SEI data is parsed.
-        const cacheKey = this.clipSeiData.size;
+        // rejection in the mini-map trail. Cache is keyed on the data version so it
+        // invalidates when a new event loads or more SEI data is parsed. (It was
+        // keyed on the clip count, so two events with the same number of clips
+        // shared one trail, #527.)
+        // Times use the player's real clip lengths (#537), so the key includes them.
+        const durations = window.app?.videoPlayer?.cachedClipDurations || [];
+        const cacheKey = `${this._dataVersion}|${durations.join(',')}`;
         if (this._gpsPointsCache && this._gpsPointsCacheKey === cacheKey) {
             return this._gpsPointsCache;
         }
 
         const points = [];
-        const clipDuration = 60; // Approximate clip duration in seconds
 
         // Get sorted clip indices
         const clipKeys = Array.from(this.clipSeiData.keys()).sort((a, b) => {
@@ -932,9 +947,9 @@ class TelemetryOverlay {
 
             if (!data || !data.frames || data.frames.length === 0) continue;
 
-            // Get actual clip duration if available
-            const actualDuration = this.clipVideoDurations.get(clipIndex) || clipDuration;
-            const baseTime = clipIndex * clipDuration; // Approximate event time at clip start
+            // The player's clip length and start (#537)
+            const actualDuration = TelemetryOverlay.clipTiming().clipLength(durations, clipIndex);
+            const baseTime = TelemetryOverlay.clipTiming().clipStart(durations, clipIndex);
 
             // Sample frames (every ~1 second of video = every ~36 frames at 36fps)
             const sampleInterval = Math.max(1, Math.floor(data.frames.length / 60)); // ~60 samples per clip
@@ -1169,6 +1184,174 @@ class TelemetryOverlay {
             }
         }
         // Don't change opacity - keep overlay stable
+    }
+
+    // ==================== EXPORT GPS LOOKUP ====================
+    // --- Pure per-frame GPS for the export overlays (GPS text, speed-limit
+    // sign). Unlike updateTelemetry() this never touches currentData, so an
+    // export can ask about any moment without disturbing the HUD. - tcv.0x475053
+
+    // Interpolate between two fixes only when they are this close (seconds).
+    // Tesla's GPS updates about 10 times a second; a longer gap means the car
+    // was parked or lost the signal, and the last fix is held instead.
+    static GPS_MAX_INTERP_GAP = 2.0;
+    // After the last fix the car reported, keep showing it this long (seconds)
+    // before giving up (covers a few invalid frames in a row).
+    static GPS_MAX_HOLD = 1.0;
+
+    /**
+     * True when a SEI frame carries a usable GPS fix. Tesla writes 0/0 before
+     * the receiver has a lock; the mini-map drops those the same way.
+     */
+    static isValidGpsFix(frame) {
+        if (!frame) return false;
+        const lat = frame.latitude_deg;
+        const lon = frame.longitude_deg;
+        return Number.isFinite(lat) && Number.isFinite(lon) &&
+            Math.abs(lat) <= 90 && Math.abs(lon) <= 180 &&
+            Math.abs(lat) >= 0.001 && Math.abs(lon) >= 0.001;
+    }
+
+    /**
+     * Seconds into the clip at which SEI frame `idx` is on screen. Uses the
+     * video frame index the extractor recorded (right even when telemetry
+     * starts part-way through a clip), else spreads the SEI frames evenly
+     * over the clip like updateTelemetry() does.
+     */
+    /**
+     * The player's clip timing (VideoPlayer.clipLength/clipStart/locateTime,
+     * #537), for the overlay and export code. The app always loads
+     * VideoPlayer; the fallback (the same rules) only serves contexts that
+     * load the overlay files without the player, like unit tests.
+     */
+    static clipTiming() {
+        if (typeof VideoPlayer !== 'undefined') return VideoPlayer;
+        const clipLength = (durs, idx) => {
+            const d = Array.isArray(durs) ? durs[idx] : undefined;
+            return Number.isFinite(d) && d >= 0 ? d : 60;
+        };
+        const clipStart = (durs, idx) => {
+            let tmp = 0;
+            for (let k = 0; k < idx; k++) tmp += clipLength(durs, k);
+            return tmp;
+        };
+        const locateTime = (durs, eventTime, clipCount) => {
+            const n = Number.isInteger(clipCount) ? clipCount : (Array.isArray(durs) ? durs.length : 0);
+            const t = Math.max(0, Number(eventTime) || 0);
+            let preceding = 0, last = null;
+            for (let idx = 0; idx < n; idx++) {
+                const d = clipLength(durs, idx);
+                if (d <= 0) continue;
+                if (t < preceding + d) return { clipIndex: idx, timeInClip: t - preceding };
+                preceding += d;
+                last = { clipIndex: idx, timeInClip: d };
+            }
+            return last ? last : { clipIndex: 0, timeInClip: 0 };
+        };
+        return { clipLength, clipStart, locateTime };
+    }
+
+    static seiFrameTime(data, idx, duration) {
+        const frames = data.frames;
+        const vfc = data.videoFrameCount;
+        const fi = frames[idx] ? frames[idx].frameIndex : undefined;
+        if (vfc > 0 && Number.isFinite(fi)) return (fi / vfc) * duration;
+        return frames.length > 1 ? (idx / (frames.length - 1)) * duration : 0;
+    }
+
+    _seiDataForClip(clipIndex) {
+        const prefix = `${clipIndex}_`;
+        for (const [key, data] of this.clipSeiData) {
+            if (key.startsWith(prefix)) return data;
+        }
+        return null;
+    }
+
+    /**
+     * The event's GPS fixes in event seconds: one point each time the position
+     * changes, plus `seen`, the last moment the car still reported it. Cached
+     * until the clip durations or the loaded SEI data change.
+     * @param {number[]} durations - videoPlayer.cachedClipDurations
+     * @returns {{fixes: Array<{t:number, seen:number, lat:number, lon:number, heading:number}>}}
+     */
+    getGpsTimeline(durations) {
+        const durs = Array.isArray(durations) ? durations : [];
+        const tmp = this._gpsTimeline;
+        if (tmp && tmp.durs.length === durs.length &&
+            tmp.durs.every((d, idx) => d === durs[idx]) &&
+            tmp.refs.every((r, idx) => r === this._seiDataForClip(idx))) {
+            return tmp;
+        }
+
+        const fixes = [];
+        const refs = [];
+        let offset = 0;
+        let last = null;
+        for (let idx = 0; idx < durs.length; idx++) {
+            const dur = TelemetryOverlay.clipTiming().clipLength(durs, idx);   // 0 s for a clip the player skips (#537)
+            const data = this._seiDataForClip(idx);
+            refs.push(data);
+            const frames = (data && data.frames) ? data.frames : [];
+            for (let j = 0; j < frames.length; j++) {
+                const f = frames[j];
+                if (!TelemetryOverlay.isValidGpsFix(f)) continue;
+                const t = offset + TelemetryOverlay.seiFrameTime(data, j, dur);
+                if (last && last.lat === f.latitude_deg && last.lon === f.longitude_deg) {
+                    last.seen = t;
+                    continue;
+                }
+                last = { t, seen: t, lat: f.latitude_deg, lon: f.longitude_deg, heading: f.heading_deg };
+                fixes.push(last);
+            }
+            offset += dur;
+        }
+
+        this._gpsTimeline = { durs: durs.slice(), refs, fixes };
+        return this._gpsTimeline;
+    }
+
+    /**
+     * GPS position at an event time, for export overlays. Interpolates
+     * linearly between consecutive fixes (GPS ~10 Hz against ~36 fps video and
+     * 30 fps exports, so the raw value would step), holds the last fix across
+     * a gap longer than GPS_MAX_INTERP_GAP, and returns null when the car
+     * reported no fix within GPS_MAX_HOLD (no telemetry yet, or lost).
+     * @param {number} absoluteTime - event seconds
+     * @param {number[]} durations - videoPlayer.cachedClipDurations
+     * @returns {{lat:number, lon:number, heading:(number|null), interpolated:boolean}|null}
+     */
+    getGpsAt(absoluteTime, durations) {
+        const { fixes } = this.getGpsTimeline(durations);
+        if (fixes.length === 0 || !Number.isFinite(absoluteTime)) return null;
+
+        // Last fix at or before absoluteTime
+        let lo = 0, hi = fixes.length - 1, k = -1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (fixes[mid].t <= absoluteTime + 1e-9) { k = mid; lo = mid + 1; } else { hi = mid - 1; }
+        }
+        if (k < 0) return null;
+
+        const a = fixes[k];
+        const b = fixes[k + 1];
+        if (b && b.t > a.t && (b.t - a.t) <= TelemetryOverlay.GPS_MAX_INTERP_GAP) {
+            const frac = Math.min(1, Math.max(0, (absoluteTime - a.t) / (b.t - a.t)));
+            let dLon = b.lon - a.lon;
+            if (dLon > 180) dLon -= 360;
+            if (dLon < -180) dLon += 360;
+            let lon = a.lon + dLon * frac;
+            if (lon > 180) lon -= 360;
+            if (lon < -180) lon += 360;
+            let heading = null;
+            if (Number.isFinite(a.heading) && Number.isFinite(b.heading)) {
+                const dH = ((b.heading - a.heading + 540) % 360) - 180;
+                heading = (a.heading + dH * frac + 360) % 360;
+            }
+            return { lat: a.lat + (b.lat - a.lat) * frac, lon, heading, interpolated: frac > 0 };
+        }
+
+        if (absoluteTime - a.seen > TelemetryOverlay.GPS_MAX_HOLD) return null;
+        return { lat: a.lat, lon: a.lon, heading: Number.isFinite(a.heading) ? a.heading : null, interpolated: false };
     }
 
     // ==================== RENDERING ====================

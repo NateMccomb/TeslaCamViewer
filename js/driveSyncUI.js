@@ -42,15 +42,17 @@ class DriveSyncUI {
     }
 
     /**
-     * Escape HTML to prevent XSS attacks
-     * @param {string} str - String to escape
-     * @returns {string} Escaped string safe for innerHTML
+     * Translate with an English fallback for keys a locale doesn't have yet.
      */
-    escapeHtml(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+    tr(key, params, fallback) {
+        let text = window.i18n ? window.i18n.t(key, params) : key;
+        if (!text || text === key) {
+            text = fallback;
+            for (const [k, v] of Object.entries(params || {})) {
+                text = text.split(`{{${k}}}`).join(String(v));
+            }
+        }
+        return text;
     }
 
     show() {
@@ -294,7 +296,7 @@ class DriveSyncUI {
                         <div class="sync-settings-group">
                             <label>${this.t('syncSettings.noteConflict')}</label>
                             <select id="settingNoteConflict" class="sync-settings-select">
-                                <option value="ask" ${this.driveSync.settings.noteConflictMode === 'ask' ? 'selected' : ''}>${this.t('syncSettings.askEachTime')}</option>
+                                <option value="ask" ${this.driveSync.settings.noteConflictMode === 'ask' ? 'selected' : ''}>${this.t('syncSettings.keepBothTellMe')}</option>
                                 <option value="merge" ${this.driveSync.settings.noteConflictMode === 'merge' ? 'selected' : ''}>${this.t('syncSettings.mergeAutomatically')}</option>
                             </select>
                         </div>
@@ -386,7 +388,7 @@ class DriveSyncUI {
                 <div class="sync-preset-info">
                     <span class="sync-preset-name">${FolderParser.escapeHtml(p.name)}</span>
                     <span class="sync-preset-path">${FolderParser.escapeHtml(p.sourceLabel)} → ${FolderParser.escapeHtml(p.destLabel)}</span>
-                    ${p.importedFrom ? `<span class="sync-preset-imported">${this.t('presets.importedFrom')} ${p.importedFrom}</span>` : ''}
+                    ${p.importedFrom ? `<span class="sync-preset-imported">${this.t('presets.importedFrom')} ${FolderParser.escapeHtml(p.importedFrom)}</span>` : ''}
                 </div>
                 <div class="sync-preset-actions">
                     <button class="sync-preset-delete-btn" data-preset-id="${p.id}" title="${this.t('presets.delete')}">
@@ -563,7 +565,17 @@ class DriveSyncUI {
         results.newer.forEach(item => this.selectedItems.set(item.event.name, item.selected));
         results.differentSize.forEach(item => this.selectedItems.set(item.event.name, item.selected));
 
+        // Files Compare couldn't read: say so before anything is synced (#522)
+        const warnings = results.warnings || [];
+        const warningsHtml = warnings.length === 0 ? '' : `
+            <div id="syncCompareWarnings" class="sync-errors-compact" role="alert">
+                <strong>${FolderParser.escapeHtml(this.tr('driveSync.compareWarningsTitle', { count: warnings.length },
+                    'Some files could not be read ({{count}})'))}</strong><br>
+                ${warnings.map(w => FolderParser.escapeHtml(w)).join('<br>')}
+            </div>`;
+
         resultsGrid.innerHTML = `
+            ${warningsHtml}
             ${this.renderResultCategory('missing', 'Missing on destination', results.missing, true)}
             ${this.renderResultCategory('newer', 'Newer on source', results.newer, true)}
             ${this.renderResultCategory('differentSize', 'Different size', results.differentSize, false)}
@@ -721,11 +733,17 @@ class DriveSyncUI {
             return;
         }
 
+        // The browser asks for access only during a click: ask now for what the sync needs (Move also deletes
+        // from the source, which was picked read-only). startSync() stops before copying if it wasn't given.
+        await this.driveSync.requestSyncPermissions(this.syncMode);
+
         // Confirm if move mode
         if (this.syncMode === 'move') {
             const confirmed = confirm(
                 `You are about to MOVE ${selectedEvents.length} events.\n\n` +
                 `Files will be DELETED from the source drive after verification.\n\n` +
+                this.tr('driveSync.moveConfirmDetail', {},
+                    'Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.') + `\n\n` +
                 `Continue?`
             );
             if (!confirmed) return;
@@ -808,16 +826,27 @@ class DriveSyncUI {
         const progressText = document.getElementById('fileProgressText');
         if (progressText) progressText.textContent = `${percent}%`;
 
+        // Verifying (every byte of every copied file, before Move deletes anything): which file, and how far
+        const verifying = state.status === 'verifying' && state.verifyFilesTotal > 0;
         const currentLabel = document.getElementById('currentItemLabel');
         if (currentLabel) {
-            currentLabel.textContent = state.currentFile
-                ? `${state.currentEvent} (${state.currentFile})`
-                : state.currentEvent || 'Preparing...';
+            if (verifying) {
+                const vPct = state.verifyBytesTotal > 0
+                    ? Math.min(100, Math.round((state.verifyBytesDone || 0) / state.verifyBytesTotal * 100))
+                    : 100;
+                currentLabel.textContent = this.tr('driveSync.verifyingFiles',
+                    { current: Math.min((state.verifyFilesDone || 0) + 1, state.verifyFilesTotal), total: state.verifyFilesTotal },
+                    'Verifying {{current}} of {{total}} files') + ` (${vPct}%): ${state.currentEvent}`;
+            } else {
+                currentLabel.textContent = state.currentFile
+                    ? `${state.currentEvent} (${state.currentFile})`
+                    : state.currentEvent || 'Preparing...';
+            }
         }
 
         const eventProgress = document.getElementById('eventProgress');
         if (eventProgress) {
-            eventProgress.textContent = `${state.eventsCompleted + 1} / ${state.eventsTotal} events`;
+            eventProgress.textContent = `${Math.min((state.eventsProcessed ?? state.eventsCompleted) + 1, state.eventsTotal)} / ${state.eventsTotal} events`;
         }
 
         const bytesProgress = document.getElementById('bytesProgress');
@@ -834,7 +863,7 @@ class DriveSyncUI {
         if (etaStat) etaStat.textContent = `ETA: ${this.driveSync.formatDuration(eta)}`;
 
         // Update title
-        document.title = `Syncing ${percent}% - TeslaCamViewer`;
+        document.title = verifying ? 'Verifying... - TeslaCamViewer' : `Syncing ${percent}% - TeslaCamViewer`;
     }
 
     onComplete(state) {
@@ -855,14 +884,28 @@ class DriveSyncUI {
             summary.textContent = `${state.eventsCompleted}/${state.eventsTotal} events | ${this.driveSync.formatBytes(state.bytesCompleted)} transferred`;
         }
 
-        if (state.errors.length > 0) {
+        // Not every event made it: say so (amber badge; "Sync Failed" when none did) instead of a green "Sync Complete"
+        {
+            const failed = state.errors.length > 0;
+            const badge = document.querySelector('.sync-complete-badge');
+            if (badge) badge.style.background = !failed ? '' : (state.eventsCompleted > 0 ? 'var(--warning, #ffb800)' : 'var(--danger)');
+            const titleEl = document.querySelector('.sync-complete-title');
+            if (titleEl) {
+                titleEl.textContent = this.t(failed && state.eventsCompleted === 0 ? 'driveSync.syncFailed' : 'driveSync.syncComplete');
+                titleEl.style.color = '';   // a cancel or failure before may have coloured it
+            }
+        }
+
+        const warnings = state.warnings || [];
+        if (state.errors.length > 0 || warnings.length > 0) {
             const errorsEl = document.getElementById('syncErrors');
             if (errorsEl) {
                 errorsEl.classList.remove('hidden');
                 // Sanitize error messages to prevent XSS
-                errorsEl.innerHTML = state.errors.map(e =>
-                    `${this.escapeHtml(e.event)}: ${this.escapeHtml(e.error)}`
-                ).join('<br>');
+                errorsEl.innerHTML = [
+                    ...state.errors.map(e => `${FolderParser.escapeHtml(e.event)}: ${FolderParser.escapeHtml(e.error)}`),
+                    ...warnings.map(w => `${FolderParser.escapeHtml(w.event)}: ${FolderParser.escapeHtml(w.warning)}`)
+                ].join('<br>');
             }
         }
 
@@ -882,15 +925,29 @@ class DriveSyncUI {
         if (startBtn) startBtn.classList.add('hidden');
         if (doneBtn) doneBtn.classList.remove('hidden');
 
+        // A Cancel is not a failure: amber, "Sync cancelled", and how far it got
+        const cancelled = !!error?.cancelled;
         const summary = document.getElementById('completeSummary');
         if (summary) {
-            summary.textContent = `Error: ${error.message}`;
-            summary.style.color = 'var(--danger)';
+            summary.textContent = cancelled ? error.message : `Error: ${error.message}`;
+            summary.style.color = cancelled ? '' : 'var(--danger)';
+        }
+
+        // What happened to each event before the sync stopped (a failed check, the cancelled one)
+        const st = this.driveSync.state || {};
+        const lines = [
+            ...(st.errors || []).map(e => `${FolderParser.escapeHtml(e.event)}: ${FolderParser.escapeHtml(e.error)}`),
+            ...(st.warnings || []).map(w => `${FolderParser.escapeHtml(w.event)}: ${FolderParser.escapeHtml(w.warning)}`)
+        ];
+        const errorsEl = document.getElementById('syncErrors');
+        if (errorsEl && lines.length > 0) {
+            errorsEl.classList.remove('hidden');
+            errorsEl.innerHTML = lines.join('<br>');
         }
 
         const badge = document.querySelector('.sync-complete-badge');
         if (badge) {
-            badge.style.background = 'var(--danger)';
+            badge.style.background = cancelled ? 'var(--warning, #ffb800)' : 'var(--danger)';
             badge.innerHTML = `
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
@@ -900,8 +957,10 @@ class DriveSyncUI {
 
         const title = document.querySelector('.sync-complete-title');
         if (title) {
-            title.textContent = 'Sync Failed';
-            title.style.color = 'var(--danger)';
+            title.textContent = cancelled
+                ? this.tr('driveSync.syncCancelled', {}, 'Sync cancelled')
+                : this.t('driveSync.syncFailed');
+            title.style.color = cancelled ? 'var(--warning, #ffb800)' : 'var(--danger)';
         }
 
         this.requestAttention();

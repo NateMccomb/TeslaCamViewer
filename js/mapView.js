@@ -2123,8 +2123,15 @@ class MapView {
                     // Check if the correct event is loaded and video is ready
                     if (window.app?.videoPlayer?.currentEvent?.name === event.name) {
                         try {
-                            await window.app.videoPlayer.seekToEventTime(eventTime);
-                            console.log(`[MapView] Seeked to disengagement at ${eventTime.toFixed(1)}s`);
+                            // Now the event is loaded, use its real clip lengths (#537): the 60 s estimate
+                            // above is off after a short or front-less clip
+                            const vp = window.app.videoPlayer;
+                            const durs = vp.cachedClipDurations;
+                            const seekTime = (typeof VideoPlayer !== 'undefined' && Array.isArray(durs) && durs.length > clipIndex)
+                                ? VideoPlayer.clipStart(durs, clipIndex) + Math.min(frameIndex / FPS, VideoPlayer.clipLength(durs, clipIndex))
+                                : eventTime;
+                            await vp.seekToEventTime(seekTime);
+                            console.log(`[MapView] Seeked to disengagement at ${seekTime.toFixed(1)}s`);
                         } catch (error) {
                             console.warn('[MapView] Failed to seek to disengagement:', error);
                         }

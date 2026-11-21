@@ -7,6 +7,10 @@ class TeslaCamViewerApp {
     constructor() {
         // Check for other instances using BroadcastChannel
         this._initInstanceDetection();
+        // Pause what's behind a full-screen modal (its blurred backdrop flickered on some GPUs)
+        this._watchModalBackdrops();
+        // Opened from the folder (file://): say which features the browser blocks - rev:49f
+        setTimeout(() => this._showFileProtocolNotice(), 2847);
 
         // Initialize components - tcv.0x4E4D43
         this.folderParser = new FolderParser();
@@ -69,6 +73,8 @@ class TeslaCamViewerApp {
         this.speedLimitDisplay = document.getElementById('speedLimitDisplay');
         this.currentSpeedLimitData = null;
         this.lastSpeedLimitGps = null;
+        this._speedLimitShowsUnavailable = false;
+        window.addEventListener('tcv-speedlimit-status', (e) => this._onSpeedLimitStatus(e.detail));
         this.streetViewOverlay = new StreetViewOverlay(this.videoPlayer);
 
         // Wire up visibility change callbacks for all overlays
@@ -555,14 +561,18 @@ class TeslaCamViewerApp {
         this.frameBackBtn.addEventListener('mousedown', () => this.startFrameStepping(-1));
         this.frameBackBtn.addEventListener('mouseup', () => this.stopFrameStepping());
         this.frameBackBtn.addEventListener('mouseleave', () => this.stopFrameStepping());
-        this.frameBackBtn.addEventListener('touchstart', () => this.startFrameStepping(-1));
+        // preventDefault: no compatibility mousedown after the touch, which
+        // stepped a second frame per tap (audit 1.17)
+        this.frameBackBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.startFrameStepping(-1); }, { passive: false });
         this.frameBackBtn.addEventListener('touchend', () => this.stopFrameStepping());
+        this.frameBackBtn.addEventListener('touchcancel', () => this.stopFrameStepping());
 
         this.frameForwardBtn.addEventListener('mousedown', () => this.startFrameStepping(1));
         this.frameForwardBtn.addEventListener('mouseup', () => this.stopFrameStepping());
         this.frameForwardBtn.addEventListener('mouseleave', () => this.stopFrameStepping());
-        this.frameForwardBtn.addEventListener('touchstart', () => this.startFrameStepping(1));
+        this.frameForwardBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.startFrameStepping(1); }, { passive: false });
         this.frameForwardBtn.addEventListener('touchend', () => this.stopFrameStepping());
+        this.frameForwardBtn.addEventListener('touchcancel', () => this.stopFrameStepping());
 
         this.prevClipBtn.addEventListener('click', () => this.previousClip());
         this.nextClipBtn.addEventListener('click', () => this.nextClip());
@@ -704,15 +714,19 @@ class TeslaCamViewerApp {
         // Export format dropdown - syncs with settings
         const exportFormatSelect = document.getElementById('exportFormatSelect');
         const gifWarning = document.getElementById('gifWarning');
+        const h264Warning = document.getElementById('h264Warning');
+        const showFormatWarnings = (fmt) => {
+            if (gifWarning) gifWarning.classList.toggle('hidden', fmt !== 'gif');
+            // MP4 (H.264) is the most compatible but often the slowest (software encoder on many PCs)
+            if (h264Warning) h264Warning.classList.toggle('hidden', fmt !== 'mp4-h264');
+        };
         if (exportFormatSelect) {
             // Initialize from settings
             const savedFormat = this.settingsManager.get('exportFormat') || 'mp4';
             exportFormatSelect.value = savedFormat;
 
-            // Show/hide GIF warning based on initial format
-            if (gifWarning) {
-                gifWarning.classList.toggle('hidden', savedFormat !== 'gif');
-            }
+            // Show/hide the GIF and H.264 speed warnings based on initial format
+            showFormatWarnings(savedFormat);
 
             // Update settings when format changes
             exportFormatSelect.addEventListener('change', (e) => {
@@ -720,19 +734,15 @@ class TeslaCamViewerApp {
                 this.settingsManager.set('exportFormat', e.target.value);
                 console.log('Export format:', e.target.value);
 
-                // Show/hide GIF warning
-                if (gifWarning) {
-                    gifWarning.classList.toggle('hidden', e.target.value !== 'gif');
-                }
+                // Show/hide the GIF and H.264 speed warnings
+                showFormatWarnings(e.target.value);
             });
 
             // Keep toolbar controls in sync when export settings change elsewhere (e.g. Settings modal)
             this.settingsManager.onChange((settings) => {
                 if (exportFormatSelect.value !== settings.exportFormat) {
                     exportFormatSelect.value = settings.exportFormat;
-                    if (gifWarning) {
-                        gifWarning.classList.toggle('hidden', settings.exportFormat !== 'gif');
-                    }
+                    showFormatWarnings(settings.exportFormat);
                 }
                 if (privacyModeCheckbox && privacyModeCheckbox.checked !== (settings.privacyModeExport === true)) {
                     privacyModeCheckbox.checked = settings.privacyModeExport === true;
@@ -1278,7 +1288,7 @@ class TeslaCamViewerApp {
      */
     updateDriveSelector(drives) {
         // Clear existing options except "All Drives"
-        this.driveSelect.innerHTML = '<option value="">All Drives</option>';
+        this.driveSelect.innerHTML = `<option value="">${FolderParser.escapeHtml(this._t('sidebar.allDrives'))}</option>`;
 
         // Add drive options
         for (const drive of drives) {
@@ -1603,6 +1613,7 @@ class TeslaCamViewerApp {
                 const driveId = e.target.closest('.drive-remove-btn').dataset.driveId;
                 if (confirm('Remove this drive? Events will no longer be shown.')) {
                     await this.folderManager.removeDrive(driveId);
+                    this.folderParser.forgetEncrypted?.(driveId);
 
                     // Remove events from allEvents
                     this.allEvents = this.allEvents.filter(e => e.driveId !== driveId);
@@ -1994,11 +2005,24 @@ class TeslaCamViewerApp {
         const hiddenCamerasPanel = document.getElementById('hiddenCamerasPanel');
         const hiddenCamerasList = document.getElementById('hiddenCamerasList');
 
-        const cameraNames = {
-            front: 'Front',
-            back: 'Back',
-            left_repeater: 'Left',
-            right_repeater: 'Right'
+        // Name and "Show ..." tooltip for every camera, in the user's language. The pillar cameras were missing
+        // here, so a hidden pillar was listed as "undefined" (2026-11-19). Any other id falls back to the
+        // shared camera table (cameraIds.js), never to "undefined".
+        const cameraKeys = {
+            front: ['cameras.front', 'cameras.showFront'],
+            back: ['cameras.back', 'cameras.showBack'],
+            left_repeater: ['cameras.left', 'cameras.showLeft'],
+            right_repeater: ['cameras.right', 'cameras.showRight'],
+            left_pillar: ['cameras.leftPillar', 'cameras.showLeftPillar'],
+            right_pillar: ['cameras.rightPillar', 'cameras.showRightPillar']
+        };
+        const cameraName = (camera) => {
+            const k = Object.prototype.hasOwnProperty.call(cameraKeys, camera) ? cameraKeys[camera] : null;
+            return k ? this._t(k[0]) : (window.cameraIds?.label?.(camera) || String(camera));
+        };
+        const showTitle = (camera) => {
+            const k = Object.prototype.hasOwnProperty.call(cameraKeys, camera) ? cameraKeys[camera] : null;
+            return k ? this._t(k[1]) : this._t('cameras.showCamera', { camera: cameraName(camera) });
         };
 
         // Update hidden cameras panel
@@ -2014,12 +2038,13 @@ class TeslaCamViewerApp {
             }
 
             hiddenCamerasPanel.classList.remove('hidden');
+            const esc = FolderParser.escapeHtml;
             hiddenCamerasList.innerHTML = hiddenCameras.map(camera => `
-                <button class="hidden-camera-btn" data-camera="${camera}" title="Show ${cameraNames[camera]} Camera">
+                <button class="hidden-camera-btn" data-camera="${esc(camera)}" title="${esc(showTitle(camera))}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
                     </svg>
-                    ${cameraNames[camera]}
+                    ${esc(cameraName(camera))}
                 </button>
             `).join('');
 
@@ -2043,8 +2068,10 @@ class TeslaCamViewerApp {
             });
         });
 
-        // Initial update
+        // Initial update, and again in the new language
         updateHiddenPanel();
+        window.addEventListener('localeChanged', () => updateHiddenPanel());
+        this._updateHiddenCamerasPanel = updateHiddenPanel;
     }
 
     /**
@@ -2179,6 +2206,11 @@ class TeslaCamViewerApp {
         // Then apply regular filters
         const filteredEvents = this.eventFilter.applyFilters(eventsToFilter);
 
+        // Tesla-encrypted events aren't in the list; the browser shows a notice for them
+        if (this.eventBrowser.setEncryptedSummary && this.folderParser.getEncryptedSummary) {
+            this.eventBrowser.setEncryptedSummary(this.folderParser.getEncryptedSummary(activeDriveId));
+        }
+
         // Update event browser with filtered events
         this.eventBrowser.loadEvents(filteredEvents);
 
@@ -2207,6 +2239,10 @@ class TeslaCamViewerApp {
      */
     async registerEventsAndLoadBackups(events) {
         if (!events || events.length === 0) return;
+
+        // RecentClips hours were named after the UTC day before 2026.47.5: notes and bookmarks
+        // saved under those names are copied to the new names (old entries are kept) (#531)
+        if (typeof FolderParser !== 'undefined') FolderParser.migrateLegacyEventKeys(events);
 
         // Register events with NotesManager and Timeline
         this.notesManager.registerEvents(events);
@@ -2343,6 +2379,12 @@ class TeslaCamViewerApp {
 
         this.showLoading('Loading event...');
 
+        // Load token: when the user picks another event while this one is
+        // still loading, this load stops at its next await instead of
+        // painting its timeline, telemetry and seeks over the newer event.
+        const loadToken = this._eventLoadToken = (this._eventLoadToken || 0) + 1;
+        const superseded = () => loadToken !== this._eventLoadToken;
+
         try {
             this.currentEvent = event;
 
@@ -2351,10 +2393,12 @@ class TeslaCamViewerApp {
 
             // Load event in video player
             await this.videoPlayer.loadEvent(event);
+            if (superseded()) return;
 
             // Record event view for session tracking
             if (this.sessionManager) {
                 await this.sessionManager.recordEventView(event.compoundKey || event.name);
+                if (superseded()) return;
             }
 
             // Update pillar camera support based on event
@@ -2363,6 +2407,7 @@ class TeslaCamViewerApp {
 
             // Get total duration first (before SEI extraction to avoid concurrent file handle access)
             const totalDuration = await this.videoPlayer.getTotalDuration();
+            if (superseded()) return;
             this.timeline.setDuration(totalDuration);
             this.timeline.setClipMarkers(event.clipGroups);
 
@@ -2410,11 +2455,13 @@ class TeslaCamViewerApp {
             }
 
             // Detect and display gaps in recording
+            // Always set them, an empty list too: that clears the previous
+            // event's markers and the copy redrawn on zoom (#534).
             const gaps = this.folderParser.detectGaps(event.clipGroups);
             if (gaps.length > 0) {
                 console.log(`Detected ${gaps.length} gap(s) in recording:`, gaps);
-                this.timeline.setGapMarkers(gaps, event.clipGroups);
             }
+            this.timeline.setGapMarkers(gaps, event.clipGroups);
 
             // Set current event for bookmark persistence (use compoundKey for multi-drive support)
             this.timeline.setCurrentEvent(event.compoundKey || event.name);
@@ -2430,6 +2477,7 @@ class TeslaCamViewerApp {
             // Clear speed limit display for new event
             this.currentSpeedLimitData = null;
             this.lastSpeedLimitGps = null;
+            this._speedLimitShowsUnavailable = false;
             if (this.speedLimitDisplay) {
                 this.speedLimitDisplay.classList.remove('visible');
             }
@@ -2466,6 +2514,7 @@ class TeslaCamViewerApp {
             // Without this, sentry-auto-seek ran after our seek and overwrote
             // it, sending the player to the sentry trigger instead of the AI
             // match time.
+            if (superseded()) return;
             const aiSeekSec = window.aiSearchUI?.consumePendingSeek?.(event.name);
 
             // For Sentry events, seek to 1 minute 4 seconds from the end
@@ -2495,6 +2544,8 @@ class TeslaCamViewerApp {
                 this.timeline.setSentryTriggerMarker(0);
             }
 
+            if (superseded()) return;
+
             // Apply current playback speed before playing
             const currentSpeed = parseFloat(this.speedSelect.value) || 1;
             this.videoPlayer.setPlaybackRate(currentSpeed);
@@ -2503,6 +2554,7 @@ class TeslaCamViewerApp {
             await this.play();
 
         } catch (error) {
+            if (superseded()) return;
             this.hideLoading();
             console.error('Error loading event:', error);
             alert('Unable to load event videos. The drive may have been disconnected.');
@@ -2515,19 +2567,20 @@ class TeslaCamViewerApp {
      */
     updateEventInfo(event) {
         const date = new Date(event.timestamp);
-        const dateStr = date.toLocaleDateString('en-US', {
+        const dateLocale = window.i18n?.dateLocale?.() || 'en-US';
+        const dateStr = date.toLocaleDateString(dateLocale, {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric'
         });
-        const timeStr = date.toLocaleTimeString('en-US', {
+        const timeStr = date.toLocaleTimeString(dateLocale, {
             hour: '2-digit',
             minute: '2-digit',
             second: '2-digit'
         });
 
-        this.eventDateElement.textContent = `${dateStr} at ${timeStr}`;
+        this.eventDateElement.textContent = this._t('player.dateAtTime', { date: dateStr, time: timeStr });
 
         if (event.metadata) {
             const city = event.metadata.city || '';
@@ -2685,6 +2738,7 @@ class TeslaCamViewerApp {
         try {
             console.log(`[Weather] Fetching from telemetry GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
             const weather = await window.weatherService.getWeather(lat, lng, timestamp);
+            if (this.currentEvent !== event) return;  // user moved on (#527)
 
             if (weather) {
                 const formatted = window.weatherService.formatForDisplay(weather);
@@ -3134,31 +3188,77 @@ class TeslaCamViewerApp {
             return;
         }
 
-        // Check if position changed significantly (> 50m)
+        // Check if position changed significantly (> 50m). A lookup that
+        // failed is tried again once the servers' cool-down is over.
+        const svc = window.speedLimitService;
         if (this.lastSpeedLimitGps) {
             const dist = this._haversineDistance(lat, lng, this.lastSpeedLimitGps.lat, this.lastSpeedLimitGps.lng);
-            if (dist < 50) return; // Skip update if position hasn't changed much
+            const retryDue = this._speedLimitShowsUnavailable && svc.nextRetryAt && svc.nextRetryAt(lat, lng) <= Date.now();
+            if (dist < 50 && !retryDue) return; // Skip update if position hasn't changed much
         }
         this.lastSpeedLimitGps = { lat, lng };
 
         // Try to get cached speed limit first (non-blocking)
-        const cached = window.speedLimitService.getSpeedLimitCached(lat, lng);
+        const cached = svc.getSpeedLimitCached(lat, lng);
         if (cached) {
             this._showSpeedLimit(cached);
         } else {
             // Trigger async fetch (won't block playback)
-            window.speedLimitService.getSpeedLimit(lat, lng).then(data => {
+            svc.getSpeedLimit(lat, lng).then(data => {
+                // Ignore answers for a spot the car has since left
+                if (this.lastSpeedLimitGps?.lat !== lat || this.lastSpeedLimitGps?.lng !== lng) return;
                 if (data) {
                     this._showSpeedLimit(data);
+                } else if (svc.getCellStatus && svc.getCellStatus(lat, lng) === 'unavailable') {
+                    this._showSpeedLimitUnavailable();
+                } else {
+                    this._showSpeedLimit(null); // no posted limit on this road
                 }
             }).catch(() => {});
         }
     }
 
     /**
+     * Say in plain words that the limit couldn't be looked up, instead of
+     * showing nothing (which reads as "no limit" or "broken"). Different from
+     * a road with no posted limit, which shows no sign at all.
+     */
+    _showSpeedLimitUnavailable() {
+        const svc = window.speedLimitService;
+        if (!this.speedLimitDisplay || !svc) return;
+        this.currentSpeedLimitData = null;
+        this._speedLimitShowsUnavailable = true;
+        const full = svc.describeUnavailable();
+        const reason = svc.getStatus().reason;
+        const shortText = reason === 'offline'
+            ? 'Speed limit: offline'
+            : (reason === 'unreachable' ? 'Speed limit: server unreachable' : 'Speed limit: server busy');
+        const el = document.createElement('span');
+        el.className = 'limit-unavailable';
+        el.textContent = shortText;
+        this.speedLimitDisplay.replaceChildren(el);
+        this.speedLimitDisplay.title = `${full} TeslaCamViewer keeps retrying in the background.`;
+        this.speedLimitDisplay.classList.add('visible');
+    }
+
+    /**
+     * When lookups start working again, look up the current spot right away
+     * instead of waiting for the car to move.
+     */
+    _onSpeedLimitStatus(status) {
+        if (status?.state !== 'ok' || !this._speedLimitShowsUnavailable || !this.lastSpeedLimitGps) return;
+        const { lat, lng } = this.lastSpeedLimitGps;
+        const cached = window.speedLimitService?.getSpeedLimitCached(lat, lng);
+        if (cached) this._showSpeedLimit(cached);
+        else this._updateSpeedLimitDisplay(lat, lng);
+    }
+
+    /**
      * Show speed limit in the display
      */
     _showSpeedLimit(data) {
+        this._speedLimitShowsUnavailable = false;
+        this.speedLimitDisplay.title = 'Speed Limit';
         if (!data || data.limit === null) {
             this.currentSpeedLimitData = null;
             this.speedLimitDisplay.classList.remove('visible');
@@ -3200,7 +3300,8 @@ class TeslaCamViewerApp {
         if (!window.speedLimitService || !clipSeiData) return;
 
         const positions = [];
-        const clipDuration = 60;
+        // The player's real clip lengths (#537)
+        const durations = this.videoPlayer?.cachedClipDurations || [];
 
         // Extract GPS positions with their event times
         Object.keys(clipSeiData).forEach(clipIndexStr => {
@@ -3209,7 +3310,8 @@ class TeslaCamViewerApp {
             if (!clipData?.frames) return;
 
             const frameCount = clipData.frames.length;
-            const baseTime = clipIndex * clipDuration;
+            const clipDuration = VideoPlayer.clipLength(durations, clipIndex);
+            const baseTime = VideoPlayer.clipStart(durations, clipIndex);
 
             // Sample every ~10 seconds (360 frames at 36fps)
             const sampleInterval = Math.max(1, Math.floor(frameCount / 6));
@@ -3329,6 +3431,8 @@ class TeslaCamViewerApp {
      * @param {number} direction -1 for backward, 1 for forward
      */
     startFrameStepping(direction) {
+        // A second start (touch plus mouse) must not leave an interval running
+        this.stopFrameStepping();
         // Pause playback first
         if (this.videoPlayer.getIsPlaying()) {
             this.pause();
@@ -3358,12 +3462,12 @@ class TeslaCamViewerApp {
      * @param {number} direction -1 for backward, 1 for forward
      */
     async stepFrame(direction) {
-        const currentTime = this.videoPlayer.getCurrentTime();
         const frameRate = 30; // Assume 30fps for Tesla cameras
         const frameDuration = 1 / frameRate;
 
-        const newTime = currentTime + (frameDuration * direction);
-        await this.videoPlayer.seek(newTime); // Don't clamp to 0, let seek() handle negative values
+        // Relative to where the player is when the step runs, not when the
+        // key was pressed (audit 1.10). Negative values reach the previous clip.
+        await this.videoPlayer.seekBy(frameDuration * direction);
     }
 
     /**
@@ -3572,6 +3676,8 @@ class TeslaCamViewerApp {
         // resolves so we can show "Export Cancelled" instead of the green
         // success completion screen.
         let userCancelled = false;
+        // Where the playhead was, to put it back afterwards (set once the export really starts)
+        let restoreTo = null;
 
         // Auto-detect focused camera in Focus Mode
         if (camera === 'all' && this.layoutManager?.currentLayout === 'layout-focus') {
@@ -3580,7 +3686,13 @@ class TeslaCamViewerApp {
 
         try {
             if (this.videoExport?.isExporting) {
-                alert('An export is already in progress. Please wait for it to complete.');
+                alert(this._t('export.alreadyRunning'));
+                return;
+            }
+
+            // Free tier: a 3rd new event today gets the limit message (naming today's two export events) before
+            // anything else, not a confirm, a render and an "Export Complete" with no file (2026-11-19).
+            if (this.videoExport?._checkExportAccess && !(await this.videoExport._checkExportAccess())) {
                 return;
             }
 
@@ -3589,13 +3701,13 @@ class TeslaCamViewerApp {
 
             // Camera label for display
             const cameraLabels = {
-                all: 'all cameras',
-                front: 'front camera',
-                back: 'rear camera',
-                left_repeater: 'left camera',
-                right_repeater: 'right camera',
-                left_pillar: 'left pillar camera',
-                right_pillar: 'right pillar camera'
+                all: this._t('export.cameraAll'),
+                front: this._t('export.cameraFront'),
+                back: this._t('export.cameraBack'),
+                left_repeater: this._t('export.cameraLeft'),
+                right_repeater: this._t('export.cameraRight'),
+                left_pillar: this._t('export.cameraLeftPillar'),
+                right_pillar: this._t('export.cameraRightPillar')
             };
             const cameraLabel = cameraLabels[camera] || camera;
 
@@ -3615,21 +3727,23 @@ class TeslaCamViewerApp {
             const exportEndTime = marks.outPoint;
 
             // Determine what will be exported
-            let exportDescription;
+            let exportRange;
             if (marks.inPoint !== null && marks.outPoint !== null) {
-                exportDescription = `marked section (${this.clipMarking.getMarkInfo()}) - ${cameraLabel}`;
+                exportRange = this._t('export.rangeMarked', { marks: this.clipMarking.getMarkInfo() });
             } else if (marks.inPoint !== null) {
-                exportDescription = `from IN marker to end of event - ${cameraLabel}`;
+                exportRange = this._t('export.rangeFromIn');
             } else if (marks.outPoint !== null) {
-                exportDescription = `from start to OUT marker - ${cameraLabel}`;
+                exportRange = this._t('export.rangeToOut');
             } else {
-                exportDescription = `from current position to end of event - ${cameraLabel}`;
+                exportRange = this._t('export.rangeFromCurrent');
             }
 
             // Confirm export
             const currentSpeed = parseFloat(this.speedSelect.value) || 1;
-            const speedNote = currentSpeed !== 1 ? ` at ${currentSpeed}x speed` : '';
-            const message = `Export ${exportDescription}${speedNote}?\n\n⏱️ Export takes approximately 3-4x the video duration (a 10 second clip takes ~30-40 seconds to render).\n\nPlease don't switch events until complete.`;
+            const question = currentSpeed !== 1
+                ? this._t('export.confirmAtSpeed', { range: exportRange, camera: cameraLabel, speed: currentSpeed })
+                : this._t('export.confirm', { range: exportRange, camera: cameraLabel });
+            const message = `${question}\n\n⏱️ ${this._t('export.confirmDuration')}\n\n${this._t('export.confirmDontSwitch')}`;
 
             if (!confirm(message)) {
                 return;
@@ -3637,12 +3751,21 @@ class TeslaCamViewerApp {
 
             // Validate export range
             if (exportEndTime !== null && exportStartTime >= exportEndTime) {
-                alert('Invalid export range: Start time must be before end time.\nPlease adjust your IN/OUT markers.');
+                alert(this._t('export.invalidRange'));
+                return;
+            }
+            // Nothing left to export from here: no OUT mark and the playhead (or the IN mark) at the end of the
+            // event. That used to run, record nothing and end as a "complete" 110-byte WebM: after an export with
+            // no marks the playhead is left at the end, so the next one started there (2026-11-19).
+            const eventEnd = this.timeline?.totalDuration || 0;
+            if (exportEndTime === null && eventEnd > 0 && eventEnd - exportStartTime < VideoExport.MIN_EXPORT_SECS) {
+                alert(this._t('export.nothingToExport', { position: this.formatTime(exportStartTime), end: this.formatTime(eventEnd) }));
                 return;
             }
 
             // Disable all controls during export
             this.disableControls();
+            restoreTo = currentAbsoluteTime;
 
             // Load plate blur model if plate blurring is enabled
             const blurPlatesEnabled = this.settingsManager.get('blurLicensePlates') === true;
@@ -3657,7 +3780,7 @@ class TeslaCamViewerApp {
                 this.loadingOverlay.style.bottom = '0';
                 this.loadingOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
                 this.loadingOverlay.style.zIndex = '9999';
-                this.loadingText.innerHTML = '<div style="text-align: center;"><div style="font-size: 1.1rem; color: #ffffff;">Loading AI model for license plate detection...</div><div style="font-size: 0.9rem; color: #a0a0a0; margin-top: 0.5rem;">This may take a moment on first use</div></div>';
+                this.loadingText.innerHTML = `<div style="text-align: center;"><div style="font-size: 1.1rem; color: #ffffff;">${FolderParser.escapeHtml(this._t('export.loadingPlateModel'))}</div><div style="font-size: 0.9rem; color: #a0a0a0; margin-top: 0.5rem;">${FolderParser.escapeHtml(this._t('export.loadingPlateModelHint'))}</div></div>`;
                 try {
                     const loaded = await this.plateBlur.loadModel();
                     if (!loaded) {
@@ -3681,21 +3804,21 @@ class TeslaCamViewerApp {
             this.loadingOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
             this.loadingOverlay.style.zIndex = '9999';
             // Create stable HTML structure with ID'd elements for updates (don't recreate button on progress)
-            const exportTitle = camera === 'all' ? 'Video' : cameraLabel.charAt(0).toUpperCase() + cameraLabel.slice(1);
+            const exportTitle = camera === 'all' ? this._t('export.titleVideo') : cameraLabel.charAt(0).toUpperCase() + cameraLabel.slice(1);
             this.loadingText.innerHTML = `
                 <div style="text-align: center;">
                     <div id="exportTitle" style="font-size: 1.2rem; font-weight: bold; margin-bottom: 0.5rem; color: #ffffff;">
-                        Starting Export...
+                        ${FolderParser.escapeHtml(this._t('export.starting'))}
                     </div>
                     <div id="exportProgress" style="font-size: 0.9rem; color: #a0a0a0;">
-                        Preparing video...
+                        ${FolderParser.escapeHtml(this._t('export.preparingVideo'))}
                     </div>
                     <div id="exportSpeedNotice" style="min-height: 1.5rem;"></div>
                     <div style="width: 300px; height: 8px; background: #3a3a3a; border-radius: 4px; margin: 1rem auto; overflow: hidden;">
                         <div id="exportProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4a9eff, #6bb1ff); transition: width 0.1s linear;"></div>
                     </div>
                     <button id="cancelExportBtn" style="margin-top: 1rem; padding: 0.5rem 1.5rem; background: #d32f2f; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
-                        Cancel
+                        ${FolderParser.escapeHtml(this._t('common.cancel'))}
                     </button>
                 </div>
             `;
@@ -3759,21 +3882,29 @@ class TeslaCamViewerApp {
                 let wallEta = 0;
                 let wallElapsed = 0;
                 const now = Date.now();
+                // the unrounded percent: a slow encode moves less than 1 % in the 8 s window, and rounded it looked
+                // like no progress at all (the line then fell back to "Video: 00:00 / 00:06")
+                const rawPct = Math.min(100, Math.max(0, Number(percent) || 0));
+                if (etaSamples.length && rawPct < etaSamples[etaSamples.length - 1].pct - 0.5) {
+                    // progress went back (an encoder restart from frame 0): the old samples and estimate don't apply
+                    etaSamples.length = 0;
+                    smoothedEta = null;
+                }
                 if (exportStatus.wallStartTime) {
                     wallElapsed = (now - exportStatus.wallStartTime) / 1000;
 
-                    etaSamples.push({ t: now, pct: safePercent });
+                    etaSamples.push({ t: now, pct: rawPct });
                     while (etaSamples.length > 1 && (now - etaSamples[0].t) > ETA_WINDOW_MS) {
                         etaSamples.shift();
                     }
 
-                    if (etaSamples.length >= ETA_MIN_SAMPLES && safePercent < 100) {
+                    if (etaSamples.length >= ETA_MIN_SAMPLES && rawPct < 100) {
                         const oldest = etaSamples[0];
                         const dt = (now - oldest.t) / 1000;
-                        const dpct = safePercent - oldest.pct;
+                        const dpct = rawPct - oldest.pct;
                         if (dt > 0.5 && dpct > 0) {
                             const windowRate = dpct / dt; // percent per second
-                            const rawEta = (100 - safePercent) / windowRate;
+                            const rawEta = (100 - rawPct) / windowRate;
                             smoothedEta = (smoothedEta == null)
                                 ? rawEta
                                 : smoothedEta * (1 - ETA_EMA_ALPHA) + rawEta * ETA_EMA_ALPHA;
@@ -3784,22 +3915,51 @@ class TeslaCamViewerApp {
 
                 // Update only the text/style of existing elements (button stays untouched)
                 if (titleEl) {
-                    titleEl.textContent = `Exporting ${exportTitle}: ${safePercent}%`;
+                    titleEl.textContent = this._t('export.progressTitle', { what: exportTitle, percent: safePercent });
                 }
                 if (progressEl) {
-                    // Show wall-clock time prominently since frame-by-frame export takes ~4x real-time
-                    if (wallEta > 0 && wallEta < 7200) {
-                        progressEl.textContent = `${this.formatTime(wallElapsed)} elapsed / ~${this.formatTime(wallEta)} remaining`;
-                    } else {
-                        progressEl.textContent = `Video: ${this.formatTime(safeElapsed)} / ${this.formatTime(safeTotal)}`;
+                    // Wall-clock time: elapsed, and the time left when there is an estimate: from the recent progress,
+                    // else from the encoder's own frames per second. Never the video position ("Video: 00:00 /
+                    // 00:06"): it reads as a reset whenever an estimate is briefly missing (between stages, after
+                    // a restart), which is how it showed on a test laptop, 2026-11-21. This is the only writer.
+                    let eta = (wallEta > 0 && wallEta < 7200) ? wallEta : 0;
+                    const encI = exportStatus.encoder;
+                    if (!eta && encI && encI.totalFrames > 0 && encI.framesDone > 0) {
+                        const secs = (performance.now() - encI.startedAt) / 1000;
+                        const fps = secs > 2 ? encI.framesDone / secs : 0;
+                        if (fps > 0) eta = Math.min(7199, Math.max(0, (encI.totalFrames - encI.framesDone) / fps));
+                    }
+                    const text = (eta > 0 && safePercent < 100)
+                        ? this._t('export.elapsedRemaining', { elapsed: this.formatTime(wallElapsed), remaining: this.formatTime(eta) })
+                        : this._t('export.elapsedOnly', { elapsed: this.formatTime(wallElapsed) });
+                    if (progressEl.textContent !== text) {
+                        progressEl.textContent = text;
+                        // export debug log (tcv.exportDebug): every write of this line, with who called the progress
+                        if (window.VideoExportFast?._dbg) {
+                            const caller = (new Error().stack || '').split('\n').slice(2, 4).map(x => x.trim()).join(' <- ');
+                            window.VideoExportFast.dbg('progress line', { text, percent: Math.round(rawPct * 10) / 10, caller });
+                        }
                     }
                 }
                 if (speedNoticeEl) {
+                    const notes = [];
                     if (exportStatus.speedWasReduced && exportStatus.currentSpeed !== exportStatus.originalSpeed) {
-                        speedNoticeEl.innerHTML = `<div style="color: #ffb800; font-size: 0.85rem;">Speed reduced to ${exportStatus.currentSpeed}x (buffering)</div>`;
-                    } else {
-                        speedNoticeEl.innerHTML = '';
+                        notes.push(`<div style="color: #ffb800; font-size: 0.85rem;">${FolderParser.escapeHtml(this._t('export.speedReduced', { speed: exportStatus.currentSpeed }))}</div>`);
                     }
+                    // MP4 (H.264) on the browser's software encoder can be the slowest export, and so can WebM or
+                    // MP4 (VP9) on the software VP9 encoder: say so, with the measured frame rate (the time left is
+                    // the line above, from the same progress)
+                    const enc = exportStatus.encoder;
+                    if (enc && enc.software) {
+                        const secs = (performance.now() - enc.startedAt) / 1000;
+                        const rate = secs > 2 && enc.framesDone > 0 ? enc.framesDone / secs : 0;
+                        const rateText = rate > 0
+                            ? this._t('export.softwareH264Rate', { fps: rate < 10 ? rate.toFixed(1) : Math.round(rate) })
+                            : '';
+                        notes.push(`<div id="exportSoftwareNote" style="color: #9cc7ff; font-size: 0.85rem; max-width: 420px; margin: 0.5rem auto 0;">${FolderParser.escapeHtml(this._t(enc.name === 'vp9' ? 'export.softwareVp9' : enc.name === 'vp8' ? 'export.softwareVp8' : 'export.softwareH264'))}${rateText ? `<br>${FolderParser.escapeHtml(rateText)}` : ''}</div>`);
+                    }
+                    const html = notes.join('');
+                    if (speedNoticeEl.innerHTML !== html) speedNoticeEl.innerHTML = html;
                 }
                 if (progressBarEl) {
                     progressBarEl.style.width = `${safePercent}%`;
@@ -3826,10 +3986,21 @@ class TeslaCamViewerApp {
             if (cancelBtn && cancelHandler) {
                 cancelBtn.removeEventListener('click', cancelHandler);
             }
+            await this._restorePlayheadAfterExport(restoreTo);
+
+            // "Export Complete" only when a checked file was really saved. An export that ended without one (and
+            // wasn't cancelled) says so instead of claiming success.
+            if (!userCancelled && this.videoExport.lastExportSaved !== true) {
+                this.hideLoading();
+                this.enableControls();
+                alert(this._t('export.notSaved'));
+                return;
+            }
 
             // Show completion overlay — amber/cancelled variant if the user
-            // clicked Cancel mid-export.
-            this.showExportComplete({ cancelled: userCancelled });
+            // clicked Cancel mid-export. It says how long the export took.
+            const wallStart = this.videoExport.getExportStatus().wallStartTime;
+            this.showExportComplete({ cancelled: userCancelled, tookSec: wallStart ? (Date.now() - wallStart) / 1000 : null });
 
         } catch (error) {
             // Try to clean up cancel handler - cancelBtn may or may not exist depending on where error occurred
@@ -3839,12 +4010,22 @@ class TeslaCamViewerApp {
             }
             this.hideLoading();
             this.enableControls();
+            await this._restorePlayheadAfterExport(restoreTo);
 
+            if (error?.code === 'EXPORT_LIMIT') {
+                // The free export limit refused it: its message is already on screen, nothing was rendered
+                console.warn('Export stopped:', error.message);
+                return;
+            }
             // Don't show error alert for user-initiated cancellation
-            if (error.message && error.message.includes('cancelled')) {
+            if (userCancelled || (error.message && error.message.includes('cancelled'))) {
                 console.log('Export cancelled by user');
+                // Same amber "Export Cancelled" screen as when the export
+                // stops on its own after Cancel (WebM/GIF reject instead, #525)
+                this.showExportComplete({ cancelled: true });
             } else {
-                console.error('Export failed:', error);
+                if (VideoExport.isHandledFailure(error)) console.warn('Export stopped:', error.message);
+                else console.error('Export failed:', error);
                 // Match common GPU-side failure patterns and offer a clearer
                 // recovery path. The raw error message from VideoEncoder /
                 // MediaRecorder / VideoDecoder is usually opaque ("Operation
@@ -3863,20 +4044,45 @@ class TeslaCamViewerApp {
                     || this.videoExport?._renderCanvasLost
                     || this.videoExport?._playbackCanvasLost;
 
-                if (looksGpu) {
+                if (error?.code === 'ENCODER_STALLED') {
+                    // The encoder stopped answering (VideoExportFast watchdog)
+                    alert(this._t('export.encoderStalled', { codec: error.codec?.muxName || '?' }));
+                } else if (error?.code === 'NO_ENCODER') {
+                    // No encoder here took the export at any size (VideoExportFast.prepare), found before rendering.
+                    // WebM says so and suggests MP4 (H.264) (the other message suggests WebM)
+                    alert(this._t(error.format === 'webm' ? 'export.noWebmEncoder' : 'export.noEncoder', { size: `${error.width} × ${error.height}` }));
+                } else if (error?.code === 'BAD_OUTPUT') {
+                    // The finished file isn't real (VideoExport._verifyOutput): nothing was saved
+                    const whyKey = {
+                        tiny: 'export.badOutput_tiny', frames: 'export.badOutput_frames', length: 'export.badOutput_length'
+                    }[error.reasonKey] || 'export.badOutput_unreadable';
+                    const why = this._t(whyKey, error.reasonParams || {});
+                    alert(this._t('export.badOutput', { format: error.what || '', reason: why }));
+                } else if (looksGpu) {
                     console.error('[ExportGPU] Failure pattern suggests GPU context loss or hardware encoder error — see preceding [GPUContextLost]/[MediaRecorderError]/[VideoExportFast]/[FastFrameExtractor] log lines for codec + dimensions');
-                    alert(
-                        'Export failed — looks like your GPU was reset mid-export.\n\n'
-                        + 'This usually means the hardware encoder hung or Windows reset the graphics driver. '
-                        + 'Try one of: lower the export resolution (Settings), disable plate blur for this export, '
-                        + 'export a shorter time range using IN/OUT markers, or update your graphics driver.\n\n'
-                        + 'If it keeps happening, open Settings → Diagnostics → Console Log Capture and send us the log — '
-                        + 'we just added detailed encoder/decoder context to help support@teslacamviewer.com diagnose this.'
-                    );
+                    alert(this._t('export.gpuFailed'));
                 } else {
-                    alert('Export was unable to complete: ' + error.message);
+                    alert(this._t('export.unableToComplete', { error: error.message }));
                 }
             }
+        }
+    }
+
+    /**
+     * After an export, put the playhead back where it was. The WebM, GIF and single-camera exports step the
+     * player through the range, so it was left at the export's end: with no marks that is the end of the event,
+     * and the next export ("from the current position") then had nothing to record (a 110-byte WebM).
+     * @param {number} absoluteTime  event time before the export
+     */
+    async _restorePlayheadAfterExport(absoluteTime) {
+        if (!Number.isFinite(absoluteTime) || !this.videoPlayer?.currentEvent) return;
+        try {
+            const now = this.getAbsoluteEventTime(this.videoPlayer.getCurrentTime());
+            if (Math.abs(now - absoluteTime) < 0.05) return;
+            await this.videoPlayer.seekToEventTime(absoluteTime);
+            await this.videoPlayer.pause();
+        } catch (e) {
+            console.warn('[Export] Could not put the playhead back after the export:', e?.message || e);
         }
     }
 
@@ -3958,14 +4164,19 @@ class TeslaCamViewerApp {
         if (exportVideoBtn && this.layoutManager) {
             const config = this.layoutManager.getCurrentConfig();
             const layoutName = config?.name || this.layoutManager.getCurrentLayout();
-            // Format the display name - capitalize each word
-            const displayName = layoutName
-                .replace(/^layout-/, '')
-                .replace(/-/g, ' ')
-                .replace(/\b\w/g, c => c.toUpperCase());
+            // The layout menu's own (translated) name when it lists this layout; else
+            // the config name with each word capitalized
+            const layoutSelect = document.getElementById('layoutSelect');
+            const option = layoutSelect?.selectedOptions?.[0];
+            const displayName = FolderParser.escapeHtml(option && option.value === this.layoutManager.getCurrentLayout()
+                ? option.textContent.trim()
+                : layoutName
+                    .replace(/^layout-/, '')
+                    .replace(/-/g, ' ')
+                    .replace(/\b\w/g, c => c.toUpperCase()));
             // Keep the icon and update the text
             const icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>`;
-            exportVideoBtn.innerHTML = `${icon}<span>Export Video<span class="layout-name-line">${displayName}</span></span>`;
+            exportVideoBtn.innerHTML = `${icon}<span>${FolderParser.escapeHtml(this._t('export.exportVideo'))}<span class="layout-name-line">${displayName}</span></span>`;
         }
     }
 
@@ -4018,11 +4229,13 @@ class TeslaCamViewerApp {
         // Sort by time
         const sortedBookmarks = [...bookmarks].sort((a, b) => a.time - b.time);
 
+        // Labels and ids can come from a drive's backup file: escape them (#523)
+        const esc = FolderParser.escapeHtml;
         this.bookmarksList.innerHTML = sortedBookmarks.map(bookmark => `
-            <div class="bookmark-item" data-bookmark-id="${bookmark.id}" data-time="${bookmark.time}">
-                <span class="bookmark-item-time">${this.formatTime(bookmark.time)}</span>
-                <span class="bookmark-item-label">${bookmark.label}</span>
-                <button class="bookmark-delete-btn" data-bookmark-id="${bookmark.id}" title="Delete bookmark">
+            <div class="bookmark-item" data-bookmark-id="${esc(bookmark.id)}" data-time="${esc(Number(bookmark.time))}">
+                <span class="bookmark-item-time">${esc(this.formatTime(bookmark.time))}</span>
+                <span class="bookmark-item-label">${esc(bookmark.label)}</span>
+                <button class="bookmark-delete-btn" data-bookmark-id="${esc(bookmark.id)}" title="Delete bookmark">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
                     </svg>
@@ -4076,12 +4289,25 @@ class TeslaCamViewerApp {
     }
 
     /**
+     * Translated text from the locale files (i18n.js), or the key when i18n isn't loaded
+     * @param {string} key
+     * @param {Object} params - {{placeholder}} values
+     * @returns {string}
+     */
+    _t(key, params = {}) {
+        return window.i18n ? window.i18n.t(key, params) : key;
+    }
+
+    /**
      * Handle keyboard shortcuts
      * @param {KeyboardEvent} event
      */
     async handleKeyPress(event) {
         // Ignore if typing in input
         if (event.target.tagName === 'INPUT') return;
+        // Not behind a modal, during an export, in other fields or with
+        // Ctrl/Meta/Alt (#532). An open modal's own Escape handler closes it.
+        if (this._shortcutsBlocked(event)) return;
 
         switch (event.code) {
             case 'Space':
@@ -4099,8 +4325,7 @@ class TeslaCamViewerApp {
                     this.previousClip();
                 } else {
                     // Seek back 5 seconds (allow negative to trigger previous clip)
-                    const currentTime = this.videoPlayer.getCurrentTime();
-                    await this.videoPlayer.seek(currentTime - 5);
+                    await this.videoPlayer.seekBy(-5);  // from where the player is when it runs (audit 1.10)
                 }
                 break;
 
@@ -4110,8 +4335,7 @@ class TeslaCamViewerApp {
                     this.nextClip();
                 } else {
                     // Seek forward 5 seconds
-                    const currentTime = this.videoPlayer.getCurrentTime();
-                    await this.videoPlayer.seek(currentTime + 5);
+                    await this.videoPlayer.seekBy(5);
                 }
                 break;
 
@@ -4355,6 +4579,44 @@ class TeslaCamViewerApp {
     }
 
     /**
+     * True when a player shortcut must not run for this key press (#532):
+     * a Ctrl/Meta/Alt combination (browser, OS and the Ctrl+K palette keep
+     * those; Shift combinations still work), typing in a field, an export
+     * running, or a modal, dialog or popover open.
+     * @param {KeyboardEvent} event
+     * @returns {boolean}
+     */
+    _shortcutsBlocked(event) {
+        if (event.ctrlKey || event.metaKey || event.altKey) return true;
+        const tgt = event.target;
+        const tag = tgt && tgt.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (tgt && tgt.isContentEditable)) return true;
+        if (this.videoExport && this.videoExport.isExporting) return true;
+        return this._openModalElement() !== null;
+    }
+
+    /**
+     * The modal, dialog or popover that is open and covers the player, or
+     * null. Modals here are marked by class name (settings-modal, help-modal,
+     * notes-modal, stats-modal, command-palette, plate-enhancer-dialog,
+     * severity-popover, ...) or role="dialog"; open = rendered and visible.
+     * The loading overlay counts too (exporting, "Loading event...").
+     * @returns {Element|null}
+     */
+    _openModalElement() {
+        const sel = '[role="dialog"], [aria-modal="true"], [class*="modal"], [class*="dialog"], ' +
+            '[class*="backdrop"], [class*="popover"], .command-palette, .loading-overlay';
+        for (const el of document.querySelectorAll(sel)) {
+            if (el.classList.contains('hidden')) continue;
+            if (el.getClientRects().length === 0) continue;   // display: none, or inside a hidden parent
+            const cs = getComputedStyle(el);
+            if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
+            return el;
+        }
+        return null;
+    }
+
+    /**
      * Change playback speed by step
      * @param {number} direction 1 for faster, -1 for slower
      */
@@ -4504,7 +4766,7 @@ class TeslaCamViewerApp {
         if (viewedAfter !== 5 && viewedAfter !== 8) return;
 
         // Per-day dedupe — one toast per threshold per day.
-        const today = new Date().toISOString().slice(0, 10);
+        const today = this.sessionManager?._getTodayString?.() || new Date().toISOString().slice(0, 10);   // local day, as the limits
         const dedupeKey = `tcv_freetier_warn_${today}_${viewedAfter}`;
         if (localStorage.getItem(dedupeKey)) return;
         localStorage.setItem(dedupeKey, '1');
@@ -4534,13 +4796,13 @@ class TeslaCamViewerApp {
         const usedAfter = access.limit - access.remaining + 1;
         if (usedAfter !== 1) return;
 
-        const today = new Date().toISOString().slice(0, 10);
+        const today = this.sessionManager?._getTodayString?.() || new Date().toISOString().slice(0, 10);   // local day, as the limits
         const dedupeKey = `tcv_export_warn_${today}_${usedAfter}`;
         if (localStorage.getItem(dedupeKey)) return;
         localStorage.setItem(dedupeKey, '1');
 
         const left = access.limit - usedAfter;
-        const message = `${usedAfter} of ${access.limit} free exports used today. ${left} remaining. Re-exporting the same event stays free.`;
+        const message = this._t('export.freeExportsUsed', { used: usedAfter, limit: access.limit, left });
         if (typeof this.showToast === 'function') {
             this.showToast(message, 'info', 8000);
         } else {
@@ -4550,10 +4812,18 @@ class TeslaCamViewerApp {
 
     showExportComplete(opts = {}) {
         const cancelled = opts.cancelled === true;
-        const title = cancelled ? 'Export Cancelled' : 'Export Complete';
-        const subtitle = cancelled
-            ? 'The export was stopped before it finished. No file was saved.'
-            : 'Your video has been saved successfully.';
+        const title = FolderParser.escapeHtml(this._t(cancelled ? 'export.cancelledTitle' : 'export.completeTitle'));
+        const subtitle = FolderParser.escapeHtml(this._t(cancelled ? 'export.cancelledText' : 'export.completeText'));
+        // The real format of the file (VP9 or H.264), not just the menu choice.
+        // Plus, when the speed-limit sign was on, whether it could be looked up.
+        const formatNote = cancelled ? '' : [
+            this.videoExport?.describeLastExport?.() || '',
+            this.videoExport?.describeSpeedLimitExport?.() || '',
+            opts.tookSec > 0 ? this._t('export.tookTime', { time: this.formatTime(opts.tookSec) }) : ''
+        ].filter(Boolean).join('\n');
+        const formatNoteHtml = formatNote
+            ? `<div id="exportFormatNote" style="font-size: 0.9rem; color: #b0b0b0; max-width: 420px; margin: -1.25rem auto 1.5rem; white-space: pre-line;">${FolderParser.escapeHtml(formatNote)}</div>`
+            : '';
         const titleColor = cancelled ? '#ffb800' : '#4caf50';
         const barGradient = cancelled
             ? 'linear-gradient(90deg, #ffb800, #ff8800)'
@@ -4569,6 +4839,7 @@ class TeslaCamViewerApp {
                 <div style="font-size: 1rem; color: #e0e0e0; margin-bottom: 2rem;">
                     ${subtitle}
                 </div>
+                ${formatNoteHtml}
                 <div style="width: 300px; height: 8px; background: #3a3a3a; border-radius: 4px; margin: 1rem auto 2rem; overflow: hidden;">
                     <div style="width: 100%; height: 100%; background: ${barGradient};"></div>
                 </div>
@@ -4583,7 +4854,7 @@ class TeslaCamViewerApp {
                     cursor: pointer;
                     transition: background 0.2s;
                 " onmouseover="this.style.background='#3a8eef'" onmouseout="this.style.background='#4a9eff'">
-                    OK
+                    ${FolderParser.escapeHtml(this._t('common.ok'))}
                 </button>
             </div>
         `;
@@ -4610,9 +4881,15 @@ class TeslaCamViewerApp {
             return;
         }
 
+        // Load token: a clip of the previous event that finishes parsing after
+        // the user switched must not show or be saved on this one (#527).
+        const seiToken = this._seiLoadToken = (this._seiLoadToken || 0) + 1;
+        const isCurrent = () => seiToken === this._seiLoadToken && this.currentEvent === event;
+
         try {
             // Initialize SEI extractor if needed
             await window.seiExtractor.init();
+            if (!isCurrent()) return;
 
             // Reset overlay data for new event
             this.telemetryOverlay.reset();
@@ -4658,8 +4935,10 @@ class TeslaCamViewerApp {
                 if (frontClip && frontClip.fileHandle) {
                     // Get File from FileHandle and load SEI data (async)
                     frontClip.fileHandle.getFile().then(file => {
+                        if (!isCurrent()) return null;
                         return this.telemetryOverlay.loadClipData(file, i);
                     }).then(data => {
+                        if (!isCurrent()) return;
                         if (data && data.frames.length > 0) {
                             console.log(`SEI telemetry loaded for clip ${i}: ${data.frames.length} frames`);
                             // Auto-show telemetry overlay if we have telemetry data
@@ -4733,7 +5012,7 @@ class TeslaCamViewerApp {
         if (this._severityTimeout) clearTimeout(this._severityTimeout);
         this._severityTimeout = setTimeout(() => {
             this._severityTimeout = null;
-            if (this.currentEvent?.name !== event.name) return;  // user moved on
+            if (this.currentEvent !== event) return;  // user moved on
             try {
                 // Pass cached clip durations so event timestamps are accurate
                 // (clips vary 55-63s — assuming 60s puts peaks up to a minute off)
@@ -4804,7 +5083,7 @@ class TeslaCamViewerApp {
                 window.eventInsightsCache.getLaunches(eventKey)
             ]);
             // Apply only if user is still on this event (they may have moved on).
-            if (this.currentEvent?.name !== event.name) return;
+            if (this.currentEvent !== event) return;
             let touched = false;
             if (cachedSeverity) {
                 event._severityScore = cachedSeverity;
@@ -4920,7 +5199,7 @@ class TeslaCamViewerApp {
         const eventKey = event.compoundKey || event.name;
         try {
             const cached = await window.eventInsightsCache.getNearMisses(eventKey);
-            if (cached && this.currentEvent?.name === event.name) {
+            if (cached && this.currentEvent === event) {
                 this.timeline.setNearMissMarkers(cached);
             }
         } catch (e) { /* non-fatal */ }
@@ -4962,6 +5241,7 @@ class TeslaCamViewerApp {
         if (!this.elevationOverlay || !this.telemetryOverlay || !window.elevationService) {
             return;
         }
+        if (this.currentEvent !== event) return;  // user moved on (#527)
 
         try {
             // Get GPS points from telemetry
@@ -4979,6 +5259,7 @@ class TeslaCamViewerApp {
                 gpsPoints,
                 event.compoundKey || event.name
             );
+            if (this.currentEvent !== event) return;
 
             if (profile) {
                 const totalDuration = this.timeline.totalDuration || 0;
@@ -5017,6 +5298,9 @@ class TeslaCamViewerApp {
         if (!this.telemetryGraphs || !this.telemetryOverlay) {
             return;
         }
+        // A debounced load for the previous event must not compute (and save)
+        // near-misses for this one (#527).
+        if (this.currentEvent !== event) return;
 
         try {
             // Get clip SEI data from telemetryOverlay
@@ -5038,8 +5322,11 @@ class TeslaCamViewerApp {
 
             // Set up near-miss detection callback to update timeline markers
             // Preserve any existing callback (e.g., from incidentSlowMo)
-            const existingCallback = this.telemetryGraphs.onNearMissesDetected;
-            this.telemetryGraphs.onNearMissesDetected = (nearMisses) => {
+            // Wrap it once: this runs on every event load, and wrapping our own previous wrapper made the
+            // chain grow, so near-misses were cached and saved once per event opened so far
+            let existingCallback = this.telemetryGraphs.onNearMissesDetected;
+            if (existingCallback && existingCallback._appNearMissWrapper) existingCallback = existingCallback._base;
+            const nearMissWrapper = (nearMisses) => {
                 if (this.timeline) {
                     this.timeline.setNearMissMarkers(nearMisses);
                 }
@@ -5060,6 +5347,9 @@ class TeslaCamViewerApp {
                     });
                 }
             };
+            nearMissWrapper._appNearMissWrapper = true;
+            nearMissWrapper._base = existingCallback;
+            this.telemetryGraphs.onNearMissesDetected = nearMissWrapper;
 
             // Set up incident detection callback to feed MapView
             // TelemetryGraphs is the source of truth for incident detection
@@ -5607,6 +5897,55 @@ class TeslaCamViewerApp {
     }
 
     /**
+     * Set body.tcv-modal-open while a full-screen modal is open (What's New, Settings, Help, Statistics...),
+     * so the CSS can pause the animations behind it. Those modals blur what's behind them (backdrop-filter);
+     * anything still animating back there (the blue dots pulse forever) makes Chrome redraw the blur on every
+     * frame, and on some GPUs one of those redraws now and then drops the dark backdrop for a frame, so the
+     * player flashes through. A modal here is any direct child of <body> other than the main UI that is fixed,
+     * shown and covers the window, so a new modal is covered without adding it to a list.
+     */
+    _watchModalBackdrops() {
+        const mainUi = new Set([document.querySelector('.app-container'), document.getElementById('bottomSheet')]);
+        const isOpenModal = (el) => {
+            if (mainUi.has(el) || el.tagName === 'SCRIPT' || el.tagName === 'TEMPLATE') return false;
+            const cs = getComputedStyle(el);
+            if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') {
+                return false;
+            }
+            const r = el.getBoundingClientRect();
+            return r.width >= window.innerWidth * 0.9 && r.height >= window.innerHeight * 0.9;
+        };
+        let queued = false;
+        const update = () => {
+            queued = false;
+            document.body.classList.toggle('tcv-modal-open', Array.from(document.body.children).some(isOpenModal));
+        };
+        const schedule = () => {
+            if (!queued) {
+                queued = true;
+                requestAnimationFrame(update);
+            }
+        };
+        // Watch <body>'s own children (added, removed, class/style/hidden changes), not the whole page, so video
+        // playback and timeline updates inside the main UI never wake this up.
+        const observer = new MutationObserver((records) => {
+            for (const r of records) {
+                if (r.type === 'childList') r.addedNodes.forEach(n => watchAttrs(n));
+            }
+            schedule();
+        });
+        const watchAttrs = (n) => {
+            if (n.nodeType === 1 && !mainUi.has(n)) {
+                observer.observe(n, { attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
+            }
+        };
+        observer.observe(document.body, { childList: true });
+        Array.from(document.body.children).forEach(watchAttrs);
+        window.addEventListener('resize', schedule);
+        update();
+    }
+
+    /**
      * Initialize instance detection using BroadcastChannel
      * Detects if another tab/window has TeslaCamViewer open
      */
@@ -5648,6 +5987,31 @@ class TeslaCamViewerApp {
     /**
      * Show warning about multiple instances
      */
+    /**
+     * When index.html is opened straight from its folder (file://), Chrome and Edge block fetches of the
+     * app's own files, workers and module imports, so telemetry, plate tools, GIF / fast exports and
+     * translations don't work. Explain that once per session, with the two ways to get everything.
+     */
+    _showFileProtocolNotice() {
+        if (location.protocol !== 'file:') return;
+        try { if (sessionStorage.getItem('tcv-file-notice-closed')) return; } catch (e) { /* storage blocked */ }
+        if (document.getElementById('file-protocol-banner')) return;
+        const banner = document.createElement('div');
+        banner.id = 'file-protocol-banner';
+        banner.setAttribute('role', 'status');
+        banner.innerHTML = `
+            <div style="background: #f59e0b; color: #1a1a1a; padding: 10px 20px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 10001; display: flex; justify-content: center; align-items: center; gap: 15px; font-size: 0.9rem; line-height: 1.4;">
+                <span>⚠️ ${FolderParser.escapeHtml(this._t('fileProtocol.notice'))}</span>
+                <button class="file-protocol-close" style="background: #1a1a1a; color: #f59e0b; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; flex-shrink: 0;">${FolderParser.escapeHtml(this._t('common.close'))}</button>
+            </div>
+        `;
+        banner.querySelector('.file-protocol-close').addEventListener('click', () => {
+            banner.remove();
+            try { sessionStorage.setItem('tcv-file-notice-closed', '1'); } catch (e) { /* storage blocked */ }
+        });
+        document.body.appendChild(banner);
+    }
+
     _showInstanceWarning() {
         console.warn('[App] Another TeslaCamViewer instance detected in another tab/window!');
 
@@ -5770,7 +6134,7 @@ class TeslaCamViewerApp {
                 </div>
                 <div class="update-toast-text">
                     <strong>New files detected</strong>
-                    <span>${label} — refresh to load new events</span>
+                    <span>${FolderParser.escapeHtml(label)} — refresh to load new events</span>
                 </div>
                 <button class="update-toast-btn" data-action="refresh">Refresh</button>
                 <button class="update-toast-close" data-action="dismiss" title="Dismiss">&times;</button>
@@ -5866,7 +6230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const toast = document.createElement('div');
                 toast.id = 'plate-model-toast';
                 toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; background: #2d2d2d; color: #e0e0e0; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 10000; font-size: 14px; display: flex; align-items: center; gap: 10px;';
-                toast.innerHTML = '<div class="loading-spinner" style="width: 16px; height: 16px; border: 2px solid #555; border-top-color: #4a9eff; border-radius: 50%; animation: spin 1s linear infinite;"></div><span>Loading plate detection model...</span>';
+                toast.innerHTML = '<div class="loading-spinner" style="width: 16px; height: 16px; border: 2px solid #555; border-top-color: #4a9eff; border-radius: 50%; animation: spin 1s linear infinite;"></div><span>' + FolderParser.escapeHtml(window.app._t('export.plateModelLoading')) + '</span>';
                 document.body.appendChild(toast);
 
                 const success = await window.app.plateBlur.loadModel((progress) => {
@@ -5878,9 +6242,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Update toast and auto-dismiss
                 if (success) {
-                    toast.innerHTML = '<span style="color: #66bb6a;">✓ Plate detection ready</span>';
+                    toast.innerHTML = '<span style="color: #66bb6a;">✓ ' + FolderParser.escapeHtml(window.app._t('export.plateModelReady')) + '</span>';
                 } else {
-                    toast.innerHTML = '<span style="color: #ef5350;">⚠ Plate detection failed to load</span>';
+                    toast.innerHTML = '<span style="color: #ef5350;">⚠ ' + FolderParser.escapeHtml(window.app._t('export.plateModelFailed')) + '</span>';
                 }
                 setTimeout(() => toast.remove(), 3000);
             }

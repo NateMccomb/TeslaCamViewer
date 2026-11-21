@@ -123,6 +123,12 @@
             get() { return wcv._videoHeight; },
             configurable: true
         });
+        // Not on HTMLVideoElement: lets the exporter check that the canvas
+        // really shows the frame for currentTime before it captures it.
+        Object.defineProperty(canvas, 'framePresented', {
+            get() { return wcv._isPresented(); },
+            configurable: true
+        });
         // HTMLMediaElement properties we stub out
         Object.defineProperty(canvas, 'loop', {
             get() { return wcv._loop; },
@@ -209,6 +215,11 @@
             this._decoderLastTs = -1;     // highest timestamp decoded so far
             this._decoderFinished = false;
             this._decoderRefillInFlight = false;
+            this._refillPromise = null;   // the running refill, so a seek or load can wait for it
+            this._queueGen = 0;           // bumps whenever the queue is reset; older refills stop and drop their frames
+            this._seekGen = 0;            // bumps per seek; a newer seek supersedes an older one
+            this._frameDur = 1 / 30;      // one frame's duration in seconds (from the clip's samples)
+            this._firstFrameTs = 0;       // timestamp of the clip's first frame
             this._lastDrawnTs = -1;       // what the canvas currently shows
 
             // External-clock mode flag. When true, the per-instance rAF
@@ -224,6 +235,8 @@
          */
         _tick(absoluteSec) {
             if (!this._decoder || this._readyState < HAVE_METADATA) return;
+            // A seek owns the queue until it has drawn its frame.
+            if (this._seeking) return;
             const t = Math.max(0, Math.min(absoluteSec, this._duration || absoluteSec));
             this._currentTime = t;
             // Refill trigger AND refill size both widened. Was trigger=0.4s,
@@ -306,6 +319,13 @@
                 if (dec.samples.length > 0) {
                     const last = dec.samples[dec.samples.length - 1];
                     this._duration = (last.cts + last.duration) / dec.timescale;
+                    let firstCts = Infinity;
+                    for (const s of dec.samples) if (s.cts < firstCts) firstCts = s.cts;
+                    this._firstFrameTs = firstCts / dec.timescale;
+                    // Average frame duration (Tesla clips have uneven frame
+                    // spacing, so no single sample's duration is reliable).
+                    const d = (this._duration - this._firstFrameTs) / dec.samples.length;
+                    this._frameDur = (d > 0.001 && d < 1) ? d : 1 / 30;
                 } else {
                     this._duration = 0;
                 }
@@ -315,7 +335,12 @@
                 this._fire('loadedmetadata');
 
                 // Prime decode of the first frame so we can display something
-                // before any seek/play call.
+                // before any seek/play call. A refill for the previous source
+                // may still be winding down (its decoder was just closed);
+                // wait for it, or this prime would be skipped and the freshly
+                // resized (black) canvas would stay black.
+                await this._awaitRefillIdle();
+                if (token !== this._loadToken) return;
                 await this._refillQueue(0, 0.5);
                 if (token !== this._loadToken) return;
                 this._drawBestFrameFor(0);
@@ -362,12 +387,32 @@
             this._ended = false;
             this._videoWidth = 0;
             this._videoHeight = 0;
+            this._resetQueue();
+            this._seekGen++;              // a seek still running for the old source must not finish on this one
+            this._lastDrawnTs = -1;
+            this._frameDur = 1 / 30;
+            this._firstFrameTs = 0;
+            if (this._rafHandle) { cancelAnimationFrame(this._rafHandle); this._rafHandle = null; }
+        }
+
+        /**
+         * Empty the decoded-frame queue. A refill still running for the old
+         * queue sees the generation change, stops at its next frame and
+         * drops what it decoded instead of mixing old frames into the new
+         * queue.
+         */
+        _resetQueue() {
             this._frameQueue.forEach(f => { try { f.bitmap.close?.(); } catch {} });
             this._frameQueue = [];
+            this._queueGen++;
             this._decoderLastTs = -1;
             this._decoderFinished = false;
-            this._lastDrawnTs = -1;
-            if (this._rafHandle) { cancelAnimationFrame(this._rafHandle); this._rafHandle = null; }
+        }
+
+        async _awaitRefillIdle() {
+            while (this._decoderRefillInFlight && this._refillPromise) {
+                try { await this._refillPromise; } catch {}
+            }
         }
 
         _teardownDecoder() {
@@ -414,24 +459,90 @@
                 return;
             }
             const clamped = Math.max(0, Math.min(sec, this._duration || sec));
-            if (Math.abs(clamped - this._currentTime) < 0.01) return;
 
+            // Like HTMLVideoElement, every seek fires seeking/seeked, and
+            // `seeked` means the canvas now shows the frame for the new time.
+            // A newer seek supersedes this one: only the newest fires seeked.
+            // (Before: a seek issued while a decode was running skipped its
+            // own decode and fired seeked with the old frame still drawn, and
+            // a seek to the time currentTime already held returned early even
+            // when that frame had never been drawn. The frame-by-frame export
+            // then captured stale or black frames.)
+            const gen = ++this._seekGen;
+            const decoder = this._decoder;
             this._seeking = true;
             this._fire('seeking');
             this._currentTime = clamped;
 
-            // Drop the existing queue — timestamps may all be pre-seek.
-            this._frameQueue.forEach(f => { try { f.bitmap.close?.(); } catch {} });
-            this._frameQueue = [];
-            this._decoderLastTs = -1;
-            this._decoderFinished = false;
-
-            await this._refillQueue(clamped, 0.5);
-            this._drawBestFrameFor(clamped);
+            if (this._presentFromQueue(clamped)) {
+                // Already decoded (sequential export steps, small seeks):
+                // drawn now. Fire seeked from a microtask, like the native
+                // element fires it asynchronously.
+                await Promise.resolve();
+                if (gen !== this._seekGen) return;
+            } else {
+                // Drop the existing queue: its frames don't cover the target.
+                // Any refill still running sees the reset and stops.
+                this._resetQueue();
+                await this._awaitRefillIdle();
+                if (gen !== this._seekGen || decoder !== this._decoder) return;
+                // Start 0.1 s early so the frame on screen at `clamped` (the
+                // last one at or before it) is decoded too, not only the first
+                // frame after it, even with uneven frame spacing.
+                await this._refillQueue(Math.max(0, clamped - 0.1), 0.6);
+                if (gen !== this._seekGen || decoder !== this._decoder) return;
+                this._drawBestFrameFor(clamped);
+            }
 
             this._seeking = false;
             this._fire('seeked');
             this._emitTimeUpdate();
+        }
+
+        /**
+         * If the queue already holds the frame that is on screen at `sec`,
+         * draw it and return true. The queue is contiguous (each refill
+         * starts where the previous one ended), so the last frame at or
+         * before `sec` is the right one as long as a later frame exists or
+         * `sec` is within one frame of it (or the clip is fully decoded).
+         */
+        _presentFromQueue(sec) {
+            const best = this._queuedFrameFor(sec);
+            if (!best) return false;
+            this._drawBestFrameFor(sec);
+            return this._lastDrawnTs === best.ts;
+        }
+
+        /**
+         * The decoded frame that is on screen at `sec`, or null when the
+         * queue can't tell: the last frame at or before `sec`, provided a
+         * later frame is decoded too (or `sec` is within a frame of it, or
+         * the clip is decoded to its end). Before the clip's first frame,
+         * that first frame.
+         */
+        _queuedFrameFor(sec) {
+            if (this._frameQueue.length === 0) return null;
+            let best = null, first = null, later = false;
+            for (const f of this._frameQueue) {
+                if (!first || f.ts < first.ts) first = f;
+                if (f.ts <= sec + 1e-4) {
+                    if (!best || f.ts > best.ts) best = f;
+                } else {
+                    later = true;
+                }
+            }
+            if (!best) {
+                return (first && first.ts <= this._firstFrameTs + 1e-4) ? first : null;
+            }
+            if (!later && !this._decoderFinished && sec - best.ts >= this._frameDur) return null;
+            return best;
+        }
+
+        /** True when the canvas shows the frame that is on screen at currentTime. */
+        _isPresented() {
+            if (this._seeking || !this._decoder || this._lastDrawnTs < 0) return false;
+            const best = this._queuedFrameFor(this._currentTime);
+            return !!best && best.ts === this._lastDrawnTs;
         }
 
         // ---------- Decode pump ----------
@@ -440,24 +551,44 @@
          * Ensure the frame queue has decoded content covering the window
          * [startSec, startSec + aheadSec]. Delegates to FastClipDecoder's
          * decodeSequence, which handles keyframe seek + sequential decode.
+         * Only one refill runs at a time; a refill whose queue was reset
+         * (seek, new source) stops at its next frame and drops its frames.
          */
-        async _refillQueue(startSec, aheadSec) {
-            if (!this._decoder || this._decoderRefillInFlight) return;
+        _refillQueue(startSec, aheadSec) {
+            if (!this._decoder || this._decoderRefillInFlight) return Promise.resolve();
             this._decoderRefillInFlight = true;
+            const decoder = this._decoder;
+            const gen = this._queueGen;
+            const STALE = {};
             const endSec = Math.min((this._duration || Infinity), startSec + aheadSec);
-            try {
-                await this._decoder.decodeSequence(startSec, endSec, (bitmap, tsSec) => {
-                    this._frameQueue.push({ bitmap, ts: tsSec });
-                    if (tsSec > this._decoderLastTs) this._decoderLastTs = tsSec;
-                });
-                if (endSec >= (this._duration || 0) - 0.01) {
-                    this._decoderFinished = true;
+            const p = (async () => {
+                try {
+                    await decoder.decodeSequence(startSec, endSec, (bitmap, tsSec) => {
+                        if (gen !== this._queueGen || decoder !== this._decoder) {
+                            try { bitmap.close?.(); } catch {}
+                            throw STALE;
+                        }
+                        this._frameQueue.push({ bitmap, ts: tsSec });
+                        if (tsSec > this._decoderLastTs) this._decoderLastTs = tsSec;
+                    });
+                    if (gen === this._queueGen && endSec >= (this._duration || 0) - 0.01) {
+                        this._decoderFinished = true;
+                    }
+                } catch (e) {
+                    // A stopped refill (queue reset or decoder closed under
+                    // it) is expected, not a failure.
+                    if (e !== STALE && gen === this._queueGen && decoder === this._decoder) {
+                        console.warn('[WebCodecsVideoElement] decode failed:', e);
+                    }
+                } finally {
+                    if (this._refillPromise === p) {
+                        this._decoderRefillInFlight = false;
+                        this._refillPromise = null;
+                    }
                 }
-            } catch (e) {
-                console.warn('[WebCodecsVideoElement] decode failed:', e);
-            } finally {
-                this._decoderRefillInFlight = false;
-            }
+            })();
+            this._refillPromise = p;
+            return p;
         }
 
         _drawBestFrameFor(sec) {
@@ -465,7 +596,9 @@
             // Pick the frame with timestamp closest to (but not after) sec.
             let best = this._frameQueue[0];
             for (const f of this._frameQueue) {
-                if (f.ts <= sec && f.ts >= best.ts) best = f;
+                // 0.1 ms slack: timestamps are rounded to whole microseconds,
+                // so a frame that starts exactly at `sec` can read a hair later.
+                if (f.ts <= sec + 1e-4 && f.ts >= best.ts) best = f;
             }
             if (best.ts === this._lastDrawnTs) return;
             try {
@@ -494,6 +627,12 @@
 
         async _onFrame(now) {
             if (this._paused) return;
+            if (this._seeking) {
+                // A seek owns the queue until it has drawn its frame.
+                this._lastFrameTime = now;
+                this._scheduleFrame();
+                return;
+            }
             const delta = (now - this._lastFrameTime) / 1000;
             this._lastFrameTime = now;
             const step = delta * this._playbackRate;
@@ -503,10 +642,8 @@
                 // End-of-clip handling
                 if (this._loop) {
                     t = 0;
-                    this._frameQueue.forEach(f => { try { f.bitmap.close?.(); } catch {} });
-                    this._frameQueue = [];
-                    this._decoderLastTs = -1;
-                    this._decoderFinished = false;
+                    this._resetQueue();
+                    await this._awaitRefillIdle();
                     await this._refillQueue(0, 0.5);
                 } else {
                     t = this._duration;

@@ -10,6 +10,17 @@ class StatisticsManager {
     }
 
     /**
+     * 'YYYY-MM-DD' of a date in the viewer's local time. Car timestamps are local times;
+     * toISOString() is UTC, which moved evening events to the next day west of UTC and
+     * the month bars back a month east of UTC.
+     * @param {Date} date
+     * @returns {string}
+     */
+    static localDayKey(date) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    /**
      * Get translation helper
      */
     t(key) {
@@ -104,7 +115,7 @@ class StatisticsManager {
             if (event.timestamp) {
                 const date = new Date(event.timestamp);
                 const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                const dayKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+                const dayKey = StatisticsManager.localDayKey(date); // YYYY-MM-DD
 
                 stats.eventsByMonth[monthKey] = (stats.eventsByMonth[monthKey] || 0) + 1;
                 stats.eventsByDay[dayKey] = (stats.eventsByDay[dayKey] || 0) + 1;
@@ -258,7 +269,7 @@ class StatisticsManager {
         for (let i = 13; i >= 0; i--) {
             const date = new Date(today);
             date.setDate(date.getDate() - i);
-            const dayKey = date.toISOString().split('T')[0];
+            const dayKey = StatisticsManager.localDayKey(date);
             const count = eventsByDay[dayKey] || 0;
 
             data.push({
@@ -507,7 +518,7 @@ class StatisticsManager {
                 for (let d = 0; d <= 6; d++) {
                     const date = new Date(weekStart);
                     date.setDate(date.getDate() + d);
-                    const dayKey = date.toISOString().split('T')[0];
+                    const dayKey = StatisticsManager.localDayKey(date);
 
                     if (eventsByDay[dayKey]) {
                         count += eventsByDay[dayKey];
@@ -525,7 +536,7 @@ class StatisticsManager {
             // Last 6 months
             for (let i = 5; i >= 0; i--) {
                 const monthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
-                const monthKey = monthDate.toISOString().slice(0, 7); // YYYY-MM
+                const monthKey = StatisticsManager.localDayKey(monthDate).slice(0, 7); // YYYY-MM
                 const monthName = monthDate.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
                 let count = 0;
@@ -658,7 +669,7 @@ class StatisticsManager {
 
         if (format === 'json') {
             blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            filename = `teslacam-stats-${new Date().toISOString().split('T')[0]}.json`;
+            filename = `teslacam-stats-${StatisticsManager.localDayKey(new Date())}.json`;
         } else {
             // CSV format
             const lines = [
@@ -706,7 +717,7 @@ class StatisticsManager {
                 `Telemetry Percentage,${stats.totalEvents > 0 ? Math.round((stats.eventsWithTelemetry / stats.totalEvents) * 100) : 0}%`
             ];
             blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-            filename = `teslacam-stats-${new Date().toISOString().split('T')[0]}.csv`;
+            filename = `teslacam-stats-${StatisticsManager.localDayKey(new Date())}.csv`;
         }
 
         // Download

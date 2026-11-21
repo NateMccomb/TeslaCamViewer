@@ -7,18 +7,37 @@
 
 class SpeedLimitService {
     constructor() {
-        this.DB_NAME = 'TeslaCamViewer';
+        // A database of its own: it used to share 'TeslaCamViewer' with the
+        // weather cache at a different version, and whichever opened second
+        // was blocked or refused, so limits were never kept between visits
+        this.DB_NAME = 'TeslaCamViewerSpeedLimits';
         this.STORE_NAME = 'speedLimitCache';
-        this.DB_VERSION = 3; // Increment if schema changes
+        this.DB_VERSION = 1; // Increment if schema changes
         this.db = null;
 
-        // Multiple Overpass API servers to rotate between
+        // Public Overpass API servers (OpenStreetMap data, no key). Regional
+        // mirrors hold only their region's data, so they are only asked about
+        // points inside their coverage boxes; anywhere else an empty answer
+        // would wrongly read as "no posted limit". Each server has its own
+        // cool-down after a busy/rate-limit answer or a timeout, so a busy
+        // server is left alone instead of being asked again and again.
+        // Per spec SLS-4701: order = preference; the regional mirror goes first
+        // inside its region to keep load off the overloaded main server.
         this.overpassServers = [
-            'https://overpass-api.de/api/interpreter',
-            'https://overpass.kumi.systems/api/interpreter'
-        ];
-        this.currentServerIndex = 0;
-        this.serverFailCounts = [0, 0]; // Track failures per server
+            { name: 'ovp.dresel.systems (North America)', url: 'https://ovp.dresel.systems/api-na/interpreter', region: 'na' },
+            { name: 'ovp.dresel.systems (Europe)', url: 'https://ovp.dresel.systems/api/interpreter', region: 'eu' },
+            { name: 'overpass-api.de', url: 'https://overpass-api.de/api/interpreter', region: null },
+            { name: 'overpass.private.coffee', url: 'https://overpass.private.coffee/api/interpreter', region: null }
+        ].map(s => ({ ...s, strikes: 0, cooldownUntil: 0 }));
+        this.requestTimeoutMs = 8047;      // one query; a healthy server answers in < 2 s
+        this.cooldownBaseMs = 30047;       // overpass-api.de asks for >= 30 s after a 429
+        this.cooldownMaxMs = 10 * 60 * 1000;
+
+        // Where lookups stand, for the player and the export screens:
+        //   state 'ok' | 'unavailable'; reason 'busy' | 'offline' | 'unreachable'
+        this.status = { state: 'ok', reason: null, since: 0 };
+        // Cells whose lookup failed (not cached; retried after the cool-down)
+        this.failedCells = new Map(); // key -> { reason, at }
 
         // In-memory cache for current session
         // Key: "lat,lng" rounded to ~500m grid, Value: { limit, unit, source }
@@ -34,64 +53,140 @@ class SpeedLimitService {
 
         // Rate limiting - spread across servers
         this.lastFetchTime = 0;
-        this.minFetchInterval = 1500; // ms between API calls (can be lower with multiple servers)
-        this.backoffMultiplier = 1; // Increases on errors
-        this.maxBackoff = 8; // Max 12 seconds between calls
+        this.minFetchInterval = 1500; // ms between API calls
 
         // Grid size for caching (~500m) - less frequent checks
         this.gridSize = 0.005; // ~555m at equator
 
-        this._initDB();
+        this._dbReady = this._initDB();
+    }
+
+    // --- Server choice, cool-downs and lookup status - tcv.0x534C53
+
+    /**
+     * Is a point inside a regional mirror's data? Conservative boxes inside
+     * the Geofabrik extracts the mirrors load (north-america, europe).
+     */
+    static inRegion(region, lat, lng) {
+        const inBox = (b) => lat >= b[0] && lat <= b[1] && lng >= b[2] && lng <= b[3];
+        if (region === 'na') {
+            // Bahamas sit inside the US/Canada box but aren't in the extract
+            if (inBox([20.9, 27.3, -79.35, -72.6])) return false;
+            return [
+                [24.3, 84.0, -141.1, -52.5],    // contiguous US + Canada
+                [51.0, 71.6, -180.0, -129.9],   // Alaska
+                [18.8, 22.4, -160.6, -154.7],   // Hawaii
+                [14.5, 32.8, -118.5, -86.7]     // Mexico
+            ].some(inBox);
+        }
+        if (region === 'eu') {
+            // North African coast sits inside the box but isn't in the extract
+            if (inBox([35.0, 37.35, -1.0, 11.6])) return false;
+            return [
+                [36.0, 71.2, -10.7, 30.0],      // mainland Europe, UK, Ireland, Scandinavia
+                [63.2, 66.6, -24.6, -13.4]      // Iceland
+            ].some(inBox);
+        }
+        return region === null;
     }
 
     /**
-     * Get next Overpass server (round-robin with failure awareness)
+     * Servers that may answer for this point and aren't cooling down, in order
+     * of preference. Empty when every server that could answer is resting.
      */
-    _getNextServer() {
-        // Find server with lowest fail count
-        let bestIndex = 0;
-        let bestFailCount = this.serverFailCounts[0];
-
-        for (let i = 1; i < this.overpassServers.length; i++) {
-            if (this.serverFailCounts[i] < bestFailCount) {
-                bestIndex = i;
-                bestFailCount = this.serverFailCounts[i];
-            }
-        }
-
-        // If all have same fail count, rotate
-        if (this.serverFailCounts.every(c => c === bestFailCount)) {
-            this.currentServerIndex = (this.currentServerIndex + 1) % this.overpassServers.length;
-            return this.overpassServers[this.currentServerIndex];
-        }
-
-        this.currentServerIndex = bestIndex;
-        return this.overpassServers[bestIndex];
+    _serversFor(lat, lng, now = Date.now()) {
+        return this.overpassServers.filter(s => SpeedLimitService.inRegion(s.region, lat, lng) && s.cooldownUntil <= now);
     }
 
     /**
-     * Mark server as failed
+     * When the next server covering this point is out of its cool-down (ms
+     * epoch); 0 when one is ready now.
      */
-    _markServerFailed(serverUrl) {
-        const index = this.overpassServers.indexOf(serverUrl);
-        if (index >= 0) {
-            this.serverFailCounts[index]++;
-            // Reset fail counts periodically so servers can recover
-            const totalFails = this.serverFailCounts.reduce((a, b) => a + b, 0);
-            if (totalFails > 15) {
-                this.serverFailCounts = this.serverFailCounts.map(c => Math.floor(c / 2));
-            }
-        }
+    nextRetryAt(lat, lng) {
+        const now = Date.now();
+        const covering = this.overpassServers.filter(s => SpeedLimitService.inRegion(s.region, lat, lng));
+        if (covering.some(s => s.cooldownUntil <= now)) return 0;
+        return Math.min(...covering.map(s => s.cooldownUntil));
     }
 
     /**
-     * Mark server as successful
+     * Rest a server after a busy/rate-limit answer, a timeout or a network
+     * error: 30 s, then doubling per strike up to 10 min.
      */
-    _markServerSuccess(serverUrl) {
-        const index = this.overpassServers.indexOf(serverUrl);
-        if (index >= 0 && this.serverFailCounts[index] > 0) {
-            this.serverFailCounts[index]--;
+    _markServerFailed(server) {
+        const wait = Math.min(this.cooldownBaseMs * Math.pow(2, server.strikes), this.cooldownMaxMs);
+        server.strikes = Math.min(server.strikes + 1, 17);
+        server.cooldownUntil = Date.now() + wait;
+    }
+
+    _markServerSuccess(server) {
+        server.strikes = 0;
+        server.cooldownUntil = 0;
+    }
+
+    /**
+     * Plain-words reason for the player and the export screens.
+     */
+    describeUnavailable(reason = this.status.reason) {
+        const tr = (key, fallback) => {
+            const tmp = window.i18n?.t ? window.i18n.t(key) : key;
+            return (tmp && tmp !== key) ? tmp : fallback;
+        };
+        if (reason === 'offline') {
+            return tr('speedLimit.unavailableOffline', 'Speed limits unavailable: you\'re offline.');
         }
+        if (reason === 'unreachable') {
+            return tr('speedLimit.unavailableUnreachable', 'Speed limits unavailable right now (couldn\'t reach the map data server).');
+        }
+        return tr('speedLimit.unavailableBusy', 'Speed limits unavailable right now (map data server busy).');
+    }
+
+    /**
+     * Lookup state for one point:
+     *   'limit'       a posted limit is cached
+     *   'none'        looked up: OpenStreetMap has no posted limit here
+     *   'unavailable' the lookup failed (server busy, offline); retried later
+     *   'unknown'     not looked up yet
+     */
+    getCellStatus(lat, lng) {
+        if (!lat || !lng) return 'unknown';
+        const key = this._toGridKey(lat, lng);
+        const cached = this.memoryCache.get(key);
+        if (cached) return Number.isFinite(cached.limit) ? 'limit' : 'none';
+        return this.failedCells.has(key) ? 'unavailable' : 'unknown';
+    }
+
+    getStatus() {
+        return { ...this.status };
+    }
+
+    _setStatus(state, reason) {
+        const prev = this.status.state;
+        // While lookups are failing, "busy" (a server answered or timed out)
+        // says more than "unreachable" (a blocked/failed connection): keep it
+        if (state === 'unavailable' && prev === 'unavailable' && this.status.reason === 'busy' && reason === 'unreachable') {
+            reason = 'busy';
+        }
+        if (prev === state && this.status.reason === reason) return;
+        this.status = { state, reason, since: prev === state ? this.status.since : Date.now() };
+        // One line when lookups stop working and one when they work again,
+        // not one per request (busy servers are normal)
+        if (state === 'unavailable' && prev !== 'unavailable') {
+            console.warn(`[SpeedLimitService] ${this.describeUnavailable(reason)} Retrying with a back-off.`);
+        } else if (prev === 'unavailable') {
+            console.log('[SpeedLimitService] Speed limit lookups working again');
+        }
+        window.dispatchEvent(new CustomEvent('tcv-speedlimit-status', { detail: this.getStatus() }));
+    }
+
+    _noteCellFailed(key, reason) {
+        this.failedCells.set(key, { reason, at: Date.now() });
+        // Keep the map small on long sessions
+        if (this.failedCells.size > 2000) {
+            const oldest = this.failedCells.keys().next().value;
+            this.failedCells.delete(oldest);
+        }
+        this._setStatus('unavailable', reason);
     }
 
     /**
@@ -99,6 +194,7 @@ class SpeedLimitService {
      */
     async _initDB() {
         return new Promise((resolve, reject) => {
+            if (typeof indexedDB === 'undefined') { resolve(null); return; }
             const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
 
             request.onerror = () => {
@@ -106,8 +202,13 @@ class SpeedLimitService {
                 resolve(null);
             };
 
+            // Another tab holds an older version open: carry on with the memory cache
+            request.onblocked = () => resolve(null);
+
             request.onsuccess = (event) => {
                 this.db = event.target.result;
+                // Let a newer version (another tab after an update) take over
+                this.db.onversionchange = () => { this.db.close(); this.db = null; };
                 console.log('[SpeedLimitService] IndexedDB ready');
                 resolve(this.db);
             };
@@ -122,6 +223,15 @@ class SpeedLimitService {
                 }
             };
         });
+    }
+
+    /**
+     * Wait (briefly) for the database to open, so lookups made right after
+     * page load still find what earlier visits cached.
+     */
+    async _dbWait() {
+        if (this.db || !this._dbReady) return;
+        await Promise.race([this._dbReady, new Promise(r => setTimeout(r, 1047))]);
     }
 
     /**
@@ -191,74 +301,107 @@ class SpeedLimitService {
      * Fetch speed limit from OpenStreetMap Overpass API
      */
     async _fetchSpeedLimit(lat, lng, cacheKey) {
-        // Rate limiting with exponential backoff
-        const now = Date.now();
-        const effectiveInterval = this.minFetchInterval * this.backoffMultiplier;
-        const timeSinceLastFetch = now - this.lastFetchTime;
-        if (timeSinceLastFetch < effectiveInterval) {
-            await new Promise(r => setTimeout(r, effectiveInterval - timeSinceLastFetch));
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+            this._noteCellFailed(cacheKey, 'offline');
+            return null;
         }
-        this.lastFetchTime = Date.now();
+        // Every server that could answer is resting: don't touch the network
+        if (this._serversFor(lat, lng).length === 0) {
+            this._noteCellFailed(cacheKey, this.status.reason || 'busy');
+            return null;
+        }
 
-        // Get next server from rotation
-        const serverUrl = this._getNextServer();
-
-        try {
-            // Query for roads near this point with maxspeed tag
-            // Use larger radius since we're checking less frequently
-            const radius = 100; // meters
-            const query = `
+        // Query for roads near this point with a maxspeed tag
+        const radius = 100; // meters
+        const query = `
                 [out:json][timeout:10];
                 way(around:${radius},${lat},${lng})["highway"]["maxspeed"];
                 out tags;
             `;
 
-            const response = await fetch(serverUrl, {
+        let reason = null;
+        // At most 3 servers per cell; later ones only when earlier ones fail
+        for (let idx = 0; idx < 3; idx++) {
+            // One request at a time across the app, >= 1.5 s apart; the server
+            // is picked after the wait, so a server that just failed for
+            // another lookup is not asked again
+            const tmp = await this._oneAtATime(async () => {
+                const wait = this.minFetchInterval - (Date.now() - this.lastFetchTime);
+                if (wait > 0) await new Promise(r => setTimeout(r, wait));
+                const server = this._serversFor(lat, lng)[0];
+                if (!server) return null;
+                this.lastFetchTime = Date.now();
+                const res = await this._queryServer(server, query);
+                if (!res.ok && res.rest) this._markServerFailed(server);
+                return { server, res };
+            });
+            if (!tmp) break;
+            const { server, res } = tmp;
+            if (res.ok) {
+                this._markServerSuccess(server);
+                const parsed = this._parseOverpassResult(res.data);
+                // Cache the answer (a road without a posted limit too, so it isn't asked again)
+                const cacheData = parsed || { limit: null, unit: null, source: 'not_found' };
+                this.memoryCache.set(cacheKey, cacheData);
+                this.failedCells.delete(cacheKey);
+                this._setStatus('ok', null);
+                await this._saveToDB(cacheKey, cacheData);
+                return parsed;
+            }
+            if (res.reason === 'busy' || !reason) reason = res.reason;
+            if (res.reason === 'offline') break;
+        }
+
+        this._noteCellFailed(cacheKey, reason || this.status.reason || 'busy');
+        return null;
+    }
+
+    /**
+     * Run fn after every earlier queued request has finished (Overpass
+     * servers ask clients not to send parallel queries).
+     */
+    _oneAtATime(fn) {
+        const run = (this._requestChain || Promise.resolve()).then(fn, fn);
+        this._requestChain = run.catch(() => null);
+        return run;
+    }
+
+    /**
+     * One Overpass request. Never throws.
+     * @returns {{ok:true, data:Object}|{ok:false, reason:string, rest:boolean}}
+     */
+    async _queryServer(server, query) {
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = setTimeout(() => ctrl && ctrl.abort(), this.requestTimeoutMs);
+        try {
+            const response = await fetch(server.url, {
                 method: 'POST',
                 body: `data=${encodeURIComponent(query)}`,
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                signal: ctrl ? ctrl.signal : undefined
             });
-
             if (!response.ok) {
-                // Handle rate limiting (429) or server errors
-                this._markServerFailed(serverUrl);
-                if (response.status === 429 || response.status >= 500) {
-                    this.backoffMultiplier = Math.min(this.backoffMultiplier * 1.5, this.maxBackoff);
-                    console.warn(`[SpeedLimitService] Server ${serverUrl} returned ${response.status}. Trying next server.`);
-                    throw new Error(`Server returned ${response.status}`);
-                }
-                throw new Error(`Overpass API returned ${response.status}`);
+                // 429/406 = rate limit, 5xx = "at capacity" / gateway timeout
+                const busy = response.status === 429 || response.status === 406 || response.status >= 500;
+                return { ok: false, reason: 'busy', rest: busy };
             }
-
-            // Check content type before parsing
             const contentType = response.headers.get('content-type') || '';
             if (!contentType.includes('application/json')) {
-                // Server returned non-JSON (likely XML error page) - fail silently, try next server
-                this._markServerFailed(serverUrl);
-                this.backoffMultiplier = Math.min(this.backoffMultiplier * 1.5, this.maxBackoff);
-                throw new Error('Server returned non-JSON response');
+                return { ok: false, reason: 'busy', rest: true }; // an HTML/XML error page
             }
-
-            // Success - mark server as working and reduce backoff
-            this._markServerSuccess(serverUrl);
-            if (this.backoffMultiplier > 1) {
-                this.backoffMultiplier = Math.max(1, this.backoffMultiplier * 0.8);
-            }
-
             const data = await response.json();
-            const result = this._parseOverpassResult(data);
-
-            // Cache the result (even if null, to avoid re-fetching)
-            const cacheData = result || { limit: null, unit: null, source: 'not_found' };
-            this.memoryCache.set(cacheKey, cacheData);
-            await this._saveToDB(cacheKey, cacheData);
-
-            return result;
-        } catch (error) {
-            // Silently fail - speed limit is optional and servers can be flaky
-            return null;
+            // Overpass answers 200 with a "runtime error" remark when a query
+            // timed out or ran out of memory: that is not "no speed limit here"
+            if (data && typeof data.remark === 'string' && /error/i.test(data.remark)) {
+                return { ok: false, reason: 'busy', rest: true };
+            }
+            return { ok: true, data };
+        } catch (e) {
+            if (e && e.name === 'AbortError') return { ok: false, reason: 'busy', rest: true }; // timed out
+            const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+            return { ok: false, reason: offline ? 'offline' : 'unreachable', rest: !offline };
+        } finally {
+            clearTimeout(timer);
         }
     }
 
@@ -425,8 +568,11 @@ class SpeedLimitService {
     _startBackgroundLoading() {
         if (this.isBackgroundLoading) return;
         this.isBackgroundLoading = true;
+        // A stop + restart must not leave the old loop running alongside the new one
+        const generation = this._loadGeneration = (this._loadGeneration || 0) + 1;
 
         const loadNext = async () => {
+            if (generation !== this._loadGeneration) return;
             // Stop if queue is empty
             if (this.loadQueue.length === 0) {
                 this.isBackgroundLoading = false;
@@ -436,6 +582,7 @@ class SpeedLimitService {
 
             // Load ONE item at a time (respecting rate limits)
             const pos = this.loadQueue.shift();
+            let retryAt = 0;
             if (pos) {
                 try {
                     // Wait for the fetch to complete (this respects rate limiting)
@@ -443,12 +590,20 @@ class SpeedLimitService {
                 } catch (e) {
                     // Ignore errors, continue loading
                 }
+                // Lookup failed (servers busy): try this cell again later, at
+                // most 3 times, and wait out the servers' cool-down first
+                if (this.getCellStatus(pos.lat, pos.lng) === 'unavailable') {
+                    pos.attempts = (pos.attempts || 0) + 1;
+                    if (pos.attempts < 3) this.loadQueue.push(pos);
+                    retryAt = this.nextRetryAt(pos.lat, pos.lng);
+                }
             }
+            if (generation !== this._loadGeneration) return;
 
             // Continue with next item after a delay
             if (this.loadQueue.length > 0 && this.isBackgroundLoading) {
                 // Schedule next load - add extra delay to be conservative
-                const delay = this.minFetchInterval * this.backoffMultiplier + 500;
+                const delay = Math.max(this.minFetchInterval + 500, retryAt - Date.now());
                 setTimeout(loadNext, delay);
             } else {
                 this.isBackgroundLoading = false;
@@ -467,12 +622,14 @@ class SpeedLimitService {
     stopBackgroundLoading() {
         this.loadQueue = [];
         this.isBackgroundLoading = false;
+        this._loadGeneration = (this._loadGeneration || 0) + 1;
     }
 
     /**
      * Get from IndexedDB
      */
     async _getFromDB(key) {
+        await this._dbWait();
         if (!this.db) return null;
 
         return new Promise((resolve) => {
@@ -504,6 +661,7 @@ class SpeedLimitService {
      * Save to IndexedDB
      */
     async _saveToDB(key, data) {
+        await this._dbWait();
         if (!this.db) return;
 
         return new Promise((resolve) => {
@@ -640,6 +798,7 @@ class SpeedLimitService {
      */
     clearCache() {
         this.memoryCache.clear();
+        this.failedCells.clear();
         this.loadQueue = [];
     }
 }

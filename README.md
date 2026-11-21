@@ -64,21 +64,23 @@ Visit [teslacamviewer.com](https://teslacamviewer.com) - no installation require
 ### Option 2: Run Locally
 
 1. Clone or download this repository
-2. Open `index.html` in Chrome or Edge, or run a local server:
+2. In that folder, start a local server:
 
 ```bash
 # Using Python
-python -m http.server 8000
+python -m http.server 8000 --bind 127.0.0.1
 
 # Using Node.js
-npx http-server -p 8000
+npx http-server -p 8000 -a 127.0.0.1
 ```
 
-3. Open http://localhost:8000 in your browser
+3. Open http://localhost:8000 in Chrome or Edge
+
+You can also open `index.html` directly, but then the browser blocks some features (telemetry, license plate tools, MP4 and GIF exports, translations). The app shows a note when that happens.
 
 ### Option 3: Offline Package
 
-Use the "Download Offline Version" option in settings to create a portable copy that works without internet.
+Use the "Download Offline Package" option in Settings to create a portable copy that works without internet. Unzip it, then start a local server in that folder as in Option 2 for every feature, or open its `index.html` directly with the limits above.
 
 ## Quick Start
 
@@ -141,7 +143,7 @@ TeslaCamViewer connects to the following external services for enhanced function
 | Service | Data Sent | Purpose |
 |---------|-----------|---------|
 | [Open-Meteo](https://open-meteo.com) | GPS coordinates, date | Weather conditions for events |
-| [Overpass API](https://overpass-api.de) | GPS coordinates | Speed limit data from OpenStreetMap |
+| Overpass API servers: [overpass-api.de](https://overpass-api.de), [overpass.private.coffee](https://overpass.private.coffee), [ovp.dresel.systems](https://ovp.dresel.systems) (North America and Europe only) | GPS coordinates | Speed limit data from OpenStreetMap (one server at a time; the next one only if the first is busy) |
 | [Nominatim](https://nominatim.openstreetmap.org) | GPS coordinates | Address lookup for insurance reports |
 | [TeslaCamViewer.com](https://teslacamviewer.com) | None | Version update check only |
 
@@ -236,6 +238,6 @@ MIT License - see LICENSE file for details.
 
 ## Version
 
-Current version: 2026.47.2.1
+Current version: 2026.47.6.1
 
 Click the version number in the app to view the full changelog.

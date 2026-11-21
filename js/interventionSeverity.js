@@ -152,12 +152,19 @@
                 return ia - ib;
             });
 
-            let clipStartSec = 0;
+            // Clip start = sum of the player's lengths of every clip before it
+            // (#537): clips with no SEI entry count too, a clip the player
+            // skips (no front video) is 0 s, an unknown length is 60 s.
+            const lenOf = (idx) => {
+                const d = cachedClipDurations ? cachedClipDurations[idx] : undefined;
+                return Number.isFinite(d) && d >= 0 ? d : 60;
+            };
             for (const [key, data] of entries) {
                 const clipIdx = parseInt(key.split('_')[0], 10);
-                const clipDur = (cachedClipDurations && cachedClipDurations[clipIdx])
-                    ? cachedClipDurations[clipIdx] : 60;
-                if (!data?.frames?.length) { clipStartSec += clipDur; continue; }
+                let clipStartSec = 0;
+                for (let idx = 0; idx < clipIdx; idx++) clipStartSec += lenOf(idx);
+                const clipDur = lenOf(clipIdx);
+                if (!data?.frames?.length || clipDur <= 0) continue;
 
                 const framesPerSec = data.frames.length / clipDur;
                 for (let i = 0; i < data.frames.length; i++) {
@@ -170,7 +177,6 @@
                         gz: f.g_force_z ?? 0
                     });
                 }
-                clipStartSec += clipDur;
             }
             if (frames.length < 10) return null;
 

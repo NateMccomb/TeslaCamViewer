@@ -38,7 +38,8 @@
     "noEventLoaded": "Ingen hendelse lastet",
     "hidden": "Skjult:",
     "fullscreen": "Fullskjerm",
-    "exitFullscreen": "Avslutt fullskjerm"
+    "exitFullscreen": "Avslutt fullskjerm",
+    "dateAtTime": "{{date}} kl. {{time}}"
   },
 
   "cameras": {
@@ -46,10 +47,21 @@
     "back": "Bak",
     "left": "Venstre",
     "right": "Høyre",
+    "leftPillar": "Venstre B-stolpe",
+    "rightPillar": "Høyre B-stolpe",
     "hideFront": "Skjul frontkamera",
     "hideBack": "Skjul bakkamera",
     "hideLeft": "Skjul venstre kamera",
-    "hideRight": "Skjul høyre kamera"
+    "hideRight": "Skjul høyre kamera",
+    "hideLeftPillar": "Skjul kamera i venstre B-stolpe",
+    "hideRightPillar": "Skjul kamera i høyre B-stolpe",
+    "showFront": "Vis frontkamera",
+    "showBack": "Vis bakkamera",
+    "showLeft": "Vis venstre kamera",
+    "showRight": "Vis høyre kamera",
+    "showLeftPillar": "Vis kamera i venstre B-stolpe",
+    "showRightPillar": "Vis kamera i høyre B-stolpe",
+    "showCamera": "Vis {{camera}}"
   },
 
   "controls": {
@@ -66,7 +78,7 @@
     "markIn": "Marker startpunkt",
     "markOut": "Marker sluttpunkt",
     "clearMarks": "Fjern markeringer",
-    "export": "Eksporter alle kameraer",
+    "export": "Eksporter gjeldende oppsett",
     "exportOptions": "Eksportalternativer",
     "zoomOut": "Zoom ut tidslinje",
     "zoomIn": "Zoom inn tidslinje",
@@ -74,7 +86,10 @@
     "loop": "Gjenta",
     "speed": "Hastighet:",
     "layout": "Oppsett:",
-    "camera": "Kamera:"
+    "camera": "Kamera:",
+    "cyclePillarTitle": "Bytt mellom sidekameraer og B-stolpekameraer (Shift+P)",
+    "repeaters": "Sidekameraer",
+    "pillars": "B-stolper"
   },
 
   "bookmarks": {
@@ -84,26 +99,98 @@
     "next": "Neste bokmerke (])",
     "manage": "Administrer bokmerker",
     "clearAll": "Fjern alle",
-    "noBookmarks": "Ingen bokmerker ennå"
+    "noBookmarks": "Ingen bokmerker ennå",
+    "bookmark": {
+      "one": "{{count}} bokmerke",
+      "other": "{{count}} bokmerker"
+    }
   },
 
   "export": {
-    "header": "Eksporter kamera",
-    "allCameras": "Alle kameraer (Rutenett)",
-    "frontOnly": "Bare foran",
-    "rearOnly": "Bare bak",
-    "leftOnly": "Bare venstre",
-    "rightOnly": "Bare høyre",
+    "header": "Eksportalternativer",
+    "exportVideo": "Eksporter video",
+    "allCameras": "Gjeldende oppsett",
+    "leftPillarOnly": "Bare venstre B-stolpe",
+    "rightPillarOnly": "Bare høyre B-stolpe",
+    "privacyMode": "Personvernmodus (fjern metadata)",
+    "privacyModeHint": "Fjerner tidsstempel, GPS og posisjon",
+    "insuranceReport": "Forsikringsrapport (PDF)",
+    "generatingReport": "Lager forsikringsrapport...",
     "exporting": "Eksporterer {{percent}}%",
     "preparing": "Forbereder eksport...",
     "encoding": "Koder video...",
     "complete": "Eksport fullført",
     "cancelled": "Eksport avbrutt",
-    "failed": "Eksport mislyktes"
+    "failed": "Eksport mislyktes",
+    "formatTitle": "Eksportformat",
+    "gifWarning": "GIF-eksport tar ca. 10 ganger klippets lengde",
+    "blurPlatesHint": "Gjør eksporten betydelig tregere",
+    "insuranceReportShort": "Forsikringsrapport",
+    "alreadyRunning": "En eksport pågår allerede. Vent til den er ferdig.",
+    "cameraAll": "alle kameraer",
+    "cameraFront": "frontkamera",
+    "cameraBack": "bakkamera",
+    "cameraLeft": "venstre kamera",
+    "cameraRight": "høyre kamera",
+    "cameraLeftPillar": "kamera i venstre B-stolpe",
+    "cameraRightPillar": "kamera i høyre B-stolpe",
+    "rangeMarked": "markert del ({{marks}})",
+    "rangeFromIn": "fra startpunktet til slutten av hendelsen",
+    "rangeToOut": "fra starten til sluttpunktet",
+    "rangeFromCurrent": "fra nåværende posisjon til slutten av hendelsen",
+    "confirm": "Eksportere {{range}}, {{camera}}?",
+    "confirmAtSpeed": "Eksportere {{range}}, {{camera}}, i {{speed}}x hastighet?",
+    "confirmDuration": "Eksporten tar omtrent 3-4 ganger videoens lengde (et klipp på 10 sekunder tar ca. 30-40 sekunder).",
+    "confirmDontSwitch": "Ikke bytt hendelse før eksporten er ferdig.",
+    "invalidRange": "Ugyldig eksportområde: Starttiden må være før sluttiden.\nJuster start- og sluttpunktet.",
+    "loadingPlateModel": "Laster AI-modell for skiltgjenkjenning...",
+    "loadingPlateModelHint": "Dette kan ta litt tid første gang",
+    "starting": "Starter eksport...",
+    "preparingVideo": "Forbereder video...",
+    "titleVideo": "Video",
+    "progressTitle": "{{what}} eksporteres: {{percent}}%",
+    "elapsedRemaining": "{{elapsed}} gått / ~{{remaining}} igjen",
+    "videoProgress": "Video {{current}} av {{total}}",
+    "speedReduced": "Hastighet redusert til {{speed}}x (bufring)",
+    "gpuFailed": "Eksporten mislyktes: Det ser ut til at grafikkortet ble tilbakestilt under eksporten.\n\nDette betyr vanligvis at maskinvarekoderen hang seg, eller at Windows tilbakestilte grafikkdriveren. Prøv ett av disse: senk eksportoppløsningen (Innstillinger), slå av skiltsløring for denne eksporten, eksporter et kortere tidsrom med start- og sluttpunkt, eller oppdater grafikkdriveren.\n\nHvis det fortsetter å skje, åpner du Innstillinger → Diagnostikk → Console Log Capture og sender oss loggen. Vi har nettopp lagt til detaljert informasjon om koder og dekoder, slik at support@teslacamviewer.com kan finne årsaken.",
+    "encoderStalled": "Eksporten stoppet: Videokoderen på denne enheten sluttet å svare ({{codec}}). Ingenting ble lagret. Prøv igjen med MP4 (VP9) eller WebM, eller velg lavere eksportkvalitet under Innstillinger > Eksport.",
+    "unableToComplete": "Eksporten kunne ikke fullføres: {{error}}",
+    "completeTitle": "Eksport fullført",
+    "completeText": "Videoen din er lagret.",
+    "cancelledTitle": "Eksport avbrutt",
+    "cancelledText": "Eksporten ble stoppet før den var ferdig. Ingen fil ble lagret.",
+    "noteWebm": "Lagret som WebM (VP9).",
+    "noteH264": "Lagret som MP4 (H.264): spilles av nesten overalt, også på iPhone og i QuickTime.",
+    "noteNoH264": "Denne nettleseren kunne ikke kode H.264, så filen ble lagret som MP4 ({{codec}}). Den spilles av i Chrome, Edge, VLC og på Android; iPhone, QuickTime og enkelte redigeringsprogrammer kan kanskje ikke åpne den.",
+    "noteMp4": "Lagret som MP4 ({{codec}}): best kvalitet, spilles av i Chrome, Edge, VLC og på Android. For iPhone, QuickTime eller et redigeringsprogram velger du MP4 (H.264) i eksportmenyen.",
+    "freeExportsUsed": "{{used}} av {{limit}} gratis eksporter brukt i dag. {{left}} igjen. Å eksportere samme hendelse på nytt er fortsatt gratis.",
+    "plateModelLoading": "Laster modell for skiltgjenkjenning...",
+    "plateModelReady": "Skiltgjenkjenning klar",
+    "plateModelFailed": "Skiltgjenkjenning kunne ikke lastes",
+    "h264Warning": "MP4 (H.264) spilles av nesten overalt, men på enkelte PC-er er det den tregeste eksporten. MP4 (VP9) og WebM er ofte raskere.",
+    "softwareH264": "H.264 kodes i programvare: i full kvalitet kan dette ta flere minutter.",
+    "softwareH264Rate": "{{fps}} bilder per sekund",
+    "tookTime": "Tid brukt: {{time}}",
+    "sizeNote": "Videostørrelse: {{size}}",
+    "sizeReduced": "Videostørrelse: {{size}} (du valgte {{asked}}, mer enn videokoderen på denne enheten tar imot)",
+    "noEncoder": "Eksporten stoppet før den startet: Ingen videokoder på denne enheten tok imot denne eksporten ({{size}}), heller ikke i mindre størrelse. Ingenting ble lagret. Last inn siden på nytt og prøv igjen. Hvis det fortsatt ikke går, eksporter som WebM eller velg lavere eksportkvalitet under Innstillinger > Eksport.",
+    "badOutput": "Eksporten mislyktes: {{format}}-filen ble ødelagt ({{reason}}), så den ble ikke lagret. Prøv igjen. Skjer det igjen, velg lavere eksportkvalitet under Innstillinger > Eksport eller et annet format.",
+    "badOutput_tiny": "filen var bare {{bytes}} byte, uten video",
+    "badOutput_frames": "bare {{got}} av {{want}} bilder kom med i filen",
+    "badOutput_length": "videoen er {{got}} s lang i stedet for {{want}} s",
+    "badOutput_unreadable": "filen kan ikke spilles av",
+    "nothingToExport": "Ingenting å eksportere: avspillingsposisjonen er på slutten av hendelsen ({{position}} av {{end}}) og ingen OUT-markering er satt. Gå tilbake eller sett IN- og OUT-markeringer, og eksporter på nytt.",
+    "notSaved": "Eksporten ble avsluttet uten å lagre en fil, så ingenting ble lastet ned. Prøv igjen.",
+    "softwareVp9": "VP9 kodes i programvare: i full kvalitet kan dette ta flere minutter.",
+    "noteWebmCodec": "Lagret som WebM ({{codec}}).",
+    "noWebmEncoder": "Eksporten stoppet før den startet: Ingen WebM-videokoder på denne enheten tok imot denne eksporten ({{size}}), heller ikke i mindre størrelse. Ingenting ble lagret. Eksporter som MP4 (H.264) i stedet, eller velg lavere eksportkvalitet under Innstillinger > Eksport.",
+    "elapsedOnly": "{{elapsed}} gått",
+    "softwareVp8": "VP8 kodes i programvare: i full kvalitet kan dette ta flere minutter."
   },
 
   "layouts": {
     "grid2x2": "2×2 Rutenett",
+    "grid3x2": "3×2 Rutenett (6 kameraer)",
     "layout63": "6:3 Sentrert",
     "layout43": "4:3 Hoved",
     "all169": "Alle 16:9",
@@ -141,7 +228,13 @@
       "markingExport": "Markering & Eksport",
       "bookmarks": "Bokmerker",
       "speedControl": "Hastighetskontroll",
-      "general": "Generelt"
+      "general": "Generelt",
+      "exportOverlays": "Overlegg i eksport"
+    },
+    "exportOverlays": {
+      "gps": "GPS-koordinater ved siden av tidsstempelet (Innstillinger → Eksport, av som standard)",
+      "speedLimit": "Fartsgrenseskilt nederst til venstre (Innstillinger → Eksport, av som standard)",
+      "privacy": "Personvernmodus fjerner begge, i tillegg til tidsstempel og minikart"
     },
 
     "shortcuts": {
@@ -159,6 +252,7 @@
       "selectNextEvent": "Velg neste hendelse",
       "cycleLayouts": "Bla gjennom oppsett",
       "focusCamera": "Fokuser kamera (1=Foran, 2=Bak, 3=Venstre, 4=Høyre)",
+      "cyclePillarMode": "Bytt mellom sidekameraer/B-stolper (når tilgjengelig)",
       "toggleFullscreen": "Veksle fullskjerm",
       "focusCameraFullscreen": "Fokuser kamera fullskjerm",
       "markIn": "Marker startpunkt",
@@ -197,18 +291,72 @@
       "mobile": "Mobil",
       "export": "Eksport",
       "language": "Språk",
-      "telemetry": "Telemetry Overlay",
-      "miniMap": "Mini-Map"
+      "telemetry": "Telemetrioverlegg",
+      "miniMap": "Minikart"
     },
 
     "tabs": {
-      "general": "General",
-      "playback": "Playback",
-      "overlays": "Overlays",
-      "export": "Export",
-      "advanced": "Advanced",
-      "ai-search": "AI Search",
-      "diagnostics": "Diagnostics"
+      "general": "Generelt",
+      "playback": "Avspilling",
+      "overlays": "Overlegg",
+      "export": "Eksport",
+      "advanced": "Avansert",
+      "ai-search": "AI-søk",
+      "diagnostics": "Diagnostikk"
+    },
+    "playback": {
+      "defaultSpeed": "Standardhastighet",
+      "defaultLayout": "Standardoppsett",
+      "autoPlayNext": "Spill av neste hendelse automatisk",
+      "loopByDefault": "Gjenta som standard"
+    },
+    "performance": {
+      "preloadNextClip": "Forhåndslast neste klipp",
+      "preloadHint": "Jevnere avspilling, bruker mer minne",
+      "memoryOptimization": "Minneoptimalisering",
+      "memoryHint": "Frigjør videoressurser som ikke brukes",
+      "webCodecsPlayer": "WebCodecs-spiller",
+      "beta": "BETA",
+      "webCodecsHint": "BETA: Avspiller som tegner på canvas med WebCodecs. Prøv denne hvis avspillingen hakker eller føles treg, spesielt med integrert Intel-grafikk. Planen er å slå den på som standard for alle i en senere versjon, når vi har fått nok tilbakemeldinger. Krever at siden lastes inn på nytt."
+    },
+    "ui": {
+      "theme": "Tema",
+      "themeDark": "Mørk (standard)",
+      "themeLight": "Lys",
+      "themeMidnight": "Midnatt",
+      "themeTeslaRed": "Tesla-rød",
+      "showKeyboardHints": "Vis tastaturhint",
+      "showTimestampOverlay": "Vis tidsstempel i bildet",
+      "showWhatsNew": "Vis \"Hva er nytt\"-markører",
+      "whatsNewHint": "Blå prikker ved nye funksjoner, varsler om oppdateringer"
+    },
+    "timeline": {
+      "enableZoom": "Aktiver zoom i tidslinjen",
+      "zoomHint": "Rull for å zoome inn/ut på tidslinjen",
+      "showClipMarkers": "Vis klippmarkører"
+    },
+    "session": {
+      "rememberLastFolder": "Husk siste mappe",
+      "folderHint": "Krever mappetillatelse når siden lastes inn på nytt"
+    },
+    "offline": {
+      "downloadPackage": "Last ned pakke for frakoblet bruk",
+      "downloadHint": "Lag en frittstående versjon for USB-stasjoner (~2-3 MB)",
+      "download": "Last ned",
+      "mapNote": "Inneholder alle appfiler og biblioteker. Kartet krever internettilkobling.",
+      "notAvailable": "Pakken for frakoblet bruk er ikke tilgjengelig. Last inn siden på nytt og prøv igjen."
+    },
+    "accessibility": {
+      "highContrast": "Høy kontrast",
+      "highContrastHint": "Øker kontrasten for tekst og kanter",
+      "textSize": "Tekststørrelse",
+      "textSmall": "Liten",
+      "textMedium": "Middels (standard)",
+      "textLarge": "Stor"
+    },
+    "mobile": {
+      "lockLandscape": "Lås liggende retning under avspilling",
+      "lockHint": "Hold skjermen i liggende retning mens video spilles av (kun mobil)"
     },
 
     "language": {
@@ -219,45 +367,158 @@
     "export": {
       "videoFormat": "Videoformat",
       "webm": "WebM (VP9) - Mindre filer",
-      "mp4": "MP4 (H.264) - Bedre kompatibilitet",
-      "formatHint": "Format brukt ved videoeksport",
-      "privacyMode": "Privacy Mode Export",
-      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
-      "blurPlates": "Blur License Plates",
-      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
-      "branding": "Show TeslaCamViewer.com branding",
-      "brandingHint": "Display branding in the bottom banner of exported videos"
+      "mp4": "MP4 (VP9) - Best kvalitet (Chrome, Edge, VLC, Android)",
+      "mp4h264": "MP4 (H.264) - Maksimal kompatibilitet, kan være tregest (iPhone, QuickTime, redigeringsprogrammer)",
+      "formatHint": "Format som brukes ved videoeksport. MP4 (VP9) ser best ut, men iPhone, QuickTime og enkelte redigeringsprogrammer og sosiale apper kan ikke åpne det: bruk MP4 (H.264) for disse. MP4 (H.264) kan være tregest: svarer ikke skjermkortets H.264-koder, bytter eksporten til programvarekoderen og husker det til neste gang.",
+      "privacyMode": "Eksport i personvernmodus",
+      "privacyModeHint": "Fjern tidsstempel, GPS, posisjon og minikart fra eksporter",
+      "gpsText": "GPS-koordinater i eksport",
+      "gpsTextHint": "Skriver bilens GPS-posisjon som tekst i eksporterte videoer, ved siden av tidsstempelet. Av som standard, slik at en delt video ikke viser hvor du var. Klipp uten GPS-data bruker hendelsens omtrentlige posisjon, merket med ~. Personvernmodus fjerner den alltid.",
+      "gpsFormat": "Format for GPS-koordinater",
+      "gpsFormatDecimal": "Desimalgrader (37.49301, -121.94402)",
+      "gpsFormatDms": "Grader, minutter, sekunder (37°29'34.8\"N 121°56'38.5\"W)",
+      "speedLimit": "Fartsgrenseskilt i eksport",
+      "speedLimitHint": "Viser fartsgrensen fra OpenStreetMap som et skilt i eksporterte videoer, slik som skiltet under avspilling. Fartsgrensene slås opp på nett når eksporten starter (i opptil ca. 6 sekunder) og lagres til neste gang. Veier som ikke kunne slås opp, får ikke noe skilt. Personvernmodus fjerner det alltid.",
+      "blurPlates": "Slør bilskilt",
+      "blurPlatesHint": "Skiltgjenkjenning med AI (modell på ca. 12 MB, mellomlagres etter første bruk)",
+      "branding": "Vis TeslaCamViewer.com-merking",
+      "brandingHint": "Vis merkingen i banneret nederst i eksporterte videoer",
+      "gifAnimated": "GIF (animert)",
+      "quality": "Eksportkvalitet",
+      "qualityFull": "Full: oppsettets egen oppløsning",
+      "qualityHd": "HD: 1080p høyde",
+      "qualityWeb": "Web: 720p høyde",
+      "qualityCustom": "Egendefinert: angi høyde",
+      "qualityHint": "Skalerer eksportbildet. Full skalerer aldri ned; HD/Web begrenser størrelsen, men skalerer aldri opp; med Egendefinert velger du selv (kan skalere opp).",
+      "customHeight": "Egendefinert høyde (px)",
+      "customHeightHint": "Bredden beregnes slik at oppsettets sideforhold beholdes.",
+      "plateModelMissing": "Feil: PlateBlur er ikke lastet",
+      "plateModelInitializing": "Initialiserer...",
+      "plateModelReady": "Modell klar",
+      "plateModelFailed": "Kunne ikke laste modellen",
+      "plateModelOnFirstExport": "Modellen lastes ned ved første eksport"
     },
 
     "telemetry": {
-      "enabled": "Enable Telemetry Overlay",
-      "enabledHint": "Press T to toggle during playback",
-      "style": "Display Style",
-      "styleCockpit": "Cockpit HUD",
-      "styleTesla": "Tesla-Native Pill",
-      "styleMinimal": "Minimal Corner",
-      "units": "Speed Units",
+      "enabled": "Aktiver telemetrioverlegg",
+      "enabledHint": "Trykk T for å slå av/på under avspilling",
+      "style": "Visningsstil",
+      "styleCockpit": "Cockpit-HUD",
+      "styleTesla": "Tesla-stil (pille)",
+      "styleMinimal": "Minimal i hjørnet",
+      "units": "Hastighetsenhet",
       "unitsMph": "MPH",
       "unitsKph": "KPH",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add telemetry overlay to exported videos",
-      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+      "inExport": "Ta med i eksporter",
+      "inExportHint": "Legg telemetrioverlegget til i eksporterte videoer",
+      "description": "Viser kjøretøydata fra Tesla-programvare 2025.44.25 og nyere (hastighet, styring, pedaler osv.)"
     },
 
     "miniMap": {
-      "enabled": "Enable Mini-Map",
-      "enabledHint": "Press M to toggle, right-click for options",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add mini-map overlay to exported videos",
-      "darkMode": "Dark Mode Map",
-      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
-      "tileProvider": "Map Tile Provider",
-      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
-      "providerCarto": "Carto (Default)",
+      "enabled": "Aktiver minikart",
+      "enabledHint": "Trykk M for å slå av/på, høyreklikk for alternativer",
+      "inExport": "Ta med i eksporter",
+      "inExportHint": "Legg minikartet til i eksporterte videoer",
+      "darkMode": "Mørkt kart",
+      "darkModeHint": "Bruk mørke kartfliser (anbefales for dashcam-opptak)",
+      "tileProvider": "Kartleverandør",
+      "tileProviderHint": "Prøv OpenStreetMap hvis kartene ikke lastes (f.eks. i Kina)",
+      "providerCarto": "Carto (standard)",
       "providerOsm": "OpenStreetMap",
       "providerStadia": "Stadia Maps",
-      "description": "GPS map overlay showing vehicle position synced with video playback"
+      "description": "GPS-kart som viser bilens posisjon synkronisert med videoavspillingen"
     }
+  },
+
+  "sync": {
+    "synced": "Synkronisert (alle kameraer i takt)",
+    "drifted": "Ute av takt (korrigeres automatisk)",
+    "videosSynced": "Videoene er synkronisert",
+    "videosDrifted": "Videoene er ute av takt, synkroniserer på nytt"
+  },
+
+  "events": {
+    "stats": "{{total}} hendelser ({{saved}} lagret, {{sentry}} Sentry, {{recent}} nylige)",
+    "saved": "Lagret",
+    "sentry": "Sentry",
+    "recent": "Nylig",
+    "event": {
+      "one": "{{count}} hendelse",
+      "other": "{{count}} hendelser"
+    },
+    "statsLine": "{{saved}} lagret, {{sentry}} Sentry, {{recent}} nylige",
+    "emptyCount": "{{count}} tomme",
+    "encryptedCount": "{{count}} kryptert",
+    "noEventsFound": "Ingen hendelser funnet",
+    "noEventsHint": "Den valgte mappen inneholder ingen TeslaCam-hendelser",
+    "noFolder": "Ingen TeslaCam-mappe valgt",
+    "clipCount": {
+      "one": "{{count}} klipp",
+      "other": "{{count}} klipp"
+    },
+    "clipsDuration": {
+      "one": "{{count}} klipp (~{{minutes}} min)",
+      "other": "{{count}} klipp (~{{minutes}} min)"
+    },
+    "noVideoClips": "Ingen videoklipp",
+    "hasNotes": "Har notater/etiketter",
+    "emptyEventToast": "Ingen videoklipp tilgjengelig for hendelsen {{date}}",
+    "timeFrom": "Fra {{time}}",
+    "timeFromTo": "{{start}} - {{end}}",
+    "reasons": {
+      "manualSave": "Manuelt lagret",
+      "objectDetected": "Sentry: objekt oppdaget",
+      "vehicleBumped": "Sentry: støt mot bilen"
+    }
+  },
+
+  "encrypted": {
+    "title": {
+      "one": "{{count}} hendelse er kryptert av Tesla",
+      "other": "{{count}} hendelser er kryptert av Tesla"
+    },
+    "titleOnDrive": {
+      "one": "{{count}} hendelse på {{drive}} er kryptert av Tesla",
+      "other": "{{count}} hendelser på {{drive}} er kryptert av Tesla"
+    },
+    "notListed": {
+      "one": "Den kan ikke spilles av før den er dekryptert, og vises derfor ikke i listen nedenfor.",
+      "other": "De kan ikke spilles av før de er dekryptert, og vises derfor ikke i listen nedenfor."
+    },
+    "notListedKinds": {
+      "one": "Den kan ikke spilles av før den er dekryptert, og vises derfor ikke i listen nedenfor ({{kinds}}).",
+      "other": "De kan ikke spilles av før de er dekryptert, og vises derfor ikke i listen nedenfor ({{kinds}})."
+    },
+    "kindSaved": "{{count}} lagret",
+    "kindSentry": "{{count}} Sentry",
+    "kindRecent": "{{count}} nylige",
+    "carOnlyAll": {
+      "one": "Den kan bare dekrypteres i bilen; dashcam.tesla.com kan ikke låse den opp.",
+      "other": "Alle kan bare dekrypteres i bilen; dashcam.tesla.com kan ikke låse dem opp."
+    },
+    "carOnlySome": {
+      "one": "{{count}} av dem kan bare dekrypteres i bilen; dashcam.tesla.com kan ikke låse den opp.",
+      "other": "{{count}} av dem kan bare dekrypteres i bilen; dashcam.tesla.com kan ikke låse dem opp."
+    },
+    "damagedAll": {
+      "one": "Den ser skadet eller ufullstendig ut (for eksempel avbrutt under lagring), så den kan kanskje ikke dekrypteres.",
+      "other": "De ser skadde eller ufullstendige ut (for eksempel avbrutt under lagring), så de kan kanskje ikke dekrypteres."
+    },
+    "damagedSome": {
+      "one": "{{count}} av dem ser skadet eller ufullstendig ut (for eksempel avbrutt under lagring), så den kan kanskje ikke dekrypteres.",
+      "other": "{{count}} av dem ser skadde eller ufullstendige ut (for eksempel avbrutt under lagring), så de kan kanskje ikke dekrypteres."
+    },
+    "howToView": "Slik ser du dem",
+    "explain": "Tesla-programvare 2026.20 og nyere krypterer dashcam-klipp på USB-stasjonen. Bare bilen din eller Tesla-kontoen din kan låse dem opp.",
+    "webTitle": "Dekrypter på dashcam.tesla.com:",
+    "webText": "logg inn med Tesla-kontoen din, dekrypter og last ned klippene (det skjer i nettleseren din), og legg deretter til den nedlastede mappen her med Legg til stasjon.",
+    "webLink": "Åpne dashcam.tesla.com",
+    "carTitle": "Dekrypter i bilen:",
+    "carText": "trykk på hengelåsikonet ved et klipp i Dashcam-appen i bilen. Klippet dekrypteres da på USB-stasjonen, og det kan ikke angres.",
+    "stopTitle": "Slutt å kryptere nye klipp:",
+    "stopText": "{{path}} (ikke alle biler viser denne innstillingen). Klipp som allerede er kryptert, forblir kryptert.",
+    "stopPath": "Kontroller > Trygghet > Krypter Dashcam-opptak",
+    "stopPrivacy": "Kryptering holder opptakene dine private hvis noen får tak i USB-pinnen din; slår du den av, kan alle med pinnen se dem."
   },
 
   "filter": {
@@ -271,11 +532,21 @@
     "clear": "Fjern filtre",
     "filters": "Filtre",
     "eventTypes": "Hendelsestyper",
+    "saved": "Lagret",
+    "sentry": "Sentry",
+    "recent": "Nylig",
     "onlyBookmarked": "Kun bokmerkede hendelser",
     "onlyWithNotes": "Kun hendelser med notater/etiketter",
     "sortBy": "Sorter etter",
     "newestFirst": "Nyeste først",
-    "oldestFirst": "Eldste først"
+    "oldestFirst": "Eldste først",
+    "searchPlaceholder": "By, sted, årsak...",
+    "dateRange": "Datoområde",
+    "dateTo": "til",
+    "clearDates": "Fjern datoer",
+    "clearAllFilters": "Fjern alle filtre",
+    "filterByTag": "Filtrer etter etikett",
+    "allTags": "Alle etiketter"
   },
 
   "map": {
@@ -286,25 +557,29 @@
     "toggleStruggleZones": "Veksle Autopilot problemsoner",
     "loadingStruggleZones": "Laster AP-frakoblingsdata...",
     "struggleZonesLoaded": "{{count}} AP-frakoblinger funnet",
-    "togglePhantomBrakes": "Veksle fantombremsing hotspots",
-    "loadingPhantomBrakes": "Laster fantombremsingsdata...",
-    "phantomBrakesLoaded": "{{count}} fantombremsinger funnet",
-    "phantomBrakeHotspot": "Fantombremsing Hotspot",
-    "phantomBrakesAtLocation": "{{count}} fantombremsing(er) på dette stedet",
-    "phantomBrakeTip": "Dette stedet har gjentatt fantombremsing - vurder å rapportere til Tesla hvis det er en falsk positiv.",
-    "toggleDarkMode": "Veksle mørk kartmodus"
+    "toggleIncidents": "Veksle episodemarkører",
+    "loadingIncidents": "Laster episodedata...",
+    "incidentsLoaded": "{{count}} episoder funnet",
+    "incidentHotspot": "Sted med gjentatte episoder",
+    "incidentsAtLocation": "{{count}} episode(r) på dette stedet",
+    "incidentTip": "Det har skjedd gjentatte episoder på dette stedet. Se gjennom opptakene for å forstå hva som skjedde.",
+    "toggleDarkMode": "Veksle mørk kartmodus",
+    "scanAllEvents": "Skann alle hendelser etter kartdata",
+    "scanningEvents": "Skanner hendelser etter episoder og AP-frakoblinger...",
+    "scanComplete": "Skanning fullført: {{incidents}} episoder, {{apDisengagements}} AP-frakoblinger funnet",
+    "scanCancelled": "Skanning avbrutt"
   },
 
   "statistics": {
     "title": "Statistikk",
     "close": "Lukk",
     "tabs": {
-      "overview": "Overview",
-      "timeline": "Timeline",
-      "locations": "Locations",
-      "sentry": "Sentry Analysis",
-      "quality": "Data Quality",
-      "export": "Export"
+      "overview": "Oversikt",
+      "timeline": "Tidslinje",
+      "locations": "Steder",
+      "sentry": "Sentry-analyse",
+      "quality": "Datakvalitet",
+      "export": "Eksport"
     },
     "recordingOverview": "Opptaksoversikt",
     "totalEvents": "Totalt hendelser",
@@ -314,7 +589,7 @@
     "eventsLast14Days": "Hendelser - Siste 14 dager",
     "eventTypes": "Hendelsestyper",
     "saved": "Lagret",
-    "sentry": "Vaktmodus",
+    "sentry": "Sentry",
     "recent": "Nylig",
     "triggerReasons": "Utløsergrunner",
     "manualSave": "Manuell lagring",
@@ -324,8 +599,8 @@
     "other": "Annet",
     "unknown": "Ukjent",
     "topLocations": "Topp 10 steder (Alle hendelser)",
-    "sentryByTimeOfDay": "Vaktmodus hendelser etter tidspunkt",
-    "topSentryLocations": "Topp vaktmodus steder",
+    "sentryByTimeOfDay": "Sentry-hendelser etter tid på døgnet",
+    "topSentryLocations": "Steder med flest Sentry-hendelser",
     "dateRange": "Datoområde",
     "eventTrends": "Hendelsestrender",
     "weekly": "Ukentlig",
@@ -337,20 +612,20 @@
     "noStatsToExport": "Ingen statistikk å eksportere",
     "noTimelineData": "Ingen tidslinje data tilgjengelig",
     "noEventsLast14Days": "Ingen hendelser de siste 14 dagene",
-    "noSentryEvents": "Ingen vaktmodus hendelser å analysere",
+    "noSentryEvents": "Ingen Sentry-hendelser å analysere",
     "noTrendData": "Ingen trenddata tilgjengelig",
     "noLocationData": "Ingen stedsdata tilgjengelig",
-    "noSentryLocationData": "Ingen vaktmodus stedsdata",
+    "noSentryLocationData": "Ingen stedsdata for Sentry-hendelser",
     "events": "hendelser",
-    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
-    "triggeringCamera": "Triggering Camera Distribution",
-    "sentryByDayOfWeek": "Sentry Events by Day of Week",
-    "dayVsNight": "Day vs Night Events",
-    "dataQuality": "Data Quality",
-    "eventsWithTelemetry": "Events with Telemetry",
-    "eventsWithoutTelemetry": "Events without Telemetry",
-    "noTriggeringCameraData": "No triggering camera data available",
-    "noEventData": "No event data available"
+    "exportDescription": "Last ned statistikkdataene dine for analyse uten nett eller for arkivering.",
+    "triggeringCamera": "Fordeling etter utløsende kamera",
+    "sentryByDayOfWeek": "Sentry-hendelser etter ukedag",
+    "dayVsNight": "Hendelser dag og natt",
+    "dataQuality": "Datakvalitet",
+    "eventsWithTelemetry": "Hendelser med telemetri",
+    "eventsWithoutTelemetry": "Hendelser uten telemetri",
+    "noTriggeringCameraData": "Ingen data om utløsende kamera tilgjengelig",
+    "noEventData": "Ingen hendelsesdata tilgjengelig"
   },
 
   "errors": {
@@ -396,8 +671,8 @@
       "recent": "Rullende buffer-opptak"
     },
     "step3": {
-      "title": "Trinn 3: Se 4 kameraer",
-      "description": "Se alle 4 kameravinkler synkronisert: Foran, Bak, Venstre og Høyre.",
+      "title": "Trinn 3: Se kameraene",
+      "description": "Se alle kameravinkler synkronisert: Foran, Bak, Venstre, Høyre og B-stolpekameraene (hvis bilen har dem).",
       "tip": "Tips",
       "tipText": "Dra kameraer for å bytte posisjoner, eller skjul kameraer du ikke trenger."
     },
@@ -418,7 +693,35 @@
     "events": "hendelser",
     "removeDrive": "Fjern stasjon",
     "addDrive": "Legg til stasjon",
-    "changeColor": "Klikk for å endre farge"
+    "changeColor": "Klikk for å endre farge",
+    "archive": "Arkiv",
+    "notLoaded": "Ikke lastet",
+    "sync": "Synkroniser",
+    "syncNow": "Last hendelser fra denne arkivstasjonen",
+    "editDrive": "Rediger stasjonsinnstillinger"
+  },
+
+  "driveSetup": {
+    "title": "Stasjonsoppsett",
+    "editTitle": "Rediger stasjonsinnstillinger",
+    "tipTitle": "Tips: Valg av mappe",
+    "tipTeslaCam": "TeslaCam/ - Alle opptak fra én stasjon",
+    "tipSubfolder": "SavedClips/ eller SentryClips/ - Bare bestemte hendelsestyper",
+    "tipParent": "En overordnet mappe - Søker etter TeslaCam-mapper i den",
+    "labelField": "Stasjonsnavn",
+    "labelPlaceholder": "f.eks. Min USB-stasjon",
+    "dateFilterField": "Last hendelser fra",
+    "dateFilterAll": "Alle hendelser",
+    "dateFilterWeek": "Siste uke",
+    "dateFilterMonth": "Siste måned",
+    "dateFilter3Months": "Siste 3 måneder",
+    "dateFilter6Months": "Siste 6 måneder",
+    "dateFilterYear": "Siste år",
+    "archiveLabel": "Arkivstasjon",
+    "archiveHint": "Ikke last ved oppstart, synkroniser manuelt ved behov",
+    "changeFolder": "Bytt mappe",
+    "addDrive": "Legg til stasjon",
+    "save": "Lagre endringer"
   },
 
   "driveSync": {
@@ -477,12 +780,33 @@
     "missingOnly": "Kun manglende",
     "newerOnly": "Kun nyere",
     "syncedOnly": "Kun synkroniserte",
-    "showingFirst": "Viser første {{count}} av {{total}} hendelser"
+    "showingFirst": "Viser første {{count}} av {{total}} hendelser",
+    "scanStopped": "the folder could not be listed to the end ({{error}})",
+    "filesUnreadable": "{{count}} file(s) could not be read: {{names}}",
+    "sourcePartial": "{{event}}: {{error}}. Copy copies the files that can be read. Move will not delete anything from this event.",
+    "destPartial": "{{event}} on the destination: {{error}}",
+    "compareWarningsTitle": "Some files could not be read ({{count}})",
+    "verifyFailed": "Verifisering mislyktes ({{error}})",
+    "verifyFailedKept": "Verifisering mislyktes ({{error}}). Ingenting ble slettet fra kilden.",
+    "partialNotMoved": "Not moved: {{error}}. The files that could be read were copied; nothing was deleted from the source.",
+    "partialCopied": "Only partly copied: {{error}}",
+    "keptInSource": "Kept {{count}} file(s) in the source folder because they were not part of the verified copy (added or changed after Compare): {{names}}",
+    "moveConfirmDetail": "Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.",
+    "notesTitle": "Notater og tagger",
+    "notesConflictsKept": "{{count}} hendelse(r) har ulike notater på de to stasjonene. Begge ble beholdt som de var. For å slå dem sammen, velg \"Slå sammen automatisk\" under \"Notatkonfliktløsning\" i synkroniseringsinnstillingene.",
+    "verifyingFiles": "Verifiserer {{current}} av {{total}} filer",
+    "verifyMismatch": "kopien av {{file}} samsvarer ikke med originalen",
+    "cancelledAfter": "Avbrutt etter {{done}} av {{total}} hendelser.",
+    "cancelledKeptEvent": "Avbrutt. Ingenting fra denne hendelsen ble slettet fra kilden.",
+    "cancelledEvent": "Avbrutt før denne hendelsen var ferdig.",
+    "syncCancelled": "Synkronisering avbrutt",
+    "moveNeedsWrite": "Flytt trenger tillatelse til å endre filer på {{drive}} for å slette hendelsene den flytter. Ingenting ble kopiert eller slettet. Tillat det når nettleseren spør, eller bruk Kopier.",
+    "deleteFailed": "Kopiert og kontrollert, men {{count}} fil(er) kunne ikke slettes fra kilden og ligger der fortsatt ({{error}})."
   },
 
   "syncSettings": {
     "title": "Synkroniseringsinnstillinger",
-    "verifyAfterCopy": "Verifiser filer etter kopiering",
+    "verifyAfterCopy": "Verifiser hver byte etter kopiering (Flytt verifiserer alltid)",
     "syncNotes": "Synkroniser notater og etiketter",
     "writeSyncFile": "Skriv synkroniseringsinnstillinger til mål",
     "confirmBeforeDelete": "Bekreft før sletting av kildefiler",
@@ -490,7 +814,8 @@
     "askEachTime": "Spør hver gang",
     "mergeAutomatically": "Slå sammen automatisk",
     "saveSettings": "Lagre innstillinger",
-    "close": "Lukk"
+    "close": "Lukk",
+    "keepBothTellMe": "Behold begge og gi beskjed"
   },
 
   "presets": {
@@ -587,9 +912,73 @@
     "toggleBirdsEye": "Veksle fugleperspektiv",
     "birdsEyeTitle": "Fugleperspektiv",
     "birdsEyeWaitingGps": "Venter på GPS-data...",
-    "birdsEyeRadius": "{{radius}}m radius",
+    "birdsEyeRadius": "Radius {{radius}} m",
     "birdsEyeLowG": "Lav G",
     "birdsEyeMedG": "Medium G",
     "birdsEyeHighG": "Høy G"
+  },
+
+  "license": {
+    "activated": "Lisens aktivert!",
+    "howItWorks": "Slik fungerer TeslaCamViewer Pro-lisensen din:",
+    "privacyFirst": "Personvern først",
+    "privacyFirstDesc": "E-postadressen din brukes bare til å bekrefte lisensen lokalt på denne enheten. Den sendes aldri til noen server.",
+    "savedInTwoPlaces": "Lagret to steder",
+    "savedInTwoPlacesDesc": "Lisensen lagres i nettleserens lagring og på TeslaCam-stasjonen din. Slik kan du bruke den på flere stasjoner.",
+    "easyRecovery": "Enkel gjenoppretting",
+    "easyRecoveryDesc": "Hvis du bruker en annen nettleser eller datamaskin, åpner du bare en stasjon der lisensen er lagret. Du blir bedt om å skrive inn e-postadressen din på nytt for å bekrefte at det er deg.",
+    "multipleDevices": "Flere enheter",
+    "multipleDevicesDesc": "Bruk lisensen på hvilken som helst enhet. Hver ny nettleser ber om e-postadressen din én gang for å bekrefte, så er alt klart.",
+    "gotIt": "Skjønner",
+    "limitDailyTitle": "Daglig grense nådd",
+    "limitDailyText": "Du har sett {{limit}} hendelser i dag. Du kan fortsatt åpne dem igjen for å utforske videre; bare nye hendelser må vente. Grensen nullstilles ved midnatt.",
+    "limitExportTitle": "Eksportgrense nådd",
+    "limitExportText": "Gratisversjonen lar deg eksportere {{limit}} hendelser per dag: {{names}}. Disse kan du eksportere på nytt så ofte du vil, og velge nye etter midnatt. Pro fjerner grensen.",
+    "limitNameSeparator": " og ",
+    "limitLockedTitle": "Funksjonen er låst",
+    "limitLockedText": "Denne funksjonen krever en TeslaCamViewer Pro-lisens.",
+    "limitUpgradeLine": "Oppgrader for ubegrenset tilgang, bare $5.99/år",
+    "limitWaitTomorrow": "Vent til i morgen",
+    "limitClose": "Lukk",
+    "limitUpgrade": "Oppgrader"
+  },
+
+  "telemetry": {
+    "title": "Telemetri",
+    "toggleAnomalyMarkers": "Veksle avviksmarkører",
+    "hideAnomalyMarkers": "Skjul avviksmarkører",
+    "showAnomalyMarkers": "Vis avviksmarkører",
+    "exportCsv": "Eksporter telemetridata som CSV",
+    "noData": "Ingen data",
+    "incident": "Episode",
+    "incidentBraking": "Kraftig nedbremsing",
+    "incidentSwerve": "Brå unnamanøver",
+    "incidentCombined": "Kombinert episode",
+    "hardBrake": "Kraftig bremsing",
+    "hardAccel": "Kraftig akselerasjon",
+    "suddenAcceleration": "Brå akselerasjon ved {{speed}} mph",
+    "suddenDeceleration": "Brå nedbremsing ved {{speed}} mph",
+    "rapidSteering": "Rask rattbevegelse ({{degrees}}° endring)",
+    "gForce": "G-kraft: {{value}}g",
+    "lateralG": "Sideveis G: {{value}}g",
+    "speed": "Hastighet: {{speed}} mph",
+    "dropped": "Redusert med: {{dropped}} mph",
+    "gForceValue": "G-kraft: {{value}}g",
+    "previousApEvent": "Forrige AP-hendelse",
+    "nextApEvent": "Neste AP-hendelse",
+    "cycleApEvents": "Klikk på pilene for å bla gjennom {{count}} AP-hendelser",
+    "nearMissDetected": "Nestenulykker oppdaget",
+    "incidentTooltip": "Episodemarkør: kraftig bremsing eller unnamanøver som er verdt å se nærmere på",
+    "hardBrakingEvents": "Kraftige nedbremsinger",
+    "hardAccelEvents": "Kraftige akselerasjoner",
+    "hardBrakingAccelEvents": "Kraftige nedbremsinger/akselerasjoner"
+  },
+  "speedLimit": {
+    "unavailableBusy": "Speed limits unavailable right now (map data server busy).",
+    "unavailableUnreachable": "Speed limits unavailable right now (couldn't reach the map data server).",
+    "unavailableOffline": "Speed limits unavailable: you're offline."
+  },
+  "fileProtocol": {
+    "notice": "Du åpnet TeslaCamViewer rett fra mappen (file://), så nettleseren blokkerer noen funksjoner: telemetri, skiltverktøy, MP4- og GIF-eksport, og oversettelser. For å bruke alt, åpne teslacamviewer.com, eller start en lokal server i denne mappen (for eksempel: python -m http.server 8000) og åpne http://localhost:8000."
   }
 }

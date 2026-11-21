@@ -7,7 +7,7 @@
 
   "app": {
     "title": "TeslaCamViewer.com",
-    "description": "테슬라 대시캠 영상을 동기화된 재생으로 시청"
+    "description": "테슬라 블랙박스 영상을 동기화된 재생으로 시청"
   },
 
   "header": {
@@ -29,7 +29,7 @@
     "syncDrives": "드라이브 간 동기화",
     "selectFolder": "TeslaCam 폴더 선택",
     "emptyState": "\"TeslaCam 폴더 선택\"을 클릭하여 시작하세요",
-    "emptyStateHint": "TeslaCam 폴더 또는 테슬라 대시캠 녹화가 포함된 폴더를 선택할 수 있습니다"
+    "emptyStateHint": "TeslaCam 폴더 또는 테슬라 블랙박스 녹화가 포함된 폴더를 선택할 수 있습니다"
   },
 
   "player": {
@@ -38,7 +38,8 @@
     "noEventLoaded": "로드된 이벤트 없음",
     "hidden": "숨김:",
     "fullscreen": "전체 화면",
-    "exitFullscreen": "전체 화면 종료"
+    "exitFullscreen": "전체 화면 종료",
+    "dateAtTime": "{{date}} {{time}}"
   },
 
   "cameras": {
@@ -46,10 +47,21 @@
     "back": "후방",
     "left": "좌측",
     "right": "우측",
+    "leftPillar": "좌측 필러",
+    "rightPillar": "우측 필러",
     "hideFront": "전방 카메라 숨기기",
     "hideBack": "후방 카메라 숨기기",
     "hideLeft": "좌측 카메라 숨기기",
-    "hideRight": "우측 카메라 숨기기"
+    "hideRight": "우측 카메라 숨기기",
+    "hideLeftPillar": "좌측 필러 카메라 숨기기",
+    "hideRightPillar": "우측 필러 카메라 숨기기",
+    "showFront": "전방 카메라 표시",
+    "showBack": "후방 카메라 표시",
+    "showLeft": "좌측 카메라 표시",
+    "showRight": "우측 카메라 표시",
+    "showLeftPillar": "좌측 필러 카메라 표시",
+    "showRightPillar": "우측 필러 카메라 표시",
+    "showCamera": "{{camera}} 표시"
   },
 
   "controls": {
@@ -66,7 +78,7 @@
     "markIn": "시작점 표시",
     "markOut": "종료점 표시",
     "clearMarks": "표시 지우기",
-    "export": "모든 카메라 내보내기",
+    "export": "현재 레이아웃 내보내기",
     "exportOptions": "내보내기 옵션",
     "zoomOut": "타임라인 축소",
     "zoomIn": "타임라인 확대",
@@ -74,7 +86,10 @@
     "loop": "반복",
     "speed": "속도:",
     "layout": "레이아웃:",
-    "camera": "카메라:"
+    "camera": "카메라:",
+    "cyclePillarTitle": "리피터/필러 카메라 전환 (Shift+P)",
+    "repeaters": "리피터",
+    "pillars": "필러"
   },
 
   "bookmarks": {
@@ -84,26 +99,98 @@
     "next": "다음 북마크 (])",
     "manage": "북마크 관리",
     "clearAll": "모두 지우기",
-    "noBookmarks": "북마크 없음"
+    "noBookmarks": "북마크 없음",
+    "bookmark": {
+      "one": "북마크 {{count}}개",
+      "other": "북마크 {{count}}개"
+    }
   },
 
   "export": {
-    "header": "카메라 내보내기",
-    "allCameras": "모든 카메라 (그리드)",
-    "frontOnly": "전방만",
-    "rearOnly": "후방만",
-    "leftOnly": "좌측만",
-    "rightOnly": "우측만",
+    "header": "내보내기 옵션",
+    "exportVideo": "비디오 내보내기",
+    "allCameras": "현재 레이아웃",
+    "leftPillarOnly": "좌측 필러만",
+    "rightPillarOnly": "우측 필러만",
+    "privacyMode": "개인정보 보호 모드 (메타데이터 제거)",
+    "privacyModeHint": "타임스탬프, GPS, 위치 정보 제거",
+    "insuranceReport": "보험 제출용 보고서 (PDF)",
+    "generatingReport": "보험 제출용 보고서 생성 중...",
     "exporting": "내보내기 {{percent}}%",
     "preparing": "내보내기 준비 중...",
     "encoding": "비디오 인코딩 중...",
     "complete": "내보내기 완료",
     "cancelled": "내보내기 취소됨",
-    "failed": "내보내기 실패"
+    "failed": "내보내기 실패",
+    "formatTitle": "내보내기 형식",
+    "gifWarning": "GIF 내보내기는 클립 길이의 약 10배가 걸립니다",
+    "blurPlatesHint": "렌더링 시간이 크게 늘어납니다",
+    "insuranceReportShort": "보험 제출용 보고서",
+    "alreadyRunning": "이미 내보내기가 진행 중입니다. 완료될 때까지 기다려 주세요.",
+    "cameraAll": "모든 카메라",
+    "cameraFront": "전방 카메라",
+    "cameraBack": "후방 카메라",
+    "cameraLeft": "좌측 카메라",
+    "cameraRight": "우측 카메라",
+    "cameraLeftPillar": "좌측 필러 카메라",
+    "cameraRightPillar": "우측 필러 카메라",
+    "rangeMarked": "표시한 구간 ({{marks}})",
+    "rangeFromIn": "시작점부터 이벤트 끝까지",
+    "rangeToOut": "처음부터 종료점까지",
+    "rangeFromCurrent": "현재 위치부터 이벤트 끝까지",
+    "confirm": "다음을 내보내시겠습니까? {{range}}, {{camera}}",
+    "confirmAtSpeed": "{{speed}}배속으로 다음을 내보내시겠습니까? {{range}}, {{camera}}",
+    "confirmDuration": "내보내기에는 영상 길이의 약 3~4배 시간이 걸립니다(10초 클립은 약 30~40초).",
+    "confirmDontSwitch": "완료될 때까지 이벤트를 전환하지 마세요.",
+    "invalidRange": "내보내기 범위가 잘못되었습니다: 시작 시간이 종료 시간보다 앞서야 합니다.\n시작점/종료점 표시를 조정하세요.",
+    "loadingPlateModel": "번호판 감지용 AI 모델 로드 중...",
+    "loadingPlateModelHint": "처음 사용할 때는 시간이 조금 걸릴 수 있습니다",
+    "starting": "내보내기 시작 중...",
+    "preparingVideo": "비디오 준비 중...",
+    "titleVideo": "비디오",
+    "progressTitle": "{{what}} 내보내는 중: {{percent}}%",
+    "elapsedRemaining": "{{elapsed}} 경과 / 약 {{remaining}} 남음",
+    "videoProgress": "비디오: {{current}} / {{total}}",
+    "speedReduced": "속도를 {{speed}}배로 낮춤 (버퍼링)",
+    "gpuFailed": "내보내기 실패: 내보내는 도중 GPU가 재설정된 것 같습니다.\n\n대개 하드웨어 인코더가 멈췄거나 Windows가 그래픽 드라이버를 재설정한 경우입니다. 다음 중 하나를 시도해 보세요: 내보내기 해상도 낮추기(설정), 이번 내보내기에서 번호판 흐림 끄기, 시작점/종료점 표시로 더 짧은 구간 내보내기, 그래픽 드라이버 업데이트.\n\n계속 발생하면 설정 → 진단 → Console Log Capture를 열고 로그를 보내 주세요. 인코더/디코더 관련 상세 정보를 새로 기록하도록 했으므로 support@teslacamviewer.com에서 원인을 파악하는 데 도움이 됩니다.",
+    "encoderStalled": "내보내기 중지됨: 이 기기의 비디오 인코더가 응답하지 않습니다({{codec}}). 저장된 파일이 없습니다. MP4 (VP9) 또는 WebM으로 다시 시도하거나 설정 > 내보내기에서 내보내기 화질을 낮추세요.",
+    "unableToComplete": "내보내기를 완료할 수 없습니다: {{error}}",
+    "completeTitle": "내보내기 완료",
+    "completeText": "비디오가 저장되었습니다.",
+    "cancelledTitle": "내보내기 취소됨",
+    "cancelledText": "내보내기가 완료되기 전에 중지되었습니다. 파일은 저장되지 않았습니다.",
+    "noteWebm": "WebM (VP9)으로 저장했습니다.",
+    "noteH264": "MP4 (H.264)로 저장했습니다: iPhone과 QuickTime을 포함해 거의 모든 곳에서 재생됩니다.",
+    "noteNoH264": "이 브라우저는 H.264로 인코딩할 수 없어 MP4 ({{codec}})로 저장했습니다. Chrome, Edge, VLC, Android에서는 재생되지만 iPhone, QuickTime, 일부 편집 프로그램에서는 열리지 않을 수 있습니다.",
+    "noteMp4": "MP4 ({{codec}})로 저장했습니다: 최고 화질이며 Chrome, Edge, VLC, Android에서 재생됩니다. iPhone, QuickTime 또는 동영상 편집 프로그램에서 쓰려면 내보내기 메뉴에서 MP4 (H.264)를 선택하세요.",
+    "freeExportsUsed": "오늘 무료 내보내기 {{limit}}회 중 {{used}}회를 사용했습니다. {{left}}회 남았습니다. 같은 이벤트를 다시 내보내는 것은 무료입니다.",
+    "plateModelLoading": "번호판 감지 모델 로드 중...",
+    "plateModelReady": "번호판 감지 준비 완료",
+    "plateModelFailed": "번호판 감지를 로드하지 못했습니다",
+    "h264Warning": "MP4 (H.264)는 거의 모든 기기에서 재생되지만 일부 PC에서는 가장 느린 내보내기입니다. MP4 (VP9)와 WebM이 더 빠른 경우가 많습니다.",
+    "softwareH264": "H.264를 소프트웨어로 인코딩하는 중입니다. 최고 화질에서는 몇 분이 걸릴 수 있습니다.",
+    "softwareH264Rate": "초당 {{fps}}프레임",
+    "tookTime": "걸린 시간: {{time}}",
+    "sizeNote": "동영상 크기: {{size}}",
+    "sizeReduced": "동영상 크기: {{size}} ({{asked}}을(를) 선택했지만 이 기기의 비디오 인코더가 처리할 수 있는 크기를 넘습니다)",
+    "noEncoder": "내보내기가 시작 전에 중지됨: 이 기기의 비디오 인코더가 이 내보내기({{size}})를 받지 않았습니다. 더 작은 크기에서도 마찬가지였습니다. 저장된 파일이 없습니다. 페이지를 새로 고친 후 다시 시도하세요. 그래도 실패하면 WebM으로 내보내거나 설정 > 내보내기에서 내보내기 화질을 낮추세요.",
+    "badOutput": "내보내기 실패: {{format}} 파일이 손상되어({{reason}}) 저장하지 않았습니다. 다시 시도하세요. 다시 발생하면 설정 > 내보내기에서 내보내기 화질을 낮추거나 다른 형식을 선택하세요.",
+    "badOutput_tiny": "파일이 {{bytes}}바이트뿐이고 영상이 없습니다",
+    "badOutput_frames": "{{want}}프레임 중 {{got}}프레임만 파일에 들어갔습니다",
+    "badOutput_length": "영상 길이가 {{want}}초가 아니라 {{got}}초입니다",
+    "badOutput_unreadable": "파일을 재생할 수 없습니다",
+    "nothingToExport": "내보낼 구간이 없습니다: 재생 위치가 이벤트의 끝({{end}} 중 {{position}})에 있고 OUT 마크가 없습니다. 재생 위치를 앞으로 옮기거나 IN과 OUT 마크를 설정한 후 다시 내보내세요.",
+    "notSaved": "내보내기가 파일을 저장하지 않고 끝나서 아무것도 다운로드되지 않았습니다. 다시 시도해 주세요.",
+    "softwareVp9": "VP9를 소프트웨어로 인코딩하는 중입니다. 최고 화질에서는 몇 분이 걸릴 수 있습니다.",
+    "noteWebmCodec": "WebM ({{codec}})으로 저장했습니다.",
+    "noWebmEncoder": "내보내기가 시작 전에 중지됨: 이 기기의 WebM 비디오 인코더가 이 내보내기({{size}})를 받지 않았습니다. 더 작은 크기에서도 마찬가지였습니다. 저장된 파일이 없습니다. 대신 MP4 (H.264)로 내보내거나 설정 > 내보내기에서 내보내기 화질을 낮추세요.",
+    "elapsedOnly": "{{elapsed}} 경과",
+    "softwareVp8": "VP8을 소프트웨어로 인코딩하는 중입니다. 최고 화질에서는 몇 분이 걸릴 수 있습니다."
   },
 
   "layouts": {
     "grid2x2": "2×2 그리드",
+    "grid3x2": "3×2 그리드 (카메라 6개)",
     "layout63": "6:3 중앙",
     "layout43": "4:3 메인",
     "all169": "모두 16:9",
@@ -141,7 +228,13 @@
       "markingExport": "마킹 및 내보내기",
       "bookmarks": "북마크",
       "speedControl": "속도 조절",
-      "general": "일반"
+      "general": "일반",
+      "exportOverlays": "내보내기 오버레이"
+    },
+    "exportOverlays": {
+      "gps": "타임스탬프 옆 GPS 좌표 (설정 → 내보내기, 기본값 꺼짐)",
+      "speedLimit": "왼쪽 아래 제한 속도 표지판 (설정 → 내보내기, 기본값 꺼짐)",
+      "privacy": "개인정보 보호 모드에서는 타임스탬프, 미니맵과 함께 둘 다 제거됩니다"
     },
 
     "shortcuts": {
@@ -159,6 +252,7 @@
       "selectNextEvent": "다음 이벤트 선택",
       "cycleLayouts": "레이아웃 순환",
       "focusCamera": "카메라 포커스 (1=전방, 2=후방, 3=좌측, 4=우측)",
+      "cyclePillarMode": "리피터/필러 전환 (지원되는 경우)",
       "toggleFullscreen": "전체 화면 전환",
       "focusCameraFullscreen": "전체 화면에서 카메라 포커스",
       "markIn": "시작점 표시",
@@ -197,18 +291,72 @@
       "mobile": "모바일",
       "export": "내보내기",
       "language": "언어",
-      "telemetry": "Telemetry Overlay",
-      "miniMap": "Mini-Map"
+      "telemetry": "텔레메트리 오버레이",
+      "miniMap": "미니맵"
     },
 
     "tabs": {
-      "general": "General",
-      "playback": "Playback",
-      "overlays": "Overlays",
-      "export": "Export",
-      "advanced": "Advanced",
-      "ai-search": "AI Search",
-      "diagnostics": "Diagnostics"
+      "general": "일반",
+      "playback": "재생",
+      "overlays": "오버레이",
+      "export": "내보내기",
+      "advanced": "고급",
+      "ai-search": "AI 검색",
+      "diagnostics": "진단"
+    },
+    "playback": {
+      "defaultSpeed": "기본 속도",
+      "defaultLayout": "기본 레이아웃",
+      "autoPlayNext": "다음 이벤트 자동 재생",
+      "loopByDefault": "기본으로 반복 재생"
+    },
+    "performance": {
+      "preloadNextClip": "다음 클립 미리 로드",
+      "preloadHint": "재생이 더 부드러워지지만 메모리를 더 사용합니다",
+      "memoryOptimization": "메모리 최적화",
+      "memoryHint": "사용하지 않는 비디오 리소스 해제",
+      "webCodecsPlayer": "WebCodecs 플레이어",
+      "beta": "베타",
+      "webCodecsHint": "베타: WebCodecs 기반 캔버스 렌더러입니다. 재생이 끊기거나 느리게 느껴질 때, 특히 Intel 내장 그래픽에서 사용해 보세요. 피드백이 모이면 향후 릴리스에서 모든 사용자에게 기본으로 켤 예정입니다. 적용하려면 페이지를 새로고침해야 합니다."
+    },
+    "ui": {
+      "theme": "테마",
+      "themeDark": "다크 (기본값)",
+      "themeLight": "라이트",
+      "themeMidnight": "미드나잇",
+      "themeTeslaRed": "테슬라 레드",
+      "showKeyboardHints": "키보드 힌트 표시",
+      "showTimestampOverlay": "타임스탬프 오버레이 표시",
+      "showWhatsNew": "‘새로운 기능’ 표시 보기",
+      "whatsNewHint": "새 기능의 파란 점, 업데이트 알림"
+    },
+    "timeline": {
+      "enableZoom": "타임라인 확대/축소 사용",
+      "zoomHint": "스크롤하여 타임라인 확대/축소",
+      "showClipMarkers": "클립 구분 표시"
+    },
+    "session": {
+      "rememberLastFolder": "마지막 폴더 기억",
+      "folderHint": "새로고침하면 폴더 권한을 다시 허용해야 합니다"
+    },
+    "offline": {
+      "downloadPackage": "오프라인 패키지 다운로드",
+      "downloadHint": "USB 드라이브용 독립 실행 버전 만들기 (약 2~3 MB)",
+      "download": "다운로드",
+      "mapNote": "모든 앱 파일과 라이브러리가 포함됩니다. 지도는 인터넷 연결이 필요합니다.",
+      "notAvailable": "오프라인 패키지를 만들 수 없습니다. 페이지를 새로고침한 후 다시 시도하세요."
+    },
+    "accessibility": {
+      "highContrast": "고대비 모드",
+      "highContrastHint": "텍스트와 테두리의 대비를 높입니다",
+      "textSize": "텍스트 크기",
+      "textSmall": "작게",
+      "textMedium": "보통 (기본값)",
+      "textLarge": "크게"
+    },
+    "mobile": {
+      "lockLandscape": "재생 중 가로 화면 고정",
+      "lockHint": "비디오 재생 중 화면을 가로로 고정합니다 (모바일 전용)"
     },
 
     "language": {
@@ -219,45 +367,158 @@
     "export": {
       "videoFormat": "비디오 형식",
       "webm": "WebM (VP9) - 작은 파일",
-      "mp4": "MP4 (H.264) - 더 나은 호환성",
-      "formatHint": "비디오 내보내기 시 사용되는 형식",
-      "privacyMode": "Privacy Mode Export",
-      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
-      "blurPlates": "Blur License Plates",
-      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
-      "branding": "Show TeslaCamViewer.com branding",
-      "brandingHint": "Display branding in the bottom banner of exported videos"
+      "mp4": "MP4 (VP9) - 최고 화질 (Chrome, Edge, VLC, Android)",
+      "mp4h264": "MP4 (H.264) - 최대 호환성, 가장 느릴 수 있음 (iPhone, QuickTime, 편집 프로그램)",
+      "formatHint": "비디오를 내보낼 때 사용하는 형식입니다. MP4 (VP9)가 화질이 가장 좋지만 iPhone, QuickTime, 일부 동영상 편집 프로그램과 소셜 앱에서는 열 수 없습니다. 이런 경우에는 MP4 (H.264)를 사용하세요. MP4 (H.264)는 가장 느릴 수 있습니다. 그래픽 카드의 H.264 인코더가 응답하지 않으면 소프트웨어 인코더로 바꾸고 다음에도 그렇게 합니다.",
+      "privacyMode": "개인정보 보호 모드로 내보내기",
+      "privacyModeHint": "내보내기에서 타임스탬프, GPS, 위치, 미니맵 제거",
+      "gpsText": "내보내기에 GPS 좌표 표시",
+      "gpsTextHint": "차량의 GPS 위치를 내보낸 비디오의 타임스탬프 옆에 텍스트로 새깁니다. 공유한 영상에 내 위치가 드러나지 않도록 기본값은 꺼짐입니다. GPS 데이터가 없는 클립은 이벤트의 대략적인 위치를 ~ 표시와 함께 사용합니다. 개인정보 보호 모드에서는 항상 제거됩니다.",
+      "gpsFormat": "GPS 좌표 형식",
+      "gpsFormatDecimal": "십진 도 (37.49301, -121.94402)",
+      "gpsFormatDms": "도, 분, 초 (37°29'34.8\"N 121°56'38.5\"W)",
+      "speedLimit": "내보내기에 제한 속도 표지판 표시",
+      "speedLimitHint": "OpenStreetMap의 제한 속도를 재생 화면의 표지판처럼 내보낸 비디오에 표지판으로 표시합니다. 제한 속도는 내보내기를 시작할 때 온라인으로 조회하며(최대 약 6초) 다음에 쓸 수 있도록 저장해 둡니다. 조회하지 못한 도로에는 표지판이 표시되지 않습니다. 개인정보 보호 모드에서는 항상 제거됩니다.",
+      "blurPlates": "번호판 흐리게 처리",
+      "blurPlatesHint": "AI 번호판 감지 (약 12MB 모델, 첫 사용 후 캐시됨)",
+      "branding": "TeslaCamViewer.com 로고 표시",
+      "brandingHint": "내보낸 비디오 하단 배너에 로고 표시",
+      "gifAnimated": "GIF (애니메이션)",
+      "quality": "내보내기 화질",
+      "qualityFull": "전체: 레이아웃 원본 해상도",
+      "qualityHd": "HD: 높이 1080p",
+      "qualityWeb": "웹: 높이 720p",
+      "qualityCustom": "사용자 지정: 높이 지정",
+      "qualityHint": "내보내기 캔버스 크기를 조정합니다. 전체는 축소하지 않고, HD/웹은 크기를 제한하지만 확대하지 않으며, 사용자 지정은 직접 고를 수 있습니다(확대 가능).",
+      "customHeight": "사용자 지정 높이 (px)",
+      "customHeightHint": "너비는 레이아웃의 종횡비를 유지하도록 계산됩니다.",
+      "plateModelMissing": "오류: PlateBlur가 로드되지 않았습니다",
+      "plateModelInitializing": "초기화 중...",
+      "plateModelReady": "모델 준비 완료",
+      "plateModelFailed": "모델 로드 실패",
+      "plateModelOnFirstExport": "첫 내보내기 때 모델이 다운로드됩니다"
     },
 
     "telemetry": {
-      "enabled": "Enable Telemetry Overlay",
-      "enabledHint": "Press T to toggle during playback",
-      "style": "Display Style",
-      "styleCockpit": "Cockpit HUD",
-      "styleTesla": "Tesla-Native Pill",
-      "styleMinimal": "Minimal Corner",
-      "units": "Speed Units",
+      "enabled": "텔레메트리 오버레이 사용",
+      "enabledHint": "재생 중 T 키로 전환",
+      "style": "표시 스타일",
+      "styleCockpit": "콕핏 HUD",
+      "styleTesla": "Tesla 스타일 알약형",
+      "styleMinimal": "미니멀 (모서리)",
+      "units": "속도 단위",
       "unitsMph": "MPH",
       "unitsKph": "KPH",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add telemetry overlay to exported videos",
-      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+      "inExport": "내보내기에 포함",
+      "inExportHint": "내보낸 비디오에 텔레메트리 오버레이 추가",
+      "description": "Tesla 펌웨어 2025.44.25 이상의 차량 데이터(속도, 조향, 페달 등)를 표시합니다"
     },
 
     "miniMap": {
-      "enabled": "Enable Mini-Map",
-      "enabledHint": "Press M to toggle, right-click for options",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add mini-map overlay to exported videos",
-      "darkMode": "Dark Mode Map",
-      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
-      "tileProvider": "Map Tile Provider",
-      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
-      "providerCarto": "Carto (Default)",
+      "enabled": "미니맵 사용",
+      "enabledHint": "M 키로 전환, 마우스 오른쪽 버튼으로 옵션",
+      "inExport": "내보내기에 포함",
+      "inExportHint": "내보낸 비디오에 미니맵 오버레이 추가",
+      "darkMode": "다크 모드 지도",
+      "darkModeHint": "어두운 지도 타일 사용 (블랙박스 영상 시청에 권장)",
+      "tileProvider": "지도 타일 제공자",
+      "tileProviderHint": "지도가 로드되지 않으면(예: 중국) OpenStreetMap을 사용해 보세요",
+      "providerCarto": "Carto (기본값)",
       "providerOsm": "OpenStreetMap",
       "providerStadia": "Stadia Maps",
-      "description": "GPS map overlay showing vehicle position synced with video playback"
+      "description": "비디오 재생에 맞춰 차량 위치를 보여 주는 GPS 지도 오버레이"
     }
+  },
+
+  "sync": {
+    "synced": "동기화됨 (모든 카메라 일치)",
+    "drifted": "어긋남 (자동 보정 중)",
+    "videosSynced": "비디오가 동기화되었습니다",
+    "videosDrifted": "비디오가 어긋남: 다시 동기화 중"
+  },
+
+  "events": {
+    "stats": "이벤트 {{total}}개 (저장 {{saved}}, 감시 {{sentry}}, 최근 {{recent}})",
+    "saved": "저장됨",
+    "sentry": "감시",
+    "recent": "최근",
+    "event": {
+      "one": "이벤트 {{count}}개",
+      "other": "이벤트 {{count}}개"
+    },
+    "statsLine": "저장 {{saved}}, 감시 {{sentry}}, 최근 {{recent}}",
+    "emptyCount": "빈 이벤트 {{count}}개",
+    "encryptedCount": "암호화됨 {{count}}개",
+    "noEventsFound": "이벤트를 찾을 수 없습니다",
+    "noEventsHint": "선택한 폴더에 TeslaCam 이벤트가 없습니다",
+    "noFolder": "선택된 TeslaCam 폴더 없음",
+    "clipCount": {
+      "one": "클립 {{count}}개",
+      "other": "클립 {{count}}개"
+    },
+    "clipsDuration": {
+      "one": "클립 {{count}}개 (약 {{minutes}}분)",
+      "other": "클립 {{count}}개 (약 {{minutes}}분)"
+    },
+    "noVideoClips": "비디오 클립 없음",
+    "hasNotes": "메모/태그 있음",
+    "emptyEventToast": "{{date}} 이벤트에 재생할 수 있는 비디오 클립이 없습니다",
+    "timeFrom": "{{time}}부터",
+    "timeFromTo": "{{start}} - {{end}}",
+    "reasons": {
+      "manualSave": "수동 저장",
+      "objectDetected": "감시: 물체 감지",
+      "vehicleBumped": "감시: 차량 충격"
+    }
+  },
+
+  "encrypted": {
+    "title": {
+      "one": "이벤트 {{count}}개가 Tesla에 의해 암호화되어 있습니다",
+      "other": "이벤트 {{count}}개가 Tesla에 의해 암호화되어 있습니다"
+    },
+    "titleOnDrive": {
+      "one": "{{drive}}의 이벤트 {{count}}개가 Tesla에 의해 암호화되어 있습니다",
+      "other": "{{drive}}의 이벤트 {{count}}개가 Tesla에 의해 암호화되어 있습니다"
+    },
+    "notListed": {
+      "one": "암호를 해제하기 전에는 재생할 수 없어 아래 목록에 표시되지 않습니다.",
+      "other": "암호를 해제하기 전에는 재생할 수 없어 아래 목록에 표시되지 않습니다."
+    },
+    "notListedKinds": {
+      "one": "암호를 해제하기 전에는 재생할 수 없어 아래 목록에 표시되지 않습니다 ({{kinds}}).",
+      "other": "암호를 해제하기 전에는 재생할 수 없어 아래 목록에 표시되지 않습니다 ({{kinds}})."
+    },
+    "kindSaved": "저장 {{count}}개",
+    "kindSentry": "감시 {{count}}개",
+    "kindRecent": "최근 {{count}}개",
+    "carOnlyAll": {
+      "one": "차량에서만 암호를 해제할 수 있으며, dashcam.tesla.com에서는 해제할 수 없습니다.",
+      "other": "모두 차량에서만 암호를 해제할 수 있으며, dashcam.tesla.com에서는 해제할 수 없습니다."
+    },
+    "carOnlySome": {
+      "one": "그중 {{count}}개는 차량에서만 암호를 해제할 수 있으며, dashcam.tesla.com에서는 해제할 수 없습니다.",
+      "other": "그중 {{count}}개는 차량에서만 암호를 해제할 수 있으며, dashcam.tesla.com에서는 해제할 수 없습니다."
+    },
+    "damagedAll": {
+      "one": "손상되었거나 불완전한 것으로 보여(예: 저장 중 끊김) 암호를 해제하지 못할 수 있습니다.",
+      "other": "모두 손상되었거나 불완전한 것으로 보여(예: 저장 중 끊김) 암호를 해제하지 못할 수 있습니다."
+    },
+    "damagedSome": {
+      "one": "그중 {{count}}개는 손상되었거나 불완전한 것으로 보여(예: 저장 중 끊김) 암호를 해제하지 못할 수 있습니다.",
+      "other": "그중 {{count}}개는 손상되었거나 불완전한 것으로 보여(예: 저장 중 끊김) 암호를 해제하지 못할 수 있습니다."
+    },
+    "howToView": "보는 방법",
+    "explain": "Tesla 소프트웨어 2026.20 이상에서는 USB 드라이브의 블랙박스 클립이 암호화됩니다. 암호는 내 차량이나 Tesla 계정으로만 해제할 수 있습니다.",
+    "webTitle": "dashcam.tesla.com에서 암호 해제:",
+    "webText": "Tesla 계정으로 로그인해 클립의 암호를 해제하고 다운로드한 다음(브라우저 안에서 처리됩니다), 다운로드한 폴더를 ‘드라이브 추가’로 여기에 추가하세요.",
+    "webLink": "dashcam.tesla.com 열기",
+    "carTitle": "차량에서 암호 해제:",
+    "carText": "차량의 블랙박스 뷰어에서 클립의 자물쇠 아이콘을 탭하세요. USB 드라이브에서 바로 암호가 해제되며 되돌릴 수 없습니다.",
+    "stopTitle": "새 클립 암호화 중지:",
+    "stopText": "{{path}} (일부 차량에는 이 설정이 없습니다). 이미 암호화된 클립은 계속 암호화된 상태로 남습니다.",
+    "stopPath": "컨트롤 > 안전 > 블랙박스 녹화 암호화",
+    "stopPrivacy": "암호화는 누군가 USB 드라이브를 가져가도 영상을 보호합니다. 끄면 드라이브를 가진 사람은 누구나 볼 수 있습니다."
   },
 
   "filter": {
@@ -266,16 +527,26 @@
     "date": "날짜",
     "all": "전체",
     "savedClips": "저장된 클립",
-    "sentryClips": "센트리 클립",
+    "sentryClips": "감시 클립",
     "recentClips": "최근 클립",
     "clear": "필터 지우기",
     "filters": "필터",
     "eventTypes": "이벤트 유형",
+    "saved": "저장됨",
+    "sentry": "감시",
+    "recent": "최근",
     "onlyBookmarked": "북마크된 이벤트만",
     "onlyWithNotes": "메모/태그가 있는 이벤트만",
     "sortBy": "정렬 기준",
     "newestFirst": "최신순",
-    "oldestFirst": "오래된순"
+    "oldestFirst": "오래된순",
+    "searchPlaceholder": "도시, 위치, 사유...",
+    "dateRange": "날짜 범위",
+    "dateTo": "~",
+    "clearDates": "날짜 지우기",
+    "clearAllFilters": "모든 필터 지우기",
+    "filterByTag": "태그로 필터",
+    "allTags": "모든 태그"
   },
 
   "map": {
@@ -286,25 +557,29 @@
     "toggleStruggleZones": "오토파일럿 문제 구역 전환",
     "loadingStruggleZones": "AP 해제 데이터 로드 중...",
     "struggleZonesLoaded": "{{count}}개의 AP 해제 발견",
-    "togglePhantomBrakes": "유령 제동 핫스팟 전환",
-    "loadingPhantomBrakes": "유령 제동 데이터 로드 중...",
-    "phantomBrakesLoaded": "{{count}}개의 유령 제동 발견",
-    "phantomBrakeHotspot": "유령 제동 핫스팟",
-    "phantomBrakesAtLocation": "이 위치에서 {{count}}개의 유령 제동",
-    "phantomBrakeTip": "이 위치에서 반복적인 유령 제동이 발생합니다 - 오탐인 경우 Tesla에 보고를 고려하세요.",
-    "toggleDarkMode": "지도 다크 모드 전환"
+    "toggleIncidents": "사고 마커 표시 전환",
+    "loadingIncidents": "사고 데이터 로드 중...",
+    "incidentsLoaded": "사고 {{count}}건 발견",
+    "incidentHotspot": "사고 다발 지점",
+    "incidentsAtLocation": "이 위치의 사고 {{count}}건",
+    "incidentTip": "이 위치에서 사고가 반복되었습니다. 영상을 확인해 무슨 일이 있었는지 살펴보세요.",
+    "toggleDarkMode": "지도 다크 모드 전환",
+    "scanAllEvents": "모든 이벤트에서 지도 데이터 스캔",
+    "scanningEvents": "이벤트에서 사고와 AP 해제를 스캔하는 중...",
+    "scanComplete": "스캔 완료: 사고 {{incidents}}건, AP 해제 {{apDisengagements}}건 발견",
+    "scanCancelled": "스캔 취소됨"
   },
 
   "statistics": {
     "title": "통계",
     "close": "닫기",
     "tabs": {
-      "overview": "Overview",
-      "timeline": "Timeline",
-      "locations": "Locations",
-      "sentry": "Sentry Analysis",
-      "quality": "Data Quality",
-      "export": "Export"
+      "overview": "개요",
+      "timeline": "타임라인",
+      "locations": "위치",
+      "sentry": "감시 분석",
+      "quality": "데이터 품질",
+      "export": "내보내기"
     },
     "recordingOverview": "녹화 개요",
     "totalEvents": "총 이벤트",
@@ -314,7 +589,7 @@
     "eventsLast14Days": "이벤트 - 최근 14일",
     "eventTypes": "이벤트 유형",
     "saved": "저장됨",
-    "sentry": "센트리",
+    "sentry": "감시",
     "recent": "최근",
     "triggerReasons": "트리거 이유",
     "manualSave": "수동 저장",
@@ -324,8 +599,8 @@
     "other": "기타",
     "unknown": "알 수 없음",
     "topLocations": "상위 10개 위치 (모든 이벤트)",
-    "sentryByTimeOfDay": "시간대별 센트리 이벤트",
-    "topSentryLocations": "상위 센트리 위치",
+    "sentryByTimeOfDay": "시간대별 감시 이벤트",
+    "topSentryLocations": "상위 감시 위치",
     "dateRange": "날짜 범위",
     "eventTrends": "이벤트 추세",
     "weekly": "주간",
@@ -337,20 +612,20 @@
     "noStatsToExport": "내보낼 통계가 없습니다",
     "noTimelineData": "타임라인 데이터가 없습니다",
     "noEventsLast14Days": "최근 14일 동안 이벤트가 없습니다",
-    "noSentryEvents": "분석할 센트리 이벤트가 없습니다",
+    "noSentryEvents": "분석할 감시 이벤트가 없습니다",
     "noTrendData": "추세 데이터가 없습니다",
     "noLocationData": "위치 데이터가 없습니다",
-    "noSentryLocationData": "센트리 위치 데이터가 없습니다",
+    "noSentryLocationData": "감시 위치 데이터가 없습니다",
     "events": "이벤트",
-    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
-    "triggeringCamera": "Triggering Camera Distribution",
-    "sentryByDayOfWeek": "Sentry Events by Day of Week",
-    "dayVsNight": "Day vs Night Events",
-    "dataQuality": "Data Quality",
-    "eventsWithTelemetry": "Events with Telemetry",
-    "eventsWithoutTelemetry": "Events without Telemetry",
-    "noTriggeringCameraData": "No triggering camera data available",
-    "noEventData": "No event data available"
+    "exportDescription": "오프라인 분석이나 기록 보관을 위해 통계 데이터를 다운로드하세요.",
+    "triggeringCamera": "감지 카메라 분포",
+    "sentryByDayOfWeek": "요일별 감시 이벤트",
+    "dayVsNight": "주간/야간 이벤트",
+    "dataQuality": "데이터 품질",
+    "eventsWithTelemetry": "텔레메트리가 있는 이벤트",
+    "eventsWithoutTelemetry": "텔레메트리가 없는 이벤트",
+    "noTriggeringCameraData": "감지 카메라 데이터가 없습니다",
+    "noEventData": "이벤트 데이터가 없습니다"
   },
 
   "errors": {
@@ -378,7 +653,7 @@
     "getStarted": "시작하기",
     "welcome": {
       "title": "TeslaCam Viewer에 오신 것을 환영합니다",
-      "description": "브라우저에서 직접 테슬라 대시캠 영상을 보고 관리하세요.",
+      "description": "브라우저에서 직접 테슬라 블랙박스 영상을 보고 관리하세요.",
       "noUpload": "업로드 불필요",
       "videosStay": "영상은 컴퓨터에 그대로 유지됩니다.",
       "language": "언어"
@@ -391,13 +666,13 @@
     "step2": {
       "title": "2단계: 이벤트 탐색",
       "description": "이벤트가 왼쪽 사이드바에 날짜순으로 표시됩니다. 이벤트를 클릭하여 로드하세요.",
-      "saved": "대시캠에서 수동 저장",
+      "saved": "블랙박스에서 수동 저장",
       "sentry": "모션 감지 녹화",
       "recent": "롤링 버퍼 영상"
     },
     "step3": {
-      "title": "3단계: 4개 카메라 보기",
-      "description": "전방, 후방, 좌측, 우측 4개 카메라 앵글을 동기화하여 시청하세요.",
+      "title": "3단계: 카메라 보기",
+      "description": "모든 카메라 앵글을 동기화하여 시청하세요: 전방, 후방, 좌측, 우측, 필러 카메라(장착된 경우).",
       "tip": "팁",
       "tipText": "카메라를 드래그하여 위치를 바꾸거나 필요 없는 카메라를 숨길 수 있습니다."
     },
@@ -418,7 +693,35 @@
     "events": "이벤트",
     "removeDrive": "드라이브 제거",
     "addDrive": "드라이브 추가",
-    "changeColor": "클릭하여 색상 변경"
+    "changeColor": "클릭하여 색상 변경",
+    "archive": "아카이브",
+    "notLoaded": "로드되지 않음",
+    "sync": "동기화",
+    "syncNow": "이 아카이브 드라이브에서 이벤트 로드",
+    "editDrive": "드라이브 설정 편집"
+  },
+
+  "driveSetup": {
+    "title": "드라이브 설정",
+    "editTitle": "드라이브 설정 편집",
+    "tipTitle": "팁: 폴더 선택",
+    "tipTeslaCam": "TeslaCam/ - 한 드라이브의 모든 영상",
+    "tipSubfolder": "SavedClips/ 또는 SentryClips/ - 특정 이벤트 유형만",
+    "tipParent": "상위 폴더 - 안에 있는 TeslaCam 폴더 검색",
+    "labelField": "드라이브 이름",
+    "labelPlaceholder": "예: 내 USB 드라이브",
+    "dateFilterField": "이벤트 로드 기간",
+    "dateFilterAll": "모든 이벤트",
+    "dateFilterWeek": "지난 1주",
+    "dateFilterMonth": "지난 1개월",
+    "dateFilter3Months": "지난 3개월",
+    "dateFilter6Months": "지난 6개월",
+    "dateFilterYear": "지난 1년",
+    "archiveLabel": "아카이브 드라이브",
+    "archiveHint": "시작할 때 로드하지 않고 필요할 때 수동으로 동기화",
+    "changeFolder": "폴더 변경",
+    "addDrive": "드라이브 추가",
+    "save": "변경 사항 저장"
   },
 
   "driveSync": {
@@ -477,12 +780,33 @@
     "missingOnly": "없는 것만",
     "newerOnly": "최신 것만",
     "syncedOnly": "동기화된 것만",
-    "showingFirst": "{{total}}개 중 처음 {{count}}개 표시"
+    "showingFirst": "{{total}}개 중 처음 {{count}}개 표시",
+    "scanStopped": "the folder could not be listed to the end ({{error}})",
+    "filesUnreadable": "{{count}} file(s) could not be read: {{names}}",
+    "sourcePartial": "{{event}}: {{error}}. Copy copies the files that can be read. Move will not delete anything from this event.",
+    "destPartial": "{{event}} on the destination: {{error}}",
+    "compareWarningsTitle": "Some files could not be read ({{count}})",
+    "verifyFailed": "확인 실패 ({{error}})",
+    "verifyFailedKept": "확인 실패 ({{error}}). 원본에서 아무것도 삭제되지 않았습니다.",
+    "partialNotMoved": "Not moved: {{error}}. The files that could be read were copied; nothing was deleted from the source.",
+    "partialCopied": "Only partly copied: {{error}}",
+    "keptInSource": "Kept {{count}} file(s) in the source folder because they were not part of the verified copy (added or changed after Compare): {{names}}",
+    "moveConfirmDetail": "Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.",
+    "notesTitle": "메모 및 태그",
+    "notesConflictsKept": "{{count}}개 이벤트의 메모가 두 드라이브에서 서로 다릅니다. 둘 다 그대로 유지했습니다. 합치려면 동기화 설정의 \"메모 충돌 해결\"에서 \"자동 병합\"을(를) 선택하세요.",
+    "verifyingFiles": "파일 확인 중 ({{current}}/{{total}})",
+    "verifyMismatch": "{{file}}의 복사본이 원본과 일치하지 않습니다",
+    "cancelledAfter": "{{total}}개 중 {{done}}개 이벤트 후 취소했습니다.",
+    "cancelledKeptEvent": "취소했습니다. 이 이벤트는 원본에서 아무것도 삭제되지 않았습니다.",
+    "cancelledEvent": "이 이벤트가 끝나기 전에 취소했습니다.",
+    "syncCancelled": "동기화 취소됨",
+    "moveNeedsWrite": "이동하려면 옮긴 이벤트를 삭제할 수 있도록 {{drive}}의 파일을 변경할 권한이 필요합니다. 아무것도 복사하거나 삭제하지 않았습니다. 브라우저가 물으면 허용하거나 복사를 사용하세요.",
+    "deleteFailed": "복사하고 확인했지만 파일 {{count}}개를 원본에서 삭제하지 못해 그대로 남아 있습니다 ({{error}})."
   },
 
   "syncSettings": {
     "title": "동기화 설정",
-    "verifyAfterCopy": "복사 후 파일 확인",
+    "verifyAfterCopy": "복사 후 모든 바이트 확인 (이동은 항상 확인)",
     "syncNotes": "메모 및 태그 동기화",
     "writeSyncFile": "대상에 동기화 설정 파일 쓰기",
     "confirmBeforeDelete": "소스 파일 삭제 전 확인",
@@ -490,7 +814,8 @@
     "askEachTime": "매번 묻기",
     "mergeAutomatically": "자동 병합",
     "saveSettings": "설정 저장",
-    "close": "닫기"
+    "close": "닫기",
+    "keepBothTellMe": "둘 다 유지하고 알려 주기"
   },
 
   "presets": {
@@ -591,5 +916,69 @@
     "birdsEyeLowG": "낮은 G",
     "birdsEyeMedG": "중간 G",
     "birdsEyeHighG": "높은 G"
+  },
+
+  "license": {
+    "activated": "라이선스가 활성화되었습니다!",
+    "howItWorks": "TeslaCamViewer Pro 라이선스는 이렇게 작동합니다:",
+    "privacyFirst": "개인정보 우선",
+    "privacyFirstDesc": "이메일은 이 기기에서 라이선스를 확인하는 데만 사용되며, 서버로 전송되지 않습니다.",
+    "savedInTwoPlaces": "두 곳에 저장",
+    "savedInTwoPlacesDesc": "라이선스는 브라우저 저장소와 TeslaCam 드라이브에 저장됩니다. 그래서 여러 드라이브에서 사용할 수 있습니다.",
+    "easyRecovery": "간편한 복구",
+    "easyRecoveryDesc": "다른 브라우저나 컴퓨터를 사용할 때는 라이선스가 저장된 드라이브를 열기만 하면 됩니다. 본인 확인을 위해 이메일을 다시 입력하라는 요청이 표시됩니다.",
+    "multipleDevices": "여러 기기",
+    "multipleDevicesDesc": "어떤 기기에서든 라이선스를 사용할 수 있습니다. 새 브라우저에서는 처음 한 번만 이메일 확인을 요청하며, 그 후에는 바로 사용할 수 있습니다.",
+    "gotIt": "확인",
+    "limitDailyTitle": "일일 한도 도달",
+    "limitDailyText": "오늘 {{limit}}개의 이벤트를 보았습니다. 이미 본 이벤트는 계속 다시 열어 기능을 사용해 볼 수 있으며, 새 이벤트만 기다려야 합니다. 한도는 자정에 초기화됩니다.",
+    "limitExportTitle": "내보내기 한도 도달",
+    "limitExportText": "무료 버전은 하루에 {{limit}}개의 이벤트를 내보낼 수 있습니다: {{names}}. 이 이벤트들은 원하는 만큼 다시 내보낼 수 있고, 자정 이후에는 새 이벤트를 고를 수 있습니다. Pro는 한도가 없습니다.",
+    "limitNameSeparator": ", ",
+    "limitLockedTitle": "잠긴 기능",
+    "limitLockedText": "이 기능은 TeslaCamViewer Pro 라이선스가 필요합니다.",
+    "limitUpgradeLine": "업그레이드하면 무제한 이용, 연 $5.99",
+    "limitWaitTomorrow": "내일까지 기다리기",
+    "limitClose": "닫기",
+    "limitUpgrade": "업그레이드"
+  },
+
+  "telemetry": {
+    "title": "텔레메트리",
+    "toggleAnomalyMarkers": "이상 마커 표시 전환",
+    "hideAnomalyMarkers": "이상 마커 숨기기",
+    "showAnomalyMarkers": "이상 마커 표시",
+    "exportCsv": "텔레메트리 데이터를 CSV로 내보내기",
+    "noData": "데이터 없음",
+    "incident": "사고",
+    "incidentBraking": "급제동",
+    "incidentSwerve": "급격한 방향 전환",
+    "incidentCombined": "복합 사고",
+    "hardBrake": "급제동",
+    "hardAccel": "급가속",
+    "suddenAcceleration": "{{speed}} mph에서 급가속",
+    "suddenDeceleration": "{{speed}} mph에서 급감속",
+    "rapidSteering": "급조향 ({{degrees}}° 변화)",
+    "gForce": "G-포스: {{value}}g",
+    "lateralG": "횡방향 G: {{value}}g",
+    "speed": "속도: {{speed}} mph",
+    "dropped": "감속: {{dropped}} mph",
+    "gForceValue": "G-포스: {{value}}g",
+    "previousApEvent": "이전 AP 이벤트",
+    "nextApEvent": "다음 AP 이벤트",
+    "cycleApEvents": "화살표를 클릭해 AP 이벤트 {{count}}개를 차례로 보기",
+    "nearMissDetected": "아차 사고 감지됨",
+    "incidentTooltip": "사고 마커: 다시 볼 만한 급제동 또는 급격한 방향 전환",
+    "hardBrakingEvents": "급제동 이벤트",
+    "hardAccelEvents": "급가속 이벤트",
+    "hardBrakingAccelEvents": "급제동/급가속 이벤트"
+  },
+  "speedLimit": {
+    "unavailableBusy": "Speed limits unavailable right now (map data server busy).",
+    "unavailableUnreachable": "Speed limits unavailable right now (couldn't reach the map data server).",
+    "unavailableOffline": "Speed limits unavailable: you're offline."
+  },
+  "fileProtocol": {
+    "notice": "TeslaCamViewer를 폴더에서 바로 열었습니다(file://). 이렇게 열면 브라우저가 일부 기능을 차단합니다: 텔레메트리, 번호판 도구, MP4 및 GIF 내보내기, 번역. 모든 기능을 사용하려면 teslacamviewer.com을 열거나, 이 폴더에서 로컬 서버를 실행한 뒤(예: python -m http.server 8000) http://localhost:8000 을 여세요."
   }
 }

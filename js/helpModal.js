@@ -279,6 +279,25 @@ class HelpModal {
                         </div>
                     </div>
                 </div>
+
+                <!-- Export Overlays -->
+                <div class="help-section">
+                    <h3>${this.t('help.sections.exportOverlays')}</h3>
+                    <div class="shortcut-grid" style="font-size: 0.85em;">
+                        <div class="shortcut-row">
+                            <span style="color: #9e9e9e;">●</span>
+                            <span>${this.t('help.exportOverlays.gps')}</span>
+                        </div>
+                        <div class="shortcut-row">
+                            <span style="color: #9e9e9e;">●</span>
+                            <span>${this.t('help.exportOverlays.speedLimit')}</span>
+                        </div>
+                        <div class="shortcut-row">
+                            <span style="color: #9e9e9e;">●</span>
+                            <span>${this.t('help.exportOverlays.privacy')}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="help-footer">
                 <span class="help-tip">${this.t('help.tip')}</span>

@@ -556,7 +556,11 @@ class PlateBlur {
      * @returns {Promise<number>} Number of plates blurred
      */
     async processMultiCamera(ctx, cameras, options = {}) {
-        const { forceDetection = false } = options;
+        // cadence 'frames' (exports): detect only on the frames the caller asks for (every 5th), as designed. The
+        // 100 ms wall-clock rule below made every frame a detection whenever a frame took longer than 100 ms to
+        // make, which is every frame of a 6-camera export on a busy PC: about 5x slower, and the page stopped
+        // answering for minutes (#569 follow-up, 2026-11-19).
+        const { forceDetection = false, cadence = 'time' } = options;
 
         if (!this.isModelLoaded) {
             return 0;
@@ -570,7 +574,7 @@ class PlateBlur {
         // Cache-only frame — no fresh detection this tick. Tick the tracker
         // forward without registering a "missed detection" (since we
         // haven't actually checked) and render whatever's still active.
-        if (!forceDetection && now - this.lastDetectionTime < this.detectionInterval) {
+        if (!forceDetection && (cadence === 'frames' || now - this.lastDetectionTime < this.detectionInterval)) {
             const tracks = this._updateTracks([], /* hadFreshDetection */ false);
             for (const track of tracks) {
                 const alpha = this._trackAlpha(track);

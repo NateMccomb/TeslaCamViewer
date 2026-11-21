@@ -562,7 +562,7 @@ class MiniMapOverlay {
         // Google Street View URL with heading if available
         const heading = this.currentHeading || 0;
         const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${this.currentLat},${this.currentLng}&heading=${heading}`;
-        window.open(url, '_blank');
+        window.open(url, '_blank', 'noopener');
     }
 
     /**
@@ -576,7 +576,7 @@ class MiniMapOverlay {
 
         // Google Maps URL centered on location
         const url = `https://www.google.com/maps?q=${this.currentLat},${this.currentLng}`;
-        window.open(url, '_blank');
+        window.open(url, '_blank', 'noopener');
     }
 
     // ==================== PUBLIC API ====================
@@ -664,6 +664,9 @@ class MiniMapOverlay {
 
         this.isDarkMode = darkMode;
         localStorage.setItem(this.DARK_MODE_KEY, this.isDarkMode.toString());
+        // Settings keeps the same value, or its next change listener call (any setting, e.g. the export
+        // format) would set the old mode back
+        window.app?.settingsManager?.setQuiet?.('miniMapDarkMode', this.isDarkMode);
 
         // Update button icon
         if (this.darkModeBtn) {

@@ -94,7 +94,7 @@
             const tlDur = tl?.totalDuration;
             const cachedDurs = window.app?.videoPlayer?.cachedClipDurations;
             const duration = tlDur || (cachedDurs && cachedDurs.length
-                ? cachedDurs.reduce((a, b) => a + (b || 60), 0)
+                ? cachedDurs.reduce((a, b, idx) => a + VideoPlayer.clipLength(cachedDurs, idx), 0)
                 : event.clipGroups.length * 60);
             const zoom = tl?.zoomLevel || 1;
             const viewStart = (zoom > 1 && typeof tl?.viewStart === 'number') ? tl.viewStart : 0;

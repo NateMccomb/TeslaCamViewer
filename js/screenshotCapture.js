@@ -478,12 +478,17 @@ class ScreenshotCapture {
         const now = new Date();
         const event = this.videoPlayer.currentEvent;
 
+        // Local date and time (the car's clock is local time; toISOString would be UTC)
+        const pad = (n) => String(n).padStart(2, '0');
+        const stamp = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T` +
+            `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+
         if (event && event.timestamp) {
             const eventDate = new Date(event.timestamp);
-            return eventDate.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            if (!isNaN(eventDate.getTime())) return stamp(eventDate);
         }
 
-        return now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        return stamp(now);
     }
 
     /**

@@ -197,17 +197,17 @@ class CommandPalette {
         const html = this.filtered.map((item, idx) => {
             const sel = idx === this.selectedIndex ? ' selected' : '';
             if (item.kind === 'cmd') {
-                const cat = item.cmd.category ? `<span class="command-palette-cat">${this._esc(item.cmd.category)}</span>` : '';
-                const hint = item.cmd.shortcut ? `<span class="command-palette-shortcut">${this._esc(item.cmd.shortcut)}</span>` : '';
+                const cat = item.cmd.category ? `<span class="command-palette-cat">${FolderParser.escapeHtml(item.cmd.category)}</span>` : '';
+                const hint = item.cmd.shortcut ? `<span class="command-palette-shortcut">${FolderParser.escapeHtml(item.cmd.shortcut)}</span>` : '';
                 return `<div class="command-palette-item${sel}" data-idx="${idx}">
                     ${cat}
-                    <span class="command-palette-title">${this._esc(item.cmd.title)}</span>
+                    <span class="command-palette-title">${FolderParser.escapeHtml(item.cmd.title)}</span>
                     ${hint}
                 </div>`;
             } else {
                 return `<div class="command-palette-item command-palette-event${sel}" data-idx="${idx}">
                     <span class="command-palette-cat">Event</span>
-                    <span class="command-palette-title">${this._esc(item.label)}</span>
+                    <span class="command-palette-title">${FolderParser.escapeHtml(item.label)}</span>
                 </div>`;
             }
         }).join('');
@@ -253,12 +253,6 @@ class CommandPalette {
         } catch (err) {
             console.warn('[CommandPalette] Command failed:', err);
         }
-    }
-
-    _esc(s) {
-        return String(s).replace(/[&<>"']/g, c => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-        }[c]));
     }
 }
 

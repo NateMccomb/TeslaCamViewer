@@ -1326,6 +1326,53 @@ body.sidebar-resizing * {
     color: var(--text-muted);
 }
 
+/* Tesla-encrypted events notice (top of the event list) */
+.encrypted-notice {
+    margin: 0 0 0.75rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid rgba(255, 184, 0, 0.35);
+    border-left: 3px solid var(--warning);
+    border-radius: 6px;
+    background: rgba(255, 184, 0, 0.07);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.encrypted-notice-title {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+}
+
+.encrypted-notice p {
+    margin: 0.35rem 0 0;
+}
+
+.encrypted-notice-options summary {
+    margin-top: 0.5rem;
+    color: var(--accent);
+    cursor: pointer;
+}
+
+.encrypted-notice-options ol {
+    margin: 0.4rem 0 0;
+    padding-left: 1.2rem;
+}
+
+.encrypted-notice-options li {
+    margin-bottom: 0.4rem;
+}
+
+.encrypted-notice-options b {
+    color: var(--text-primary);
+}
+
+.encrypted-notice a {
+    color: var(--accent);
+}
+
 /* Welcome screen language selector */
 .welcome-language-selector {
     margin-top: 1.5rem;
@@ -2621,6 +2668,18 @@ button svg *,
     font-weight: 700;
     color: #000;
     line-height: 1;
+}
+
+/* Limit couldn't be looked up (map data server busy / offline): say so */
+.speed-limit-display .limit-unavailable {
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: var(--text-secondary, #b0b0b0);
+    border: 1px dashed var(--border, #555);
+    border-radius: 4px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    cursor: help;
 }
 
 /* European-style circular sign */
@@ -9639,7 +9698,7 @@ body.theme-light .tag-chip {
     cursor: help;
     animation: pulse-dot 2s ease-in-out infinite;
     transform-origin: center center;
-    will-change: transform, opacity;
+    /* No permanent will-change: it kept every dot on its own compositor layer even while nothing animated. */
     contain: layout;
 }
 
@@ -9671,6 +9730,22 @@ body.theme-light .tag-chip {
         transform: scale(1.2);
         opacity: 0.8;
     }
+}
+
+/* While a full-screen modal is open (body.tcv-modal-open, set by app.js _watchModalBackdrops) nothing behind it
+   animates, and the blue dots rest everywhere (they keep their glow, they just stop pulsing until it closes).
+   Those modals blur what's behind them; anything animating back there makes Chrome redraw the blur on every
+   frame, and on some GPUs one of those redraws now and then dropped the dark backdrop for a frame, so the player
+   UI flashed through. */
+body.tcv-modal-open .app-container,
+body.tcv-modal-open .app-container *,
+body.tcv-modal-open .app-container *::before,
+body.tcv-modal-open .app-container *::after,
+body.tcv-modal-open #bottomSheet *,
+body.tcv-modal-open #bottomSheet *::before,
+body.tcv-modal-open #bottomSheet *::after,
+body.tcv-modal-open .whats-new-dot {
+    animation-play-state: paused !important;
 }
 
 /* Update available toast notification */
@@ -9816,6 +9891,23 @@ body.theme-light .tag-chip {
     background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(5px);
     animation: fadeIn 0.2s ease;
+}
+
+/* Full-screen blurred backdrops get their own stable compositor layer, so the blur isn't re-composited from
+   scratch along with whatever changes under it. */
+.changelog-modal,
+.settings-overlay,
+.help-overlay,
+.session-modal-overlay,
+.stats-overlay,
+.notes-overlay,
+.layout-editor-overlay,
+.offline-packager-overlay,
+.quickstart-overlay,
+.loading-overlay,
+.command-palette-backdrop {
+    isolation: isolate;
+    transform: translateZ(0);
 }
 
 .changelog-content {

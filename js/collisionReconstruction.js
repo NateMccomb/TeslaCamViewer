@@ -130,15 +130,15 @@ class CollisionReconstruction {
         this.legend.innerHTML = `
             <div style="display: flex; align-items: center; gap: 4px;">
                 <span style="width: 12px; height: 3px; background: #4ade80; border-radius: 1px; flex-shrink: 0;"></span>
-                <span style="white-space: nowrap;">Low G</span>
+                <span style="white-space: nowrap;">${this._t('incidentDetection.birdsEyeLowG')}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 4px;">
                 <span style="width: 12px; height: 3px; background: #fbbf24; border-radius: 1px; flex-shrink: 0;"></span>
-                <span style="white-space: nowrap;">Med G</span>
+                <span style="white-space: nowrap;">${this._t('incidentDetection.birdsEyeMedG')}</span>
             </div>
             <div style="display: flex; align-items: center; gap: 4px;">
                 <span style="width: 12px; height: 3px; background: #ef4444; border-radius: 1px; flex-shrink: 0;"></span>
-                <span style="white-space: nowrap;">High G</span>
+                <span style="white-space: nowrap;">${this._t('incidentDetection.birdsEyeHighG')}</span>
             </div>
         `;
         this.canvasContainer.appendChild(this.legend);
@@ -156,7 +156,7 @@ class CollisionReconstruction {
             padding: 2px 6px;
             border-radius: 4px;
         `;
-        this.scaleDisplay.textContent = `${Math.round(this.viewRadiusMeters)}m radius`;
+        this.scaleDisplay.textContent = this._t('incidentDetection.birdsEyeRadius', { radius: Math.round(this.viewRadiusMeters) });
         this.canvasContainer.appendChild(this.scaleDisplay);
 
         // Setup wheel zoom on canvas
@@ -285,9 +285,15 @@ class CollisionReconstruction {
         this._updateScaleDisplay();
     }
 
+    /** Translated text (i18n.js), escaped for innerHTML; the key when i18n isn't loaded */
+    _t(key, params = {}) {
+        const t = window.i18n ? window.i18n.t(key, params) : key;
+        return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
     _updateScaleDisplay() {
         if (this.scaleDisplay) {
-            this.scaleDisplay.textContent = `${Math.round(this.viewRadiusMeters)}m radius`;
+            this.scaleDisplay.textContent = this._t('incidentDetection.birdsEyeRadius', { radius: Math.round(this.viewRadiusMeters) });
         }
     }
 

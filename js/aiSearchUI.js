@@ -306,7 +306,7 @@
             const { confident, possible, hiddenCount, tagFilter, tagFallback } = results;
 
             // Summary header
-            let summary = `<b>"${this._esc(results.query)}"</b>`;
+            let summary = `<b>"${FolderParser.escapeHtml(results.query)}"</b>`;
             if (tagFilter) {
                 const tagMatchCount = [...confident, ...possible].filter(r => r.hasTagMatch).length;
                 summary += ` · <span style="color:var(--accent,#4a9eff)">${tagMatchCount} with ${tagFilter.label} tag, all events still ranked</span>`;
@@ -448,7 +448,7 @@
                 <div class="ai-match-badge-inner" style="display:flex; gap:8px; align-items:center; margin-top:6px; padding:4px 6px; background:rgba(0,0,0,0.25); border-left:3px solid ${tierColor}; border-radius:3px;">
                     <img src="${f.thumbDataUrl}" style="width:48px; height:36px; object-fit:cover; border-radius:2px; flex-shrink:0;">
                     <div style="flex:1; min-width:0; font-size:0.72rem; line-height:1.3;">
-                        <div style="color:var(--text,#e0e0e0);"><b>#${match.rank}</b> · ${this._esc(f.camera)} @ ${matchTime}</div>
+                        <div style="color:var(--text,#e0e0e0);"><b>#${match.rank}</b> · ${FolderParser.escapeHtml(f.camera)} @ ${matchTime}</div>
                         <div style="color:var(--text-muted,#888);">match: ${match.score.toFixed(3)}</div>
                     </div>
                     <button class="ai-deep-index-btn" title="Deep-index this event — sample every scene change on all cameras (slower, catches short moments)" style="background:transparent; color:var(--accent,#4a9eff); border:1px solid var(--accent,#4a9eff); padding:2px 6px; border-radius:3px; font-size:0.65rem; cursor:pointer; white-space:nowrap; flex-shrink:0;">⚡ Deep</button>
@@ -623,7 +623,7 @@
             const frameCount = indexed?.frames?.length || 0;
             menu.innerHTML = `
                 <div style="padding:4px 12px; color:var(--text-muted,#888); font-size:0.72rem; border-bottom:1px solid var(--border,#3a3a3a);">
-                    ${this._esc(eventName.slice(0, 40))}${eventName.length > 40 ? '…' : ''}<br>
+                    ${FolderParser.escapeHtml(eventName.slice(0, 40))}${eventName.length > 40 ? '…' : ''}<br>
                     <span style="color:var(--accent,#4a9eff)">${frameCount} frames indexed</span>
                 </div>
                 <div class="ai-ctx-item" data-action="deep-index" style="padding:8px 14px; cursor:pointer; color:var(--text,#e0e0e0);">
@@ -748,9 +748,7 @@
             });
             // Auto-hide after 20 s if user ignores it
             setTimeout(() => { if (toast.isConnected) toast.remove(); }, 20000);
-        },
-
-        _esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        }
     };
 
     // Wait for DOM + aiSearch module, then init

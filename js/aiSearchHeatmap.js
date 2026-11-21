@@ -157,7 +157,7 @@
             const tlDur = window.app?.timeline?.totalDuration;
             const cachedDurs = window.app?.videoPlayer?.cachedClipDurations;
             const duration = tlDur || (cachedDurs && cachedDurs.length
-                ? cachedDurs.reduce((a, b) => a + (b || 60), 0)
+                ? cachedDurs.reduce((a, b, idx) => a + VideoPlayer.clipLength(cachedDurs, idx), 0)
                 : event.clipGroups.length * 60);
             const te = this._lastQueryEmbedding;
             const strips = [];

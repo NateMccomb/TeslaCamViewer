@@ -199,9 +199,15 @@ class ThumbnailCache {
                     .map((cam, i) => loadResults[i] ? (Number.isFinite(videos[cam].duration) ? videos[cam].duration : 60) : 0)
                     .filter(d => d > 0);
                 if (durations.length === 0) continue;
-                const clipDuration = Math.max(...durations);
+                // Place thumbnails on the player's timeline (#537): its real
+                // clip lengths, and a clip it skips (no front video, 0 s)
+                // gets none, so later clips aren't 60 s off.
+                const playerDurs = window.app?.videoPlayer?.cachedClipDurations || [];
+                const playerLen = VideoPlayer.clipLength(playerDurs, clipIdx);
+                if (playerLen <= 0) continue;
+                const clipDuration = Math.min(Math.max(...durations), playerLen);
 
-                const clipStartEventTime = clipIdx * 60;
+                const clipStartEventTime = VideoPlayer.clipStart(playerDurs, clipIdx);
 
                 for (let tInClip = 0; tInClip < clipDuration; tInClip += this.THUMBNAIL_INTERVAL_SEC) {
                     if (aborted.value) return;

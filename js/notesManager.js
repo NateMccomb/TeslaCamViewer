@@ -271,7 +271,7 @@ class NotesManager {
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6v-2zm0 4h8v2H6v-2zm10 0h2v2h-2v-2zm-6-4h8v2h-8v-2z"/>
                         </svg>
-                        ${this.escapeHtml(displayName)}
+                        ${FolderParser.escapeHtml(displayName)}
                     </div>
 
                     <!-- Tags Section -->
@@ -280,9 +280,9 @@ class NotesManager {
                         <div class="tags-container">
                             <div id="currentTags" class="current-tags">
                                 ${notes.tags.map(tag => `
-                                    <span class="tag-chip" data-tag="${this.escapeHtml(tag)}">
-                                        ${this.escapeHtml(tag)}
-                                        <button class="tag-remove" data-tag="${this.escapeHtml(tag)}">&times;</button>
+                                    <span class="tag-chip" data-tag="${FolderParser.escapeHtml(tag)}">
+                                        ${FolderParser.escapeHtml(tag)}
+                                        <button class="tag-remove" data-tag="${FolderParser.escapeHtml(tag)}">&times;</button>
                                     </span>
                                 `).join('')}
                             </div>
@@ -296,7 +296,7 @@ class NotesManager {
                             <div class="existing-tags">
                                 <span class="existing-tags-label">${this.t('notes.existingTags') || 'Existing tags'}:</span>
                                 ${allTags.slice(0, 8).map(tag => `
-                                    <button class="existing-tag-btn" data-tag="${this.escapeHtml(tag)}">${this.escapeHtml(tag)}</button>
+                                    <button class="existing-tag-btn" data-tag="${FolderParser.escapeHtml(tag)}">${FolderParser.escapeHtml(tag)}</button>
                                 `).join('')}
                             </div>
                         ` : ''}
@@ -305,7 +305,7 @@ class NotesManager {
                     <!-- Notes Section -->
                     <div class="notes-section">
                         <label class="notes-label">${this.t('notes.notes')}</label>
-                        <textarea id="notesTextarea" class="notes-textarea" placeholder="${this.t('notes.placeholder') || 'Add notes about this event...'}" maxlength="2000">${this.escapeHtml(notes.text)}</textarea>
+                        <textarea id="notesTextarea" class="notes-textarea" placeholder="${this.t('notes.placeholder') || 'Add notes about this event...'}" maxlength="2000">${FolderParser.escapeHtml(notes.text)}</textarea>
                         <div class="notes-char-count">
                             <span id="charCount">${notes.text.length}</span>/2000
                         </div>
@@ -325,18 +325,6 @@ class NotesManager {
         setTimeout(() => {
             this.modal.querySelector('#notesTextarea').focus();
         }, 100);
-    }
-
-    /**
-     * Escape HTML to prevent XSS
-     * @param {string} str - String to escape
-     * @returns {string} Escaped string
-     */
-    escapeHtml(str) {
-        if (!str) return '';
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
     }
 
     /**
@@ -422,7 +410,7 @@ class NotesManager {
             const suggestionsDiv = this.modal.querySelector('#tagSuggestions');
             if (suggestions.length > 0) {
                 suggestionsDiv.innerHTML = suggestions.slice(0, 5).map(tag =>
-                    `<div class="tag-suggestion" data-tag="${this.escapeHtml(tag)}">${this.escapeHtml(tag)}</div>`
+                    `<div class="tag-suggestion" data-tag="${FolderParser.escapeHtml(tag)}">${FolderParser.escapeHtml(tag)}</div>`
                 ).join('');
                 suggestionsDiv.classList.remove('hidden');
             } else {
@@ -514,7 +502,11 @@ class NotesManager {
         }
 
         const container = this.modal.querySelector('#currentTags');
-        const normalizedTag = tagName.trim().toLowerCase();
+        // Same rules as tags read back from a drive's backup file (#523)
+        const normalizedTag = window.EventDataBackup
+            ? EventDataBackup.sanitizeTag(tagName)
+            : tagName.trim().toLowerCase();
+        if (!normalizedTag) return;
         console.log('[NotesManager] Adding tag:', normalizedTag);
 
         // Check if already exists
@@ -527,7 +519,7 @@ class NotesManager {
         const chip = document.createElement('span');
         chip.className = 'tag-chip';
         chip.dataset.tag = normalizedTag;
-        chip.innerHTML = `${this.escapeHtml(normalizedTag)}<button class="tag-remove" data-tag="${this.escapeHtml(normalizedTag)}">&times;</button>`;
+        chip.innerHTML = `${FolderParser.escapeHtml(normalizedTag)}<button class="tag-remove" data-tag="${FolderParser.escapeHtml(normalizedTag)}">&times;</button>`;
         container.appendChild(chip);
         console.log('[NotesManager] Tag chip added to DOM');
     }

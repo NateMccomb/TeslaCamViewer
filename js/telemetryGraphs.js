@@ -964,7 +964,9 @@ class TelemetryGraphs {
         let minTime = Infinity;
         let maxTime = -Infinity;
 
-        const clipDuration = 60; // Approximate clip duration in seconds
+        // The player's real clip lengths (#537): the short last clip and a
+        // clip without a front video (0 s) line up with the video.
+        const durations = window.app?.videoPlayer?.cachedClipDurations || [];
 
         // clipSeiData is indexed by clip number
         Object.keys(clipSeiData).sort((a, b) => parseInt(a) - parseInt(b)).forEach(clipIndexStr => {
@@ -973,7 +975,8 @@ class TelemetryGraphs {
             if (!clipData?.frames || clipData.frames.length === 0) return;
 
             const frameCount = clipData.frames.length;
-            const baseTime = clipIndex * clipDuration;
+            const clipDuration = VideoPlayer.clipLength(durations, clipIndex);
+            const baseTime = VideoPlayer.clipStart(durations, clipIndex);
 
             // Sample frames (every ~5 seconds of video = every ~180 frames at 36fps)
             const sampleInterval = Math.max(1, Math.floor(frameCount / 12));
@@ -2317,7 +2320,8 @@ class TelemetryGraphs {
 
         // Collect all frames with timing information
         const allRows = [];
-        const clipDuration = 60; // Approximate clip duration in seconds
+        // The player's real clip lengths (#537)
+        const durations = window.app?.videoPlayer?.cachedClipDurations || [];
 
         // Handle both Map and plain object formats
         const entries = clipSeiData instanceof Map
@@ -2340,7 +2344,8 @@ class TelemetryGraphs {
             }
 
             const clipIndex = typeof key === 'string' ? parseInt(key.split('_')[0]) : key;
-            const baseTime = clipIndex * clipDuration;
+            const clipDuration = VideoPlayer.clipLength(durations, clipIndex);
+            const baseTime = VideoPlayer.clipStart(durations, clipIndex);
             const frameCount = clipData.frames.length;
 
             for (let i = 0; i < frameCount; i++) {
@@ -2361,7 +2366,7 @@ class TelemetryGraphs {
                     steering_angle: (frame.steering_wheel_angle || 0).toFixed(2),
                     throttle: (frame.accelerator_pedal_position || 0).toFixed(3),
                     brake: frame.brake_applied ? '1' : '0',
-                    turn_signal: frame.turn_signal_name || 'NONE',
+                    turn_signal: frame.blinker_on_left && frame.blinker_on_right ? 'HAZARD' : frame.blinker_on_left ? 'LEFT' : frame.blinker_on_right ? 'RIGHT' : 'NONE',
                     gear: frame.gear_name || 'D',
                     autopilot_state: frame.autopilot_name || 'NONE'
                 });

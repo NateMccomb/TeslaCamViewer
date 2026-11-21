@@ -7,10 +7,10 @@
     <meta name="description" content="View Tesla dashcam footage with synchronized camera playback. Browse SavedClips, SentryClips, and RecentClips - all locally in your browser.">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-    <link rel="stylesheet" href="styles/main.css?v=59">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" integrity="sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+" crossorigin="anonymous"/>
+    <link rel="stylesheet" href="styles/main.css?v=31b0f5a5">
     <link rel="stylesheet" href="styles/plate-enhancer.css?v=8">
 </head>
 <body>
@@ -49,6 +49,7 @@
                    target="_blank"
                    rel="noopener noreferrer"
                    class="header-btn github-btn"
+                   data-i18n-title="header.viewOnGitHub"
                    title="View on GitHub">
                     <svg viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
@@ -189,7 +190,7 @@
                 <!-- Bird's Eye View Panel (collapsible, auto-hides when no GPS) -->
                 <div id="birdsEyePanel" class="sidebar-panel collapsible" style="display: none;">
                     <div class="sidebar-panel-header" id="birdsEyeHeader">
-                        <span class="panel-title">Bird's Eye View</span>
+                        <span class="panel-title" data-i18n="incidentDetection.birdsEyeTitle">Bird's Eye View</span>
                         <button class="panel-collapse-btn" aria-label="Toggle panel">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
@@ -204,7 +205,7 @@
                 <!-- Telemetry Graphs Panel (collapsible, auto-hides when no data) -->
                 <div id="telemetryPanel" class="sidebar-panel collapsible" style="display: none;">
                     <div class="sidebar-panel-header" id="telemetryHeader">
-                        <span class="panel-title">Telemetry</span>
+                        <span class="panel-title" data-i18n="telemetry.title">Telemetry</span>
                         <button class="panel-collapse-btn" aria-label="Toggle panel">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
@@ -450,7 +451,7 @@
                                 <option value="5">5x</option>
                             </select>
                         </div>
-                        <button id="toggleSlowMoBtn" class="control-btn overlay-toggle-btn" disabled title="Toggle Incident Slow-Mo">
+                        <button id="toggleSlowMoBtn" class="control-btn overlay-toggle-btn" disabled data-i18n-title="incidentDetection.toggleSlowMo" title="Toggle Incident Slow-Mo">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"/>
                                 <polyline points="12,6 12,12 16,14"/>
@@ -522,15 +523,20 @@
                                         </svg>
                                         <span data-i18n="export.exportVideo">Export Video</span>
                                     </button>
-                                    <select id="exportFormatSelect" class="export-format-select" title="Export format">
+                                    <select id="exportFormatSelect" class="export-format-select" data-i18n-title="export.formatTitle" title="Export format">
                                         <option value="webm">WebM</option>
-                                        <option value="mp4">MP4</option>
+                                        <option value="mp4">MP4 (VP9)</option>
+                                        <option value="mp4-h264">MP4 (H.264)</option>
                                         <option value="gif">GIF</option>
                                     </select>
                                 </div>
                                 <div id="gifWarning" class="gif-warning hidden">
                                     <span class="gif-warning-icon">⏱️</span>
-                                    <span>GIF export takes ~10x clip length</span>
+                                    <span data-i18n="export.gifWarning">GIF export takes ~10x clip length</span>
+                                </div>
+                                <div id="h264Warning" class="gif-warning hidden">
+                                    <span class="gif-warning-icon">⏱️</span>
+                                    <span data-i18n="export.h264Warning">MP4 (H.264) plays on nearly everything but is often the slowest export. MP4 (VP9) and WebM are usually faster.</span>
                                 </div>
 
                                 <!-- Insurance Report -->
@@ -544,12 +550,12 @@
                                 <div class="export-dropdown-divider"></div>
 
                                 <!-- Export Settings -->
-                                <div class="export-settings-header">Settings</div>
+                                <div class="export-settings-header" data-i18n="settings.title">Settings</div>
 
                                 <label class="export-option export-checkbox-option">
                                     <input type="checkbox" id="blurPlatesExportCheckbox">
-                                    <span class="export-checkbox-label">Blur License Plates</span>
-                                    <span class="export-option-hint">Adds significant render time</span>
+                                    <span class="export-checkbox-label" data-i18n="settings.export.blurPlates">Blur License Plates</span>
+                                    <span class="export-option-hint" data-i18n="export.blurPlatesHint">Adds significant render time</span>
                                 </label>
 
                                 <label class="export-option export-checkbox-option">
@@ -677,24 +683,24 @@
                                 </div>
                                 <div class="mobile-more-divider"></div>
                                 <div class="mobile-more-section">
-                                    <div class="mobile-more-label">Export</div>
+                                    <div class="mobile-more-label" data-i18n="settings.sections.export">Export</div>
                                     <button class="mobile-more-option" data-action="screenshot">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                             <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/>
                                         </svg>
-                                        <span>Screenshot</span>
+                                        <span data-i18n="quickstart.shortcuts.screenshot">Screenshot</span>
                                     </button>
                                     <button class="mobile-more-option" data-action="export-video">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                             <path d="M19 12v7H5v-7H3v7c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-7h-2zm-6 .67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2z"/>
                                         </svg>
-                                        <span>Export Video</span>
+                                        <span data-i18n="export.exportVideo">Export Video</span>
                                     </button>
                                     <button class="mobile-more-option" data-action="insurance-report">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                                             <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
                                         </svg>
-                                        <span>Insurance Report</span>
+                                        <span data-i18n="export.insuranceReportShort">Insurance Report</span>
                                     </button>
                                 </div>
                             </div>
@@ -813,26 +819,27 @@
 
     <!-- Scripts -->
     <!-- JSZip for offline package creation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
     <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" integrity="sha384-mFKkGiGvT5vo1fEyGCD3hshDdKmW3wzXW/x+fWriYJArD0R3gawT6lMvLboM22c0" crossorigin="anonymous"></script>
     <!-- Protocol Buffers for Tesla SEI telemetry -->
-    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.2.6/dist/protobuf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.6.6/dist/protobuf.min.js" integrity="sha384-RcCYQWe/1f2wGOto33rpxe6p/aNfxBAda7lSQgQvLW+WDT5X6jZZhPjhWBTM7hVh" crossorigin="anonymous"></script>
     <!-- jsPDF for insurance report generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
     <!-- ONNX Runtime Web for license plate detection (uses CDN for proper module resolution) -->
     <script>
         // Pre-configure ONNX Runtime before loading
         window.ortConfig = { numThreads: 1 };
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js" defer></script>
-    <!-- UpscalerJS for AI-powered image super-resolution -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/default-model@latest/dist/umd/index.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@latest/dist/umd/4x.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/upscaler@latest/dist/browser/umd/upscaler.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js" integrity="sha384-RPL/K8tc0JVaNWsunkEmCzLeieefvFX2UCRLKLmLVChCI6P+CTKhzqF7VIeCc3Zp" crossorigin="anonymous" defer></script>
+    <!-- UpscalerJS for AI-powered image super-resolution. esrgan-thick stays on 1.0.0-beta.14: 1.0.0 has no
+         dist/umd/4x.min.js, and beta.14 is what the old @latest URL really served -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js" integrity="sha384-R4iglwC8w7UAyfRq7VUmXEPjrvYnoXIqhsbTUN07o6o8yKYeiTY0/Z6DzbsKgWZ3" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/default-model@1.0.0/dist/umd/index.min.js" integrity="sha384-GBfBtFQvD01K2rgUfQyn9FasV6Lq+6aKOkoE7a+lghzwzdz+la3ct/nXp/t9EfOR" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@upscalerjs/esrgan-thick@1.0.0-beta.14/dist/umd/4x.min.js" integrity="sha384-yeEPrs6Pg6cY+VrP79CIpnpIny5XIrujStZwUFtkQsvPfhBcnRiJ4uM1D0ZXkM6t" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/upscaler@1.0.0/dist/browser/umd/upscaler.min.js" integrity="sha384-QMCS4oRU0yhc/triRbY4mcIreg38XzA/8NNuZfTWWvv/km8cX/L63yLb3hh0IaA3" crossorigin="anonymous"></script>
     <!-- gif.js for animated GIF export -->
     <script src="vendor/gif.js"></script>
     <!-- tweetnacl for Ed25519 signature verification fallback -->
@@ -845,77 +852,77 @@
     <script src="js/backgroundScheduler.js?v=2"></script>
 
     <!-- i18n (load first) -->
-    <script src="js/i18n.js?v=2"></script>
+    <script src="js/i18n.js?v=5fecd430"></script>
 
     <!-- App Modules -->
     <script src="js/cameraIds.js?v=1"></script>
     <script src="js/sidebarResize.js"></script>
-    <script src="js/eventFilter.js"></script>
-    <script src="js/filterPanel.js?v=3"></script>
-    <script src="js/mapView.js?v=11"></script>
+    <script src="js/eventFilter.js?v=b98fc516"></script>
+    <script src="js/filterPanel.js?v=a09bb9dd"></script>
+    <script src="js/mapView.js?v=ad5b130f"></script>
     <script src="js/folderManager.js"></script>
-    <script src="js/folderParser.js?v=4"></script>
-    <script src="js/seiInsights.js?v=1"></script>
-    <script src="js/interventionSeverity.js?v=2"></script>
+    <script src="js/folderParser.js?v=e924db4f"></script>
+    <script src="js/seiInsights.js?v=c90e3b83"></script>
+    <script src="js/interventionSeverity.js?v=8f3ea41a"></script>
     <script src="js/eventInsightsCache.js?v=3"></script>
     <script src="js/insightsScanner.js?v=3"></script>
     <script src="js/insightsScannerUI.js?v=1"></script>
-    <script src="js/eventBrowser.js?v=10"></script>
-    <script src="js/videoPlayer.js?v=21"></script>
-    <script src="js/thumbnailCache.js?v=10"></script>
-    <script src="js/commandPalette.js?v=2"></script>
+    <script src="js/eventBrowser.js?v=7d7769cd"></script>
+    <script src="js/videoPlayer.js?v=9f781e8a"></script>
+    <script src="js/thumbnailCache.js?v=9283f209"></script>
+    <script src="js/commandPalette.js?v=d05f9270"></script>
     <script src="js/fileSystemObserver.js?v=5"></script>
-    <script src="js/timeline.js?v=16"></script>
+    <script src="js/timeline.js?v=65ebf97c"></script>
     <script src="js/syncController.js?v=4"></script>
     <script src="js/layoutConfig.js?v=3"></script>
     <script src="js/layoutRenderer.js?v=10"></script>
     <script src="js/layoutManager.js?v=10"></script>
     <script src="js/layoutEditor.js?v=2"></script>
-    <script src="js/screenshotCapture.js?v=8"></script>
+    <script src="js/screenshotCapture.js?v=7e57b666"></script>
     <script src="js/videoEnhancer.js"></script>
-    <script src="js/seiExtractor.js?v=3"></script>
-    <script src="js/seiDiagnostics.js?v=6"></script>
-    <script src="js/telemetryOverlay.js?v=14"></script>
-    <script src="js/miniMapOverlay.js?v=25"></script>
-    <script src="js/weatherService.js"></script>
+    <script src="js/seiExtractor.js?v=ebc8eabc"></script>
+    <script src="js/seiDiagnostics.js?v=ec74ba4c"></script>
+    <script src="js/telemetryOverlay.js?v=e18f4e11"></script>
+    <script src="js/miniMapOverlay.js?v=9ba8630f"></script>
+    <script src="js/weatherService.js?v=35a5397b"></script>
     <script src="js/elevationService.js?v=2"></script>
-    <script src="js/speedLimitService.js?v=7"></script>
+    <script src="js/speedLimitService.js?v=cfd575e2"></script>
     <script src="js/elevationOverlay.js?v=4"></script>
-    <script src="js/telemetryGraphs.js?v=13"></script>
+    <script src="js/telemetryGraphs.js?v=7d9056bd"></script>
     <script src="js/incidentSlowMo.js?v=1"></script>
-    <script src="js/collisionReconstruction.js?v=3"></script>
+    <script src="js/collisionReconstruction.js?v=8b828e9e"></script>
     <script src="js/streetViewOverlay.js?v=2"></script>
-    <script src="js/eventDataBackup.js"></script>
-    <script src="js/notesManager.js?v=2"></script>
-    <script src="js/videoExport.js?v=59"></script>
-    <script src="js/videoExportFast.js?v=11"></script>
-    <script src="js/multiCameraExportDecoder.js?v=3"></script>
+    <script src="js/eventDataBackup.js?v=54faa827"></script>
+    <script src="js/notesManager.js?v=a2e79ce0"></script>
+    <script src="js/videoExport.js?v=a09d8fcf"></script>
+    <script src="js/videoExportFast.js?v=0118493c"></script>
+    <script src="js/multiCameraExportDecoder.js?v=1b33accb"></script>
     <script src="js/clipMarking.js?v=3"></script>
-    <script src="js/insuranceReport.js?v=13"></script>
-    <script src="js/settingsManager.js?v=24"></script>
-    <script src="js/versionManager.js?v=28"></script>
-    <script src="js/statisticsManager.js?v=3"></script>
-    <script src="js/helpModal.js?v=6"></script>
+    <script src="js/insuranceReport.js?v=ef7e42c7"></script>
+    <script src="js/settingsManager.js?v=84f3ea36"></script>
+    <script src="js/versionManager.js?v=e5887859"></script>
+    <script src="js/statisticsManager.js?v=88ff0703"></script>
+    <script src="js/helpModal.js?v=327bf5a7"></script>
     <script src="js/quickStartGuide.js?v=3"></script>
-    <script src="js/offlinePackager.js?v=3"></script>
+    <script src="js/offlinePackager.js?v=67f71512"></script>
     <!-- AI Search (CLIP + WebCodecs). Loaded but inactive until user opts in via Settings. -->
-    <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js" integrity="sha384-9oK16t6TCKqCB5OpB/LwRkNa48prlRFQPTYw8tb9uj699JvQ1wjxIq7YO8Z4hn3a" crossorigin="anonymous"></script>
     <script src="js/fastFrameExtractor.js?v=4"></script>
-    <script src="js/webCodecsVideoElement.js?v=3"></script>
+    <script src="js/webCodecsVideoElement.js?v=cd9f68fe"></script>
     <script src="js/videoStateRecorder.js?v=3"></script>
     <script src="js/aiSearch.js?v=17"></script>
-    <script src="js/aiSearchUI.js?v=18"></script>
-    <script src="js/aiSearchHeatmap.js?v=4"></script>
-    <script src="js/autopilotTimelineLayer.js?v=3"></script>
+    <script src="js/aiSearchUI.js?v=5de5d767"></script>
+    <script src="js/aiSearchHeatmap.js?v=60b3e76f"></script>
+    <script src="js/autopilotTimelineLayer.js?v=bfc4ec5e"></script>
 
-    <script src="js/driveSync.js?v=4"></script>
-    <script src="js/driveSyncUI.js?v=3"></script>
+    <script src="js/driveSync.js?v=6c21b7a3"></script>
+    <script src="js/driveSyncUI.js?v=f31d2393"></script>
     <script src="js/regionTracker.js?v=5"></script>
     <script src="js/frameStacker.js?v=73"></script>
     <script src="js/plateRecognizer.js?v=8"></script>
-    <script src="js/plateEnhancer.js?v=93"></script>
+    <script src="js/plateEnhancer.js?v=e321ef36"></script>
     <script src="js/plateDetector.js?v=17"></script>
-    <script src="js/plateBlur.js?v=20"></script>
-    <script src="js/app.js?v=58"></script>
+    <script src="js/plateBlur.js?v=30e98f74"></script>
+    <script src="js/app.js?v=47aedeca"></script>
 </body>
 </html>

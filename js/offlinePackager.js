@@ -372,6 +372,21 @@ class OfflinePackager {
         } catch (e) {
             console.warn('mp4-muxer.min.mjs not found, skipping');
         }
+        // webm-muxer for WebM export (WebCodecs VP9)
+        try {
+            const webmmuxer = await this.fetchLocal('vendor/webm-muxer.min.mjs');
+            zip.file('vendor/webm-muxer.min.mjs', webmmuxer);
+        } catch (e) {
+            console.warn('webm-muxer.min.mjs not found, skipping');
+        }
+
+        // 3d3. Bundle webm-muxer for WebM export (WebCodecs; without it WebM falls back to the browser's recorder)
+        try {
+            const webmmuxer = await this.fetchLocal('vendor/webm-muxer.min.mjs');
+            zip.file('vendor/webm-muxer.min.mjs', webmmuxer);
+        } catch (e) {
+            console.warn('webm-muxer.min.mjs not found, skipping');
+        }
 
         // 3e. Bundle tweetnacl for Ed25519 signature verification
         try {
@@ -384,8 +399,8 @@ class OfflinePackager {
         // 4. Download external libraries
         progressCallback('Downloading Leaflet...', 45);
         try {
-            const leafletCSS = await this.fetchExternal(`https://unpkg.com/leaflet@${this.LEAFLET_VERSION}/dist/leaflet.css`);
-            const leafletJS = await this.fetchExternal(`https://unpkg.com/leaflet@${this.LEAFLET_VERSION}/dist/leaflet.js`);
+            const leafletCSS = await this.fetchExternal('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H');
+            const leafletJS = await this.fetchExternal('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH');
             zip.file('vendor/leaflet.css', leafletCSS);
             zip.file('vendor/leaflet.js', leafletJS);
         } catch (e) {
@@ -394,9 +409,9 @@ class OfflinePackager {
 
         progressCallback('Downloading MarkerCluster...', 55);
         try {
-            const clusterCSS1 = await this.fetchExternal(`https://unpkg.com/leaflet.markercluster@${this.MARKERCLUSTER_VERSION}/dist/MarkerCluster.css`);
-            const clusterCSS2 = await this.fetchExternal(`https://unpkg.com/leaflet.markercluster@${this.MARKERCLUSTER_VERSION}/dist/MarkerCluster.Default.css`);
-            const clusterJS = await this.fetchExternal(`https://unpkg.com/leaflet.markercluster@${this.MARKERCLUSTER_VERSION}/dist/leaflet.markercluster.js`);
+            const clusterCSS1 = await this.fetchExternal('https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css', 'sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV');
+            const clusterCSS2 = await this.fetchExternal('https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css', 'sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+');
+            const clusterJS = await this.fetchExternal('https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js', 'sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr');
             zip.file('vendor/MarkerCluster.css', clusterCSS1);
             zip.file('vendor/MarkerCluster.Default.css', clusterCSS2);
             zip.file('vendor/leaflet.markercluster.js', clusterJS);
@@ -438,11 +453,12 @@ class OfflinePackager {
 
     /**
      * Fetch external file
-     * @param {string} url - External URL
+     * @param {string} url - External URL, pinned to an exact version
+     * @param {string} [integrity] - SRI hash; the browser rejects the download if the bytes differ
      * @returns {Promise<string>} File content
      */
-    async fetchExternal(url) {
-        const response = await fetch(url);
+    async fetchExternal(url, integrity) {
+        const response = await fetch(url, integrity ? { integrity } : undefined);
         if (!response.ok) throw new Error(`Failed to fetch ${url}`);
         return await response.text();
     }
@@ -515,13 +531,14 @@ class OfflinePackager {
 
         // Remove JSZip CDN (not needed in offline version)
         html = html.replace(
-            /<script src="https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/jszip[^"]*"><\/script>\s*/g,
+            /<script src="https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/jszip[^"]*"[^>]*><\/script>\s*/g,
             ''
         );
 
-        // Remove integrity attributes (they won't match local files)
-        html = html.replace(/\s+integrity="[^"]*"/g, '');
-        html = html.replace(/\s+crossorigin="[^"]*"/g, '');
+        // The local vendor/ copies load without integrity/crossorigin (a CORS request from a file:// page
+        // fails). Tags that still point at a CDN keep both, so the browser keeps checking those.
+        html = html.replace(/<(?:script|link)\b[^>]*\b(?:src|href)="vendor\/[^"]*"[^>]*>/g,
+            tag => tag.replace(/\s+integrity="[^"]*"/g, '').replace(/\s+crossorigin="[^"]*"/g, ''));
 
         // Add offline fonts stylesheet after main.css
         html = html.replace(
@@ -654,7 +671,7 @@ class OfflinePackager {
             if (window.app?.sessionManager?.showSessionModal) {
                 window.app.sessionManager.showSessionModal();
             } else {
-                window.open('https://www.natemccomb.store/', '_blank');
+                window.open('https://www.natemccomb.store/', '_blank', 'noopener');
             }
         });
     }

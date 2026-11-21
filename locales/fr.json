@@ -38,7 +38,8 @@
     "noEventLoaded": "Aucun événement chargé",
     "hidden": "Masquées:",
     "fullscreen": "Plein écran",
-    "exitFullscreen": "Quitter le plein écran"
+    "exitFullscreen": "Quitter le plein écran",
+    "dateAtTime": "{{date}} à {{time}}"
   },
 
   "cameras": {
@@ -46,10 +47,21 @@
     "back": "Arrière",
     "left": "Gauche",
     "right": "Droite",
+    "leftPillar": "Montant gauche",
+    "rightPillar": "Montant droit",
     "hideFront": "Masquer la caméra avant",
     "hideBack": "Masquer la caméra arrière",
     "hideLeft": "Masquer la caméra gauche",
-    "hideRight": "Masquer la caméra droite"
+    "hideRight": "Masquer la caméra droite",
+    "hideLeftPillar": "Masquer la caméra du montant gauche",
+    "hideRightPillar": "Masquer la caméra du montant droit",
+    "showFront": "Afficher la caméra avant",
+    "showBack": "Afficher la caméra arrière",
+    "showLeft": "Afficher la caméra gauche",
+    "showRight": "Afficher la caméra droite",
+    "showLeftPillar": "Afficher la caméra du montant gauche",
+    "showRightPillar": "Afficher la caméra du montant droit",
+    "showCamera": "Afficher {{camera}}"
   },
 
   "controls": {
@@ -66,7 +78,7 @@
     "markIn": "Marquer le point d'entrée",
     "markOut": "Marquer le point de sortie",
     "clearMarks": "Effacer les marqueurs",
-    "export": "Exporter toutes les caméras",
+    "export": "Exporter la disposition actuelle",
     "exportOptions": "Options d'exportation",
     "zoomOut": "Zoom arrière timeline",
     "zoomIn": "Zoom avant timeline",
@@ -74,7 +86,10 @@
     "loop": "Boucle",
     "speed": "Vitesse:",
     "layout": "Disposition:",
-    "camera": "Caméra:"
+    "camera": "Caméra:",
+    "cyclePillarTitle": "Alterner entre répéteurs et montants (Shift+P)",
+    "repeaters": "Répéteurs",
+    "pillars": "Montants"
   },
 
   "bookmarks": {
@@ -84,26 +99,98 @@
     "next": "Signet suivant (])",
     "manage": "Gérer les signets",
     "clearAll": "Tout effacer",
-    "noBookmarks": "Pas encore de signets"
+    "noBookmarks": "Pas encore de signets",
+    "bookmark": {
+      "one": "{{count}} signet",
+      "other": "{{count}} signets"
+    }
   },
 
   "export": {
-    "header": "Exporter la caméra",
-    "allCameras": "Toutes les caméras (Grille)",
-    "frontOnly": "Avant uniquement",
-    "rearOnly": "Arrière uniquement",
-    "leftOnly": "Gauche uniquement",
-    "rightOnly": "Droite uniquement",
+    "header": "Options d'exportation",
+    "exportVideo": "Exporter la vidéo",
+    "allCameras": "Disposition actuelle",
+    "leftPillarOnly": "Montant gauche uniquement",
+    "rightPillarOnly": "Montant droit uniquement",
+    "privacyMode": "Mode confidentialité (sans métadonnées)",
+    "privacyModeHint": "Supprime l'horodatage, le GPS et la localisation",
+    "insuranceReport": "Rapport pour l'assurance (PDF)",
+    "generatingReport": "Création du rapport pour l'assurance...",
     "exporting": "Exportation {{percent}}%",
     "preparing": "Préparation de l'exportation...",
     "encoding": "Encodage de la vidéo...",
     "complete": "Exportation terminée",
     "cancelled": "Exportation annulée",
-    "failed": "Échec de l'exportation"
+    "failed": "Échec de l'exportation",
+    "formatTitle": "Format d'exportation",
+    "gifWarning": "L'export GIF prend environ 10 fois la durée du clip",
+    "blurPlatesHint": "Allonge nettement le temps de rendu",
+    "insuranceReportShort": "Rapport pour l'assurance",
+    "alreadyRunning": "Une exportation est déjà en cours. Veuillez attendre qu'elle se termine.",
+    "cameraAll": "toutes les caméras",
+    "cameraFront": "caméra avant",
+    "cameraBack": "caméra arrière",
+    "cameraLeft": "caméra gauche",
+    "cameraRight": "caméra droite",
+    "cameraLeftPillar": "caméra du montant gauche",
+    "cameraRightPillar": "caméra du montant droit",
+    "rangeMarked": "la section marquée ({{marks}})",
+    "rangeFromIn": "du point d'entrée à la fin de l'événement",
+    "rangeToOut": "du début au point de sortie",
+    "rangeFromCurrent": "de la position actuelle à la fin de l'événement",
+    "confirm": "Exporter {{range}} - {{camera}} ?",
+    "confirmAtSpeed": "Exporter {{range}} - {{camera}} à la vitesse {{speed}}x ?",
+    "confirmDuration": "L'exportation prend environ 3 à 4 fois la durée de la vidéo (un clip de 10 secondes prend environ 30 à 40 secondes).",
+    "confirmDontSwitch": "Ne changez pas d'événement avant la fin de l'exportation.",
+    "invalidRange": "Plage d'exportation invalide : le début doit se situer avant la fin.\nVeuillez ajuster vos marqueurs d'entrée et de sortie.",
+    "loadingPlateModel": "Chargement du modèle d'IA de détection des plaques d'immatriculation...",
+    "loadingPlateModelHint": "Cela peut prendre un moment la première fois",
+    "starting": "Démarrage de l'exportation...",
+    "preparingVideo": "Préparation de la vidéo...",
+    "titleVideo": "Vidéo",
+    "progressTitle": "Exportation ({{what}}) : {{percent}}%",
+    "elapsedRemaining": "{{elapsed}} écoulé / ~{{remaining}} restant",
+    "videoProgress": "Vidéo : {{current}} / {{total}}",
+    "speedReduced": "Vitesse réduite à {{speed}}x (mise en mémoire tampon)",
+    "gpuFailed": "Échec de l'exportation : votre carte graphique semble avoir été réinitialisée pendant l'exportation.\n\nEn général, cela signifie que l'encodeur matériel s'est bloqué ou que Windows a réinitialisé le pilote graphique. Essayez l'une de ces solutions : réduire la résolution d'exportation (Paramètres), désactiver le floutage des plaques pour cette exportation, exporter une plage plus courte avec les marqueurs d'entrée et de sortie, ou mettre à jour votre pilote graphique.\n\nSi le problème persiste, ouvrez Paramètres → Diagnostics → Console Log Capture et envoyez-nous le journal : nous venons d'y ajouter des informations détaillées sur l'encodeur et le décodeur pour aider support@teslacamviewer.com à diagnostiquer le problème.",
+    "encoderStalled": "Exportation arrêtée : l'encodeur vidéo de cet appareil ne répond plus ({{codec}}). Rien n'a été enregistré. Réessayez avec MP4 (VP9) ou WebM, ou choisissez une qualité d'exportation plus basse dans Paramètres > Exportation.",
+    "unableToComplete": "L'exportation n'a pas pu aboutir : {{error}}",
+    "completeTitle": "Exportation terminée",
+    "completeText": "Votre vidéo a bien été enregistrée.",
+    "cancelledTitle": "Exportation annulée",
+    "cancelledText": "L'exportation a été arrêtée avant la fin. Aucun fichier n'a été enregistré.",
+    "noteWebm": "Enregistré au format WebM (VP9).",
+    "noteH264": "Enregistré au format MP4 (H.264) : lisible presque partout, y compris sur iPhone et dans QuickTime.",
+    "noteNoH264": "Ce navigateur ne peut pas encoder en H.264, le fichier a donc été enregistré en MP4 ({{codec}}). Il se lit dans Chrome, Edge, VLC et sur Android ; l'iPhone, QuickTime et certains logiciels de montage risquent de ne pas l'ouvrir.",
+    "noteMp4": "Enregistré en MP4 ({{codec}}) : meilleure qualité, lisible dans Chrome, Edge, VLC et sur Android. Pour l'iPhone, QuickTime ou un logiciel de montage, choisissez MP4 (H.264) dans le menu d'exportation.",
+    "freeExportsUsed": "{{used}} exportations gratuites sur {{limit}} utilisées aujourd'hui. Il en reste {{left}}. Réexporter le même événement reste gratuit.",
+    "plateModelLoading": "Chargement du modèle de détection des plaques...",
+    "plateModelReady": "Détection des plaques prête",
+    "plateModelFailed": "Échec du chargement de la détection des plaques",
+    "h264Warning": "Le MP4 (H.264) se lit presque partout, mais sur certains PC c'est l'export le plus lent. Le MP4 (VP9) et le WebM sont souvent plus rapides.",
+    "softwareH264": "Encodage H.264 logiciel : en qualité maximale, cela peut prendre plusieurs minutes.",
+    "softwareH264Rate": "{{fps}} images par seconde",
+    "tookTime": "Durée : {{time}}",
+    "sizeNote": "Taille de la vidéo : {{size}}",
+    "sizeReduced": "Taille de la vidéo : {{size}} (vous aviez demandé {{asked}}, plus que ce qu'accepte l'encodeur vidéo de cet appareil)",
+    "noEncoder": "Exportation arrêtée avant de commencer : aucun encodeur vidéo de cet appareil n'a accepté cette exportation ({{size}}), même à une taille plus petite. Rien n'a été enregistré. Rechargez la page et réessayez. Si cela échoue encore, exportez en WebM ou choisissez une qualité d'exportation plus basse dans Paramètres > Exportation.",
+    "badOutput": "Échec de l'exportation : le fichier {{format}} est défectueux ({{reason}}), il n'a donc pas été enregistré. Veuillez réessayer. Si cela se reproduit, choisissez une qualité d'exportation plus basse dans Paramètres > Exportation ou un autre format.",
+    "badOutput_tiny": "le fichier ne faisait que {{bytes}} octets, sans vidéo",
+    "badOutput_frames": "seules {{got}} images sur {{want}} sont dans le fichier",
+    "badOutput_length": "la vidéo dure {{got}} s au lieu de {{want}} s",
+    "badOutput_unreadable": "le fichier ne peut pas être lu",
+    "nothingToExport": "Rien à exporter : la tête de lecture est à la fin de l'événement ({{position}} sur {{end}}) et aucun repère OUT n'est posé. Revenez en arrière ou posez des repères IN et OUT, puis exportez de nouveau.",
+    "notSaved": "L'exportation s'est terminée sans enregistrer de fichier, rien n'a donc été téléchargé. Veuillez réessayer.",
+    "softwareVp9": "Encodage VP9 logiciel : en qualité maximale, cela peut prendre plusieurs minutes.",
+    "noteWebmCodec": "Enregistré au format WebM ({{codec}}).",
+    "noWebmEncoder": "Exportation arrêtée avant de commencer : aucun encodeur vidéo WebM de cet appareil n'a accepté cette exportation ({{size}}), même à une taille plus petite. Rien n'a été enregistré. Exportez plutôt en MP4 (H.264) ou choisissez une qualité d'exportation plus basse dans Paramètres > Exportation.",
+    "elapsedOnly": "{{elapsed}} écoulé",
+    "softwareVp8": "Encodage VP8 logiciel : en qualité maximale, cela peut prendre plusieurs minutes."
   },
 
   "layouts": {
     "grid2x2": "Grille 2×2",
+    "grid3x2": "Grille 3×2 (6 caméras)",
     "layout63": "6:3 Centré",
     "layout43": "4:3 Principal",
     "all169": "Tout 16:9",
@@ -141,7 +228,13 @@
       "markingExport": "Marquage & Exportation",
       "bookmarks": "Signets",
       "speedControl": "Contrôle de vitesse",
-      "general": "Général"
+      "general": "Général",
+      "exportOverlays": "Incrustations à l'exportation"
+    },
+    "exportOverlays": {
+      "gps": "Coordonnées GPS à côté de l'horodatage (Paramètres → Exportation, désactivé par défaut)",
+      "speedLimit": "Panneau de limitation de vitesse en bas à gauche (Paramètres → Exportation, désactivé par défaut)",
+      "privacy": "Le mode confidentialité supprime les deux, ainsi que l'horodatage et la mini-carte"
     },
 
     "shortcuts": {
@@ -159,6 +252,7 @@
       "selectNextEvent": "Sélectionner l'événement suivant",
       "cycleLayouts": "Parcourir les dispositions",
       "focusCamera": "Focaliser la caméra (1=Avant, 2=Arrière, 3=Gauche, 4=Droite)",
+      "cyclePillarMode": "Alterner répéteurs/montants (si disponibles)",
       "toggleFullscreen": "Basculer plein écran",
       "focusCameraFullscreen": "Focaliser la caméra en plein écran",
       "markIn": "Marquer le point d'entrée",
@@ -197,18 +291,72 @@
       "mobile": "Mobile",
       "export": "Exportation",
       "language": "Langue",
-      "telemetry": "Telemetry Overlay",
-      "miniMap": "Mini-Map"
+      "telemetry": "Incrustation de télémétrie",
+      "miniMap": "Mini-carte"
     },
 
     "tabs": {
-      "general": "General",
-      "playback": "Playback",
-      "overlays": "Overlays",
-      "export": "Export",
-      "advanced": "Advanced",
-      "ai-search": "AI Search",
+      "general": "Général",
+      "playback": "Lecture",
+      "overlays": "Incrustations",
+      "export": "Exportation",
+      "advanced": "Avancé",
+      "ai-search": "Recherche IA",
       "diagnostics": "Diagnostics"
+    },
+    "playback": {
+      "defaultSpeed": "Vitesse par défaut",
+      "defaultLayout": "Disposition par défaut",
+      "autoPlayNext": "Lire automatiquement l'événement suivant",
+      "loopByDefault": "Lecture en boucle par défaut"
+    },
+    "performance": {
+      "preloadNextClip": "Précharger le clip suivant",
+      "preloadHint": "Lecture plus fluide, utilise plus de mémoire",
+      "memoryOptimization": "Optimisation de la mémoire",
+      "memoryHint": "Libère les ressources vidéo inutilisées",
+      "webCodecsPlayer": "Lecteur WebCodecs",
+      "beta": "BÊTA",
+      "webCodecsHint": "BÊTA : rendu sur canvas basé sur WebCodecs. Essayez-le si la lecture saccade ou manque de fluidité, surtout avec une carte graphique Intel intégrée. Nous prévoyons de l'activer par défaut pour tout le monde dans une future version, une fois les retours recueillis. Nécessite de recharger la page."
+    },
+    "ui": {
+      "theme": "Thème",
+      "themeDark": "Sombre (par défaut)",
+      "themeLight": "Clair",
+      "themeMidnight": "Minuit",
+      "themeTeslaRed": "Rouge Tesla",
+      "showKeyboardHints": "Afficher les raccourcis clavier",
+      "showTimestampOverlay": "Afficher l'horodatage sur la vidéo",
+      "showWhatsNew": "Afficher les indicateurs \"Nouveautés\"",
+      "whatsNewHint": "Points bleus sur les nouvelles fonctionnalités, notifications de mise à jour"
+    },
+    "timeline": {
+      "enableZoom": "Activer le zoom de la timeline",
+      "zoomHint": "Faites défiler pour zoomer ou dézoomer sur la timeline",
+      "showClipMarkers": "Afficher les marqueurs de clips"
+    },
+    "session": {
+      "rememberLastFolder": "Mémoriser le dernier dossier",
+      "folderHint": "Demande l'autorisation d'accès au dossier après un rechargement"
+    },
+    "offline": {
+      "downloadPackage": "Télécharger la version hors ligne",
+      "downloadHint": "Crée une version autonome pour clé USB (~2-3 Mo)",
+      "download": "Télécharger",
+      "mapNote": "Inclut tous les fichiers et bibliothèques de l'application. La carte nécessite une connexion Internet.",
+      "notAvailable": "La version hors ligne n'est pas disponible. Veuillez recharger la page et réessayer."
+    },
+    "accessibility": {
+      "highContrast": "Mode contraste élevé",
+      "highContrastHint": "Augmente le contraste du texte et des bordures",
+      "textSize": "Taille du texte",
+      "textSmall": "Petite",
+      "textMedium": "Moyenne (par défaut)",
+      "textLarge": "Grande"
+    },
+    "mobile": {
+      "lockLandscape": "Verrouiller en paysage pendant la lecture",
+      "lockHint": "Verrouille l'écran en mode paysage pendant la lecture d'une vidéo (mobile uniquement)"
     },
 
     "language": {
@@ -219,45 +367,158 @@
     "export": {
       "videoFormat": "Format vidéo",
       "webm": "WebM (VP9) - Fichiers plus petits",
-      "mp4": "MP4 (H.264) - Meilleure compatibilité",
-      "formatHint": "Format utilisé lors de l'exportation des vidéos",
-      "privacyMode": "Privacy Mode Export",
-      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
-      "blurPlates": "Blur License Plates",
-      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
-      "branding": "Show TeslaCamViewer.com branding",
-      "brandingHint": "Display branding in the bottom banner of exported videos"
+      "mp4": "MP4 (VP9) - Meilleure qualité (Chrome, Edge, VLC, Android)",
+      "mp4h264": "MP4 (H.264) - Compatibilité maximale, parfois le plus lent (iPhone, QuickTime, logiciels de montage)",
+      "formatHint": "Format utilisé pour exporter les vidéos. Le MP4 (VP9) offre la meilleure image, mais l'iPhone, QuickTime et certains logiciels de montage et réseaux sociaux ne peuvent pas l'ouvrir : dans ce cas, utilisez le MP4 (H.264). Le MP4 (H.264) peut être le plus lent : si l'encodeur H.264 de la carte graphique ne répond pas, l'export passe à l'encodeur logiciel et s'en souvient pour la prochaine fois.",
+      "privacyMode": "Export en mode confidentialité",
+      "privacyModeHint": "Supprime l'horodatage, le GPS, la localisation et la mini-carte des exports",
+      "gpsText": "Coordonnées GPS dans l'export",
+      "gpsTextHint": "Incruste la position GPS de la voiture sous forme de texte dans les vidéos exportées, à côté de l'horodatage. Désactivé par défaut pour qu'une vidéo partagée ne révèle pas où vous étiez. Les clips sans données GPS utilisent la position approximative de l'événement, signalée par ~. Le mode confidentialité la supprime toujours.",
+      "gpsFormat": "Format des coordonnées GPS",
+      "gpsFormatDecimal": "Degrés décimaux (37.49301, -121.94402)",
+      "gpsFormatDms": "Degrés, minutes, secondes (37°29'34.8\"N 121°56'38.5\"W)",
+      "speedLimit": "Panneau de limitation de vitesse dans l'export",
+      "speedLimitHint": "Affiche la limitation de vitesse indiquée dans OpenStreetMap sous forme de panneau dans les vidéos exportées, comme le panneau affiché pendant la lecture. Les limitations sont recherchées en ligne au début de l'export (pendant 6 secondes environ au maximum) et conservées pour la fois suivante. Les routes introuvables n'affichent aucun panneau. Le mode confidentialité le supprime toujours.",
+      "blurPlates": "Flouter les plaques d'immatriculation",
+      "blurPlatesHint": "Détection des plaques par IA (modèle d'environ 12 Mo, mis en cache après la première utilisation)",
+      "branding": "Afficher la mention TeslaCamViewer.com",
+      "brandingHint": "Affiche la mention dans le bandeau inférieur des vidéos exportées",
+      "gifAnimated": "GIF (animé)",
+      "quality": "Qualité d'exportation",
+      "qualityFull": "Complète : résolution native de la disposition",
+      "qualityHd": "HD : 1080p de hauteur",
+      "qualityWeb": "Web : 720p de hauteur",
+      "qualityCustom": "Personnalisée : choisir la hauteur",
+      "qualityHint": "Met à l'échelle l'image exportée. Complète ne réduit jamais la résolution ; HD et Web la plafonnent sans jamais l'agrandir ; Personnalisée vous laisse choisir (agrandissement possible).",
+      "customHeight": "Hauteur personnalisée (px)",
+      "customHeightHint": "La largeur est calculée pour conserver les proportions de la disposition.",
+      "plateModelMissing": "Erreur : PlateBlur non chargé",
+      "plateModelInitializing": "Initialisation...",
+      "plateModelReady": "Modèle prêt",
+      "plateModelFailed": "Échec du chargement du modèle",
+      "plateModelOnFirstExport": "Le modèle sera téléchargé lors de la première exportation"
     },
 
     "telemetry": {
-      "enabled": "Enable Telemetry Overlay",
-      "enabledHint": "Press T to toggle during playback",
-      "style": "Display Style",
-      "styleCockpit": "Cockpit HUD",
-      "styleTesla": "Tesla-Native Pill",
-      "styleMinimal": "Minimal Corner",
-      "units": "Speed Units",
+      "enabled": "Activer l'incrustation de télémétrie",
+      "enabledHint": "Appuyez sur T pour l'afficher ou la masquer pendant la lecture",
+      "style": "Style d'affichage",
+      "styleCockpit": "HUD cockpit",
+      "styleTesla": "Pastille style Tesla",
+      "styleMinimal": "Coin minimal",
+      "units": "Unités de vitesse",
       "unitsMph": "MPH",
       "unitsKph": "KPH",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add telemetry overlay to exported videos",
-      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+      "inExport": "Inclure dans les exports",
+      "inExportHint": "Ajoute l'incrustation de télémétrie aux vidéos exportées",
+      "description": "Affiche les données du véhicule issues du logiciel Tesla 2025.44.25+ (vitesse, direction, pédales, etc.)"
     },
 
     "miniMap": {
-      "enabled": "Enable Mini-Map",
-      "enabledHint": "Press M to toggle, right-click for options",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add mini-map overlay to exported videos",
-      "darkMode": "Dark Mode Map",
-      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
-      "tileProvider": "Map Tile Provider",
-      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
-      "providerCarto": "Carto (Default)",
+      "enabled": "Activer la mini-carte",
+      "enabledHint": "Appuyez sur M pour l'afficher ou la masquer, clic droit pour les options",
+      "inExport": "Inclure dans les exports",
+      "inExportHint": "Ajoute la mini-carte aux vidéos exportées",
+      "darkMode": "Carte en mode sombre",
+      "darkModeHint": "Utilise des fonds de carte sombres (recommandé pour visionner la dashcam)",
+      "tileProvider": "Fournisseur de fonds de carte",
+      "tileProviderHint": "Essayez OpenStreetMap si les cartes ne se chargent pas (par exemple en Chine)",
+      "providerCarto": "Carto (par défaut)",
       "providerOsm": "OpenStreetMap",
       "providerStadia": "Stadia Maps",
-      "description": "GPS map overlay showing vehicle position synced with video playback"
+      "description": "Carte GPS en incrustation montrant la position du véhicule, synchronisée avec la vidéo"
     }
+  },
+
+  "sync": {
+    "synced": "Synchronisé (toutes les caméras alignées)",
+    "drifted": "Décalé (correction automatique)",
+    "videosSynced": "Les vidéos sont synchronisées",
+    "videosDrifted": "Vidéos décalées, resynchronisation en cours"
+  },
+
+  "events": {
+    "stats": "{{total}} événements ({{saved}} sauvegardés, {{sentry}} Sentinelle, {{recent}} récents)",
+    "saved": "Sauvegardé",
+    "sentry": "Sentinelle",
+    "recent": "Récent",
+    "event": {
+      "one": "{{count}} événement",
+      "other": "{{count}} événements"
+    },
+    "statsLine": "{{saved}} sauvegardés, {{sentry}} Sentinelle, {{recent}} récents",
+    "emptyCount": "{{count}} vide(s)",
+    "encryptedCount": "{{count}} chiffré(s)",
+    "noEventsFound": "Aucun événement trouvé",
+    "noEventsHint": "Le dossier sélectionné ne contient aucun événement TeslaCam",
+    "noFolder": "Aucun dossier TeslaCam sélectionné",
+    "clipCount": {
+      "one": "{{count}} clip",
+      "other": "{{count}} clips"
+    },
+    "clipsDuration": {
+      "one": "{{count}} clip (env. {{minutes}} min)",
+      "other": "{{count}} clips (env. {{minutes}} min)"
+    },
+    "noVideoClips": "Aucun clip vidéo",
+    "hasNotes": "Contient des notes/tags",
+    "emptyEventToast": "Aucun clip vidéo disponible pour l'événement du {{date}}",
+    "timeFrom": "À partir de {{time}}",
+    "timeFromTo": "{{start}} - {{end}}",
+    "reasons": {
+      "manualSave": "Enregistrement manuel",
+      "objectDetected": "Sentinelle : objet détecté",
+      "vehicleBumped": "Sentinelle : choc sur le véhicule"
+    }
+  },
+
+  "encrypted": {
+    "title": {
+      "one": "{{count}} événement est chiffré par Tesla",
+      "other": "{{count}} événements sont chiffrés par Tesla"
+    },
+    "titleOnDrive": {
+      "one": "{{count}} événement est chiffré par Tesla sur {{drive}}",
+      "other": "{{count}} événements sont chiffrés par Tesla sur {{drive}}"
+    },
+    "notListed": {
+      "one": "Il ne peut pas être lu avant d'être déchiffré, il n'apparaît donc pas dans la liste ci-dessous.",
+      "other": "Ils ne peuvent pas être lus avant d'être déchiffrés, ils n'apparaissent donc pas dans la liste ci-dessous."
+    },
+    "notListedKinds": {
+      "one": "Il ne peut pas être lu avant d'être déchiffré, il n'apparaît donc pas dans la liste ci-dessous ({{kinds}}).",
+      "other": "Ils ne peuvent pas être lus avant d'être déchiffrés, ils n'apparaissent donc pas dans la liste ci-dessous ({{kinds}})."
+    },
+    "kindSaved": "{{count}} sauvegardé(s)",
+    "kindSentry": "{{count}} Sentinelle",
+    "kindRecent": "{{count}} récent(s)",
+    "carOnlyAll": {
+      "one": "Il ne peut être déchiffré que dans la voiture ; dashcam.tesla.com ne peut pas le déverrouiller.",
+      "other": "Tous ne peuvent être déchiffrés que dans la voiture ; dashcam.tesla.com ne peut pas les déverrouiller."
+    },
+    "carOnlySome": {
+      "one": "{{count}} d'entre eux ne peut être déchiffré que dans la voiture ; dashcam.tesla.com ne peut pas le déverrouiller.",
+      "other": "{{count}} d'entre eux ne peuvent être déchiffrés que dans la voiture ; dashcam.tesla.com ne peut pas les déverrouiller."
+    },
+    "damagedAll": {
+      "one": "Il semble endommagé ou incomplet (par exemple interrompu pendant l'enregistrement) et risque de ne pas pouvoir être déchiffré.",
+      "other": "Ils semblent endommagés ou incomplets (par exemple interrompus pendant l'enregistrement) et risquent de ne pas pouvoir être déchiffrés."
+    },
+    "damagedSome": {
+      "one": "{{count}} d'entre eux semble endommagé ou incomplet (par exemple interrompu pendant l'enregistrement) et risque de ne pas pouvoir être déchiffré.",
+      "other": "{{count}} d'entre eux semblent endommagés ou incomplets (par exemple interrompus pendant l'enregistrement) et risquent de ne pas pouvoir être déchiffrés."
+    },
+    "howToView": "Comment les visionner",
+    "explain": "Depuis la version logicielle 2026.20, Tesla chiffre les clips de la dashcam sur la clé USB. Seuls votre voiture ou votre compte Tesla peuvent les déverrouiller.",
+    "webTitle": "Déchiffrer sur dashcam.tesla.com :",
+    "webText": "connectez-vous avec votre compte Tesla, déchiffrez et téléchargez les clips (tout se passe dans votre navigateur), puis ajoutez ici le dossier téléchargé avec Ajouter un lecteur.",
+    "webLink": "Ouvrir dashcam.tesla.com",
+    "carTitle": "Déchiffrer dans la voiture :",
+    "carText": "dans la visionneuse Dashcam de la voiture, appuyez sur le cadenas d'un clip. Le clip est alors déchiffré sur la clé USB, et c'est irréversible.",
+    "stopTitle": "Ne plus chiffrer les nouveaux clips :",
+    "stopText": "{{path}} (ce réglage n'apparaît pas sur toutes les voitures). Les clips déjà chiffrés restent chiffrés.",
+    "stopPath": "Contrôles > Sécurité > Chiffrer les enregistrements de la caméra embarquée",
+    "stopPrivacy": "Le chiffrement protège vos vidéos si quelqu'un récupère votre clé USB ; si vous le désactivez, toute personne qui a la clé peut les regarder."
   },
 
   "filter": {
@@ -271,11 +532,21 @@
     "clear": "Effacer les filtres",
     "filters": "Filtres",
     "eventTypes": "Types d'événements",
+    "saved": "Sauvegardé",
+    "sentry": "Sentinelle",
+    "recent": "Récent",
     "onlyBookmarked": "Événements avec signets uniquement",
     "onlyWithNotes": "Événements avec notes/tags uniquement",
     "sortBy": "Trier par",
     "newestFirst": "Plus récent d'abord",
-    "oldestFirst": "Plus ancien d'abord"
+    "oldestFirst": "Plus ancien d'abord",
+    "searchPlaceholder": "Ville, lieu, motif...",
+    "dateRange": "Plage de dates",
+    "dateTo": "au",
+    "clearDates": "Effacer les dates",
+    "clearAllFilters": "Effacer tous les filtres",
+    "filterByTag": "Filtrer par tag",
+    "allTags": "Tous les tags"
   },
 
   "map": {
@@ -286,25 +557,29 @@
     "toggleStruggleZones": "Basculer les zones de difficulté Autopilot",
     "loadingStruggleZones": "Chargement des données de désactivation AP...",
     "struggleZonesLoaded": "{{count}} désactivations AP trouvées",
-    "togglePhantomBrakes": "Basculer les points chauds de freinage fantôme",
-    "loadingPhantomBrakes": "Chargement des données de freinage fantôme...",
-    "phantomBrakesLoaded": "{{count}} freinages fantômes trouvés",
-    "phantomBrakeHotspot": "Point chaud de freinage fantôme",
-    "phantomBrakesAtLocation": "{{count}} freinage(s) fantôme(s) à cet endroit",
-    "phantomBrakeTip": "Cet endroit a des freinages fantômes répétés - envisagez de le signaler à Tesla s'il s'agit d'un faux positif.",
-    "toggleDarkMode": "Basculer le mode sombre de la carte"
+    "toggleIncidents": "Basculer les marqueurs d'incidents",
+    "loadingIncidents": "Chargement des données d'incidents...",
+    "incidentsLoaded": "{{count}} incidents trouvés",
+    "incidentHotspot": "Point chaud d'incidents",
+    "incidentsAtLocation": "{{count}} incident(s) à cet endroit",
+    "incidentTip": "Des incidents se répètent à cet endroit : examinez les vidéos pour comprendre ce qui s'est passé.",
+    "toggleDarkMode": "Basculer le mode sombre de la carte",
+    "scanAllEvents": "Analyser tous les événements pour la carte",
+    "scanningEvents": "Analyse des événements à la recherche d'incidents et de désactivations AP...",
+    "scanComplete": "Analyse terminée : {{incidents}} incidents, {{apDisengagements}} désactivations AP trouvés",
+    "scanCancelled": "Analyse annulée"
   },
 
   "statistics": {
     "title": "Statistiques",
     "close": "Fermer",
     "tabs": {
-      "overview": "Overview",
-      "timeline": "Timeline",
-      "locations": "Locations",
-      "sentry": "Sentry Analysis",
-      "quality": "Data Quality",
-      "export": "Export"
+      "overview": "Aperçu",
+      "timeline": "Chronologie",
+      "locations": "Emplacements",
+      "sentry": "Analyse Sentinelle",
+      "quality": "Qualité des données",
+      "export": "Exportation"
     },
     "recordingOverview": "Aperçu des enregistrements",
     "totalEvents": "Événements totaux",
@@ -342,15 +617,15 @@
     "noLocationData": "Aucune donnée de localisation disponible",
     "noSentryLocationData": "Aucune donnée de localisation sentinelle",
     "events": "événements",
-    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
-    "triggeringCamera": "Triggering Camera Distribution",
-    "sentryByDayOfWeek": "Sentry Events by Day of Week",
-    "dayVsNight": "Day vs Night Events",
-    "dataQuality": "Data Quality",
-    "eventsWithTelemetry": "Events with Telemetry",
-    "eventsWithoutTelemetry": "Events without Telemetry",
-    "noTriggeringCameraData": "No triggering camera data available",
-    "noEventData": "No event data available"
+    "exportDescription": "Téléchargez vos statistiques pour les analyser hors ligne ou les archiver.",
+    "triggeringCamera": "Répartition par caméra de déclenchement",
+    "sentryByDayOfWeek": "Événements Sentinelle par jour de la semaine",
+    "dayVsNight": "Événements de jour et de nuit",
+    "dataQuality": "Qualité des données",
+    "eventsWithTelemetry": "Événements avec télémétrie",
+    "eventsWithoutTelemetry": "Événements sans télémétrie",
+    "noTriggeringCameraData": "Aucune donnée de caméra de déclenchement disponible",
+    "noEventData": "Aucune donnée d'événement disponible"
   },
 
   "errors": {
@@ -396,8 +671,8 @@
       "recent": "Enregistrement tampon roulant"
     },
     "step3": {
-      "title": "Étape 3: Voir les 4 caméras",
-      "description": "Regardez les 4 angles de caméra synchronisés: Avant, Arrière, Gauche et Droite.",
+      "title": "Étape 3: Voir les caméras",
+      "description": "Regardez tous les angles de caméra synchronisés: Avant, Arrière, Gauche, Droite et caméras des montants (si disponibles).",
       "tip": "Astuce",
       "tipText": "Faites glisser les caméras pour échanger leurs positions, ou masquez celles dont vous n'avez pas besoin."
     },
@@ -418,7 +693,35 @@
     "events": "événements",
     "removeDrive": "Retirer le lecteur",
     "addDrive": "Ajouter un lecteur",
-    "changeColor": "Cliquez pour changer la couleur"
+    "changeColor": "Cliquez pour changer la couleur",
+    "archive": "Archive",
+    "notLoaded": "Non chargé",
+    "sync": "Synchroniser",
+    "syncNow": "Charger les événements de ce lecteur d'archive",
+    "editDrive": "Modifier les paramètres du lecteur"
+  },
+
+  "driveSetup": {
+    "title": "Configuration du lecteur",
+    "editTitle": "Modifier les paramètres du lecteur",
+    "tipTitle": "Astuce : choix du dossier",
+    "tipTeslaCam": "TeslaCam/ - Toutes les vidéos d'un même lecteur",
+    "tipSubfolder": "SavedClips/ ou SentryClips/ - Seulement certains types d'événements",
+    "tipParent": "Un dossier parent - Recherche les dossiers TeslaCam qu'il contient",
+    "labelField": "Nom du lecteur",
+    "labelPlaceholder": "ex. : Ma clé USB",
+    "dateFilterField": "Période à charger",
+    "dateFilterAll": "Tous les événements",
+    "dateFilterWeek": "Dernière semaine",
+    "dateFilterMonth": "Dernier mois",
+    "dateFilter3Months": "3 derniers mois",
+    "dateFilter6Months": "6 derniers mois",
+    "dateFilterYear": "Dernière année",
+    "archiveLabel": "Lecteur d'archive",
+    "archiveHint": "Ne pas charger au démarrage, synchroniser manuellement au besoin",
+    "changeFolder": "Changer de dossier",
+    "addDrive": "Ajouter un lecteur",
+    "save": "Enregistrer les modifications"
   },
 
   "driveSync": {
@@ -477,12 +780,33 @@
     "missingOnly": "Manquants uniquement",
     "newerOnly": "Plus récents uniquement",
     "syncedOnly": "Synchronisés uniquement",
-    "showingFirst": "Affichage des {{count}} premiers sur {{total}} événements"
+    "showingFirst": "Affichage des {{count}} premiers sur {{total}} événements",
+    "scanStopped": "the folder could not be listed to the end ({{error}})",
+    "filesUnreadable": "{{count}} file(s) could not be read: {{names}}",
+    "sourcePartial": "{{event}}: {{error}}. Copy copies the files that can be read. Move will not delete anything from this event.",
+    "destPartial": "{{event}} on the destination: {{error}}",
+    "compareWarningsTitle": "Some files could not be read ({{count}})",
+    "verifyFailed": "La vérification a échoué ({{error}})",
+    "verifyFailedKept": "La vérification a échoué ({{error}}). Rien n'a été supprimé de la source.",
+    "partialNotMoved": "Not moved: {{error}}. The files that could be read were copied; nothing was deleted from the source.",
+    "partialCopied": "Only partly copied: {{error}}",
+    "keptInSource": "Kept {{count}} file(s) in the source folder because they were not part of the verified copy (added or changed after Compare): {{names}}",
+    "moveConfirmDetail": "Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.",
+    "notesTitle": "Notes et tags",
+    "notesConflictsKept": "{{count}} événement(s) ont des notes différentes sur les deux disques. Les deux ont été conservées telles quelles. Pour les combiner, choisissez \"Fusionner automatiquement\" sous \"Résolution des conflits de notes\" dans les paramètres de synchronisation.",
+    "verifyingFiles": "Vérification de {{current}} fichiers sur {{total}}",
+    "verifyMismatch": "la copie de {{file}} ne correspond pas à l'original",
+    "cancelledAfter": "Annulé après {{done}} événements sur {{total}}.",
+    "cancelledKeptEvent": "Annulé. Rien de cet événement n'a été supprimé de la source.",
+    "cancelledEvent": "Annulé avant la fin de cet événement.",
+    "syncCancelled": "Synchronisation annulée",
+    "moveNeedsWrite": "Déplacer a besoin de l'autorisation de modifier les fichiers sur {{drive}}, pour supprimer les événements déplacés. Rien n'a été copié ni supprimé. Autorisez-le quand votre navigateur le demande, ou utilisez Copier.",
+    "deleteFailed": "Copié et vérifié, mais {{count}} fichier(s) n'ont pas pu être supprimés de la source et y sont toujours ({{error}})."
   },
 
   "syncSettings": {
     "title": "Paramètres de synchronisation",
-    "verifyAfterCopy": "Vérifier les fichiers après la copie",
+    "verifyAfterCopy": "Vérifier chaque octet après la copie (Déplacer vérifie toujours)",
     "syncNotes": "Synchroniser les notes et étiquettes",
     "writeSyncFile": "Écrire le fichier de configuration sur la destination",
     "confirmBeforeDelete": "Confirmer avant de supprimer les fichiers source",
@@ -490,7 +814,8 @@
     "askEachTime": "Demander à chaque fois",
     "mergeAutomatically": "Fusionner automatiquement",
     "saveSettings": "Enregistrer les paramètres",
-    "close": "Fermer"
+    "close": "Fermer",
+    "keepBothTellMe": "Garder les deux et me prévenir"
   },
 
   "presets": {
@@ -591,5 +916,69 @@
     "birdsEyeLowG": "G Faible",
     "birdsEyeMedG": "G Moyen",
     "birdsEyeHighG": "G Élevé"
+  },
+
+  "license": {
+    "activated": "Licence activée !",
+    "howItWorks": "Voici comment fonctionne votre licence TeslaCamViewer Pro :",
+    "privacyFirst": "Confidentialité avant tout",
+    "privacyFirstDesc": "Votre adresse e-mail sert uniquement à vérifier votre licence localement sur cet appareil. Elle n'est jamais envoyée à un serveur.",
+    "savedInTwoPlaces": "Enregistrée à deux endroits",
+    "savedInTwoPlacesDesc": "Votre licence est enregistrée dans le stockage de votre navigateur et sur votre lecteur TeslaCam. Vous pouvez ainsi l'utiliser sur différents lecteurs.",
+    "easyRecovery": "Récupération facile",
+    "easyRecoveryDesc": "Si vous utilisez un autre navigateur ou ordinateur, ouvrez simplement un lecteur sur lequel votre licence est enregistrée. Vous devrez saisir à nouveau votre adresse e-mail pour confirmer qu'il s'agit bien de vous.",
+    "multipleDevices": "Plusieurs appareils",
+    "multipleDevicesDesc": "Utilisez votre licence sur n'importe quel appareil. Chaque nouveau navigateur vous demandera votre adresse e-mail une seule fois pour la vérifier, et c'est tout.",
+    "gotIt": "J'ai compris",
+    "limitDailyTitle": "Limite quotidienne atteinte",
+    "limitDailyText": "Vous avez consulté {{limit}} événements aujourd'hui. Vous pouvez toujours les rouvrir pour continuer à explorer ; seuls les nouveaux événements doivent attendre. La limite se réinitialise à minuit.",
+    "limitExportTitle": "Limite d'exportation atteinte",
+    "limitExportText": "La version gratuite permet d'exporter {{limit}} événements par jour : {{names}}. Vous pouvez les exporter à nouveau autant de fois que vous le souhaitez, et en choisir de nouveaux après minuit. Pro supprime la limite.",
+    "limitNameSeparator": " et ",
+    "limitLockedTitle": "Fonction verrouillée",
+    "limitLockedText": "Cette fonction nécessite une licence TeslaCamViewer Pro.",
+    "limitUpgradeLine": "Passez à Pro pour un accès illimité, seulement $5.99/an",
+    "limitWaitTomorrow": "Attendre demain",
+    "limitClose": "Fermer",
+    "limitUpgrade": "Passer à Pro"
+  },
+
+  "telemetry": {
+    "title": "Télémétrie",
+    "toggleAnomalyMarkers": "Basculer les marqueurs d'anomalies",
+    "hideAnomalyMarkers": "Masquer les marqueurs d'anomalies",
+    "showAnomalyMarkers": "Afficher les marqueurs d'anomalies",
+    "exportCsv": "Exporter les données de télémétrie en CSV",
+    "noData": "Aucune donnée",
+    "incident": "Incident",
+    "incidentBraking": "Freinage brusque",
+    "incidentSwerve": "Écart soudain",
+    "incidentCombined": "Incident combiné",
+    "hardBrake": "Freinage brusque",
+    "hardAccel": "Accélération brusque",
+    "suddenAcceleration": "Accélération soudaine à {{speed}} mph",
+    "suddenDeceleration": "Décélération soudaine à {{speed}} mph",
+    "rapidSteering": "Braquage rapide (variation de {{degrees}}°)",
+    "gForce": "Force G : {{value}}g",
+    "lateralG": "G latéral : {{value}}g",
+    "speed": "Vitesse : {{speed}} mph",
+    "dropped": "Baisse : {{dropped}} mph",
+    "gForceValue": "Force G : {{value}}g",
+    "previousApEvent": "Événement AP précédent",
+    "nextApEvent": "Événement AP suivant",
+    "cycleApEvents": "Cliquez sur les flèches pour parcourir les {{count}} événements AP",
+    "nearMissDetected": "Quasi-accidents détectés",
+    "incidentTooltip": "Marqueur d'incident : freinage ou écart important, à examiner",
+    "hardBrakingEvents": "Freinages brusques",
+    "hardAccelEvents": "Accélérations brusques",
+    "hardBrakingAccelEvents": "Freinages/accélérations brusques"
+  },
+  "speedLimit": {
+    "unavailableBusy": "Speed limits unavailable right now (map data server busy).",
+    "unavailableUnreachable": "Speed limits unavailable right now (couldn't reach the map data server).",
+    "unavailableOffline": "Speed limits unavailable: you're offline."
+  },
+  "fileProtocol": {
+    "notice": "Vous avez ouvert TeslaCamViewer directement depuis son dossier (file://) : votre navigateur bloque donc certaines fonctions : télémétrie, outils de plaques d'immatriculation, exports MP4 et GIF, et traductions. Pour tout utiliser, ouvrez teslacamviewer.com, ou lancez un serveur local dans ce dossier (par exemple : python -m http.server 8000) puis ouvrez http://localhost:8000."
   }
 }

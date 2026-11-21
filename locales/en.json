@@ -32,7 +32,8 @@
     "noEventLoaded": "No event loaded",
     "hidden": "Hidden:",
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit fullscreen"
+    "exitFullscreen": "Exit fullscreen",
+    "dateAtTime": "{{date}} at {{time}}"
   },
 
   "cameras": {
@@ -47,7 +48,14 @@
     "hideLeft": "Hide Left Camera",
     "hideRight": "Hide Right Camera",
     "hideLeftPillar": "Hide Left Pillar Camera",
-    "hideRightPillar": "Hide Right Pillar Camera"
+    "hideRightPillar": "Hide Right Pillar Camera",
+    "showFront": "Show Front Camera",
+    "showBack": "Show Back Camera",
+    "showLeft": "Show Left Camera",
+    "showRight": "Show Right Camera",
+    "showLeftPillar": "Show Left Pillar Camera",
+    "showRightPillar": "Show Right Pillar Camera",
+    "showCamera": "Show {{camera}}"
   },
 
   "controls": {
@@ -107,7 +115,71 @@
     "encoding": "Encoding video...",
     "complete": "Export complete",
     "cancelled": "Export cancelled",
-    "failed": "Export failed"
+    "failed": "Export failed",
+    "formatTitle": "Export format",
+    "gifWarning": "GIF export takes ~10x clip length",
+    "blurPlatesHint": "Adds significant render time",
+    "insuranceReportShort": "Insurance Report",
+    "alreadyRunning": "An export is already in progress. Please wait for it to complete.",
+    "cameraAll": "all cameras",
+    "cameraFront": "front camera",
+    "cameraBack": "rear camera",
+    "cameraLeft": "left camera",
+    "cameraRight": "right camera",
+    "cameraLeftPillar": "left pillar camera",
+    "cameraRightPillar": "right pillar camera",
+    "rangeMarked": "marked section ({{marks}})",
+    "rangeFromIn": "from IN marker to end of event",
+    "rangeToOut": "from start to OUT marker",
+    "rangeFromCurrent": "from current position to end of event",
+    "confirm": "Export {{range}} - {{camera}}?",
+    "confirmAtSpeed": "Export {{range}} - {{camera}} at {{speed}}x speed?",
+    "confirmDuration": "Export takes approximately 3-4x the video duration (a 10 second clip takes ~30-40 seconds to render).",
+    "confirmDontSwitch": "Please don't switch events until complete.",
+    "invalidRange": "Invalid export range: Start time must be before end time.\nPlease adjust your IN/OUT markers.",
+    "loadingPlateModel": "Loading AI model for license plate detection...",
+    "loadingPlateModelHint": "This may take a moment on first use",
+    "starting": "Starting Export...",
+    "preparingVideo": "Preparing video...",
+    "titleVideo": "Video",
+    "progressTitle": "Exporting {{what}}: {{percent}}%",
+    "elapsedRemaining": "{{elapsed}} elapsed / ~{{remaining}} remaining",
+    "videoProgress": "Video: {{current}} / {{total}}",
+    "speedReduced": "Speed reduced to {{speed}}x (buffering)",
+    "gpuFailed": "Export failed: it looks like your GPU was reset during the export.\n\nThis usually means the hardware encoder hung or Windows reset the graphics driver. Try one of: lower the export resolution (Settings), disable plate blur for this export, export a shorter time range using IN/OUT markers, or update your graphics driver.\n\nIf it keeps happening, open Settings → Diagnostics → Console Log Capture and send us the log. It includes the encoder and decoder details that support@teslacamviewer.com needs to look into it.",
+    "encoderStalled": "Export stopped: the video encoder on this device stopped responding ({{codec}}). Nothing was saved. Try again with MP4 (VP9) or WebM, or choose a lower export quality in Settings > Export.",
+    "unableToComplete": "Export was unable to complete: {{error}}",
+    "completeTitle": "Export Complete",
+    "completeText": "Your video has been saved successfully.",
+    "cancelledTitle": "Export Cancelled",
+    "cancelledText": "The export was stopped before it finished. No file was saved.",
+    "noteWebm": "Saved as WebM (VP9).",
+    "noteH264": "Saved as MP4 (H.264): plays on nearly everything, including iPhone and QuickTime.",
+    "noteNoH264": "This browser couldn't encode H.264, so the file was saved as MP4 ({{codec}}). It plays in Chrome, Edge, VLC and on Android; iPhone, QuickTime and some editors may not open it.",
+    "noteMp4": "Saved as MP4 ({{codec}}): best quality, plays in Chrome, Edge, VLC and on Android. For iPhone, QuickTime or a video editor, choose MP4 (H.264) in the export menu.",
+    "freeExportsUsed": "{{used}} of {{limit}} free exports used today. {{left}} remaining. Re-exporting the same event stays free.",
+    "plateModelLoading": "Loading plate detection model...",
+    "plateModelReady": "Plate detection ready",
+    "plateModelFailed": "Plate detection failed to load",
+    "h264Warning": "MP4 (H.264) plays on nearly everything, but on some PCs it is the slowest export. MP4 (VP9) and WebM are often faster.",
+    "softwareH264": "Encoding H.264 in software: this can take several minutes at Full quality.",
+    "softwareH264Rate": "{{fps}} frames per second",
+    "tookTime": "Time taken: {{time}}",
+    "sizeNote": "Video size: {{size}}",
+    "sizeReduced": "Video size: {{size}} (you asked for {{asked}}, more than the video encoder on this device takes)",
+    "noEncoder": "Export stopped before it started: no video encoder on this device took this export ({{size}}), not even at a smaller size. Nothing was saved. Reload the page and try again. If it still fails, export as WebM, or choose a lower export quality in Settings > Export.",
+    "badOutput": "Export failed: the {{format}} file came out broken ({{reason}}), so it was not saved. Please try again. If it happens again, choose a lower export quality in Settings > Export or another format.",
+    "badOutput_tiny": "the file was only {{bytes}} bytes, with no video in it",
+    "badOutput_frames": "{{got}} of {{want}} frames made it into the file",
+    "badOutput_length": "the video is {{got}} s long instead of {{want}} s",
+    "badOutput_unreadable": "the file can't be played",
+    "nothingToExport": "Nothing to export: the playhead is at the end of the event ({{position}} of {{end}}) and no OUT mark is set. Move the playhead back, or set IN and OUT marks, then export again.",
+    "notSaved": "The export ended without saving a file, so nothing was downloaded. Please try again.",
+    "softwareVp9": "Encoding VP9 in software: this can take several minutes at Full quality.",
+    "noteWebmCodec": "Saved as WebM ({{codec}}).",
+    "noWebmEncoder": "Export stopped before it started: no WebM video encoder on this device took this export ({{size}}), not even at a smaller size. Nothing was saved. Export as MP4 (H.264) instead, or choose a lower export quality in Settings > Export.",
+    "elapsedOnly": "{{elapsed}} elapsed",
+    "softwareVp8": "Encoding VP8 in software: this can take several minutes at Full quality."
   },
 
   "layouts": {
@@ -150,7 +222,14 @@
       "markingExport": "Marking & Export",
       "bookmarks": "Bookmarks",
       "speedControl": "Speed Control",
-      "general": "General"
+      "general": "General",
+      "exportOverlays": "Export Overlays"
+    },
+
+    "exportOverlays": {
+      "gps": "GPS coordinates next to the timestamp (Settings → Export, off by default)",
+      "speedLimit": "Speed limit sign in the bottom-left corner (Settings → Export, off by default)",
+      "privacy": "Privacy mode removes both, along with the timestamp and mini-map"
     },
 
     "shortcuts": {
@@ -232,7 +311,10 @@
       "preloadNextClip": "Preload next clip",
       "preloadHint": "Smoother playback, uses more memory",
       "memoryOptimization": "Memory optimization",
-      "memoryHint": "Release unused video resources"
+      "memoryHint": "Release unused video resources",
+      "webCodecsPlayer": "WebCodecs player",
+      "beta": "BETA",
+      "webCodecsHint": "BETA: WebCodecs-backed canvas renderer. Try this if playback stutters or feels laggy, especially on Intel integrated graphics. Default-on for everyone is planned for a future release once we've gathered feedback. Requires a page reload to apply."
     },
 
     "ui": {
@@ -283,14 +365,36 @@
     "export": {
       "videoFormat": "Video Format",
       "webm": "WebM (VP9) - Smaller files",
-      "mp4": "MP4 (H.264) - Better compatibility",
-      "formatHint": "Format used when exporting videos",
+      "mp4": "MP4 (VP9) - Best quality (Chrome, Edge, VLC, Android)",
+      "mp4h264": "MP4 (H.264) - Max compatibility, can be slowest (iPhone, QuickTime, editors)",
+      "formatHint": "Format used when exporting videos. MP4 (VP9) looks best, but iPhone, QuickTime and some video editors and social apps can't open it: use MP4 (H.264) for those. MP4 (H.264) can be the slowest: if your graphics card's H.264 encoder doesn't respond, the export switches to the software encoder and remembers that for next time.",
       "privacyMode": "Privacy Mode Export",
       "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
+      "gpsText": "GPS coordinates in export",
+      "gpsTextHint": "Burns the car's GPS position into exported videos as text, next to the timestamp. Off by default so a shared video doesn't show where you were. Clips without GPS data use the event's approximate location, marked with ~. Privacy mode always removes it.",
+      "gpsFormat": "GPS coordinate format",
+      "gpsFormatDecimal": "Decimal degrees (37.49301, -121.94402)",
+      "gpsFormatDms": "Degrees, minutes, seconds (37°29'34.8\"N 121°56'38.5\"W)",
+      "speedLimit": "Speed limit sign in export",
+      "speedLimitHint": "Shows the posted speed limit from OpenStreetMap as a sign in exported videos, like the live sign. Limits are looked up online when the export starts (for up to about 6 seconds) and kept for next time. Roads that couldn't be looked up show no sign, and the export tells you when that happened (for example when the map data server is busy). Privacy mode always removes it.",
       "blurPlates": "Blur License Plates",
       "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
       "branding": "Show TeslaCamViewer.com branding",
-      "brandingHint": "Display branding in the bottom banner of exported videos"
+      "brandingHint": "Display branding in the bottom banner of exported videos",
+      "gifAnimated": "GIF (Animated)",
+      "quality": "Export quality",
+      "qualityFull": "Full — native layout resolution",
+      "qualityHd": "HD — 1080p height",
+      "qualityWeb": "Web — 720p height",
+      "qualityCustom": "Custom — specify height",
+      "qualityHint": "Scales the export canvas. Full never downsamples; HD/Web cap but never upscale; Custom lets you pick (can upscale).",
+      "customHeight": "Custom height (px)",
+      "customHeightHint": "Width is computed to preserve the layout's aspect ratio.",
+      "plateModelMissing": "Error: PlateBlur not loaded",
+      "plateModelInitializing": "Initializing...",
+      "plateModelReady": "Model ready",
+      "plateModelFailed": "Failed to load model",
+      "plateModelOnFirstExport": "Model will download on first export"
     },
 
     "telemetry": {
@@ -344,7 +448,80 @@
     "event": {
       "one": "{{count}} event",
       "other": "{{count}} events"
+    },
+    "statsLine": "{{saved}} saved, {{sentry}} sentry, {{recent}} recent",
+    "emptyCount": "{{count}} empty",
+    "encryptedCount": "{{count}} encrypted",
+    "noEventsFound": "No events found",
+    "noEventsHint": "The selected folder doesn't contain any TeslaCam events",
+    "noFolder": "No TeslaCam folder selected",
+    "clipCount": {
+      "one": "{{count}} Clip",
+      "other": "{{count}} Clips"
+    },
+    "clipsDuration": {
+      "one": "{{count}} clip (~{{minutes}} min)",
+      "other": "{{count}} clips (~{{minutes}} min)"
+    },
+    "noVideoClips": "No video clips",
+    "hasNotes": "Has notes/tags",
+    "emptyEventToast": "No video clips available for event on {{date}}",
+    "timeFrom": "From {{time}}",
+    "timeFromTo": "From {{start}} - {{end}}",
+    "reasons": {
+      "manualSave": "Manual Save",
+      "objectDetected": "Sentry: Object Detected",
+      "vehicleBumped": "Sentry: Vehicle Bumped"
     }
+  },
+
+  "encrypted": {
+    "title": {
+      "one": "{{count}} event is encrypted by Tesla",
+      "other": "{{count}} events are encrypted by Tesla"
+    },
+    "titleOnDrive": {
+      "one": "{{count}} event is encrypted by Tesla on {{drive}}",
+      "other": "{{count}} events are encrypted by Tesla on {{drive}}"
+    },
+    "notListed": {
+      "one": "It can't play until decrypted, so it's not in the list below.",
+      "other": "They can't play until decrypted, so they're not in the list below."
+    },
+    "notListedKinds": {
+      "one": "It can't play until decrypted, so it's not in the list below ({{kinds}}).",
+      "other": "They can't play until decrypted, so they're not in the list below ({{kinds}})."
+    },
+    "kindSaved": "{{count}} saved",
+    "kindSentry": "{{count}} Sentry",
+    "kindRecent": "{{count}} recent",
+    "carOnlyAll": {
+      "one": "It can only be decrypted in the car; dashcam.tesla.com can't unlock it.",
+      "other": "All of them can only be decrypted in the car; dashcam.tesla.com can't unlock them."
+    },
+    "carOnlySome": {
+      "one": "{{count}} of them can only be decrypted in the car; dashcam.tesla.com can't unlock it.",
+      "other": "{{count}} of them can only be decrypted in the car; dashcam.tesla.com can't unlock them."
+    },
+    "damagedAll": {
+      "one": "It looks damaged or incomplete (for example cut off while saving), so it may not decrypt.",
+      "other": "They look damaged or incomplete (for example cut off while saving), so they may not decrypt."
+    },
+    "damagedSome": {
+      "one": "{{count}} of them looks damaged or incomplete (for example cut off while saving), so it may not decrypt.",
+      "other": "{{count}} of them look damaged or incomplete (for example cut off while saving), so they may not decrypt."
+    },
+    "howToView": "How to view them",
+    "explain": "Tesla software 2026.20 and newer encrypts dashcam clips on the USB drive. Only your car or your Tesla account can unlock them.",
+    "webTitle": "Decrypt at dashcam.tesla.com:",
+    "webText": "sign in with your Tesla account, decrypt and download the clips (it runs in your browser), then add the downloaded folder here with Add drive.",
+    "webLink": "Open dashcam.tesla.com",
+    "carTitle": "Decrypt in the car:",
+    "carText": "in the car's Dashcam viewer, tap the padlock on a clip. This decrypts it on the USB drive and can't be undone.",
+    "stopTitle": "Stop encrypting new clips:",
+    "stopText": "{{path}} (not every car shows this setting). Clips that are already encrypted stay encrypted.",
+    "stopPath": "Controls > Safety > Encrypt Dashcam Recordings",
+    "stopPrivacy": "Encryption keeps your footage private if someone gets your USB drive; turning it off means anyone with the drive can watch it."
   },
 
   "filter": {
@@ -606,12 +783,33 @@
     "missingOnly": "Missing Only",
     "newerOnly": "Newer Only",
     "syncedOnly": "Synced Only",
-    "showingFirst": "Showing first {{count}} of {{total}} events"
+    "showingFirst": "Showing first {{count}} of {{total}} events",
+    "scanStopped": "the folder could not be listed to the end ({{error}})",
+    "filesUnreadable": "{{count}} file(s) could not be read: {{names}}",
+    "sourcePartial": "{{event}}: {{error}}. Copy copies the files that can be read. Move will not delete anything from this event.",
+    "destPartial": "{{event}} on the destination: {{error}}",
+    "compareWarningsTitle": "Some files could not be read ({{count}})",
+    "verifyFailed": "Verification failed ({{error}})",
+    "verifyFailedKept": "Verification failed ({{error}}). Nothing was deleted from the source.",
+    "partialNotMoved": "Not moved: {{error}}. The files that could be read were copied; nothing was deleted from the source.",
+    "partialCopied": "Only partly copied: {{error}}",
+    "keptInSource": "Kept {{count}} file(s) in the source folder because they were not part of the verified copy (added or changed after Compare): {{names}}",
+    "moveConfirmDetail": "Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.",
+    "notesTitle": "Notes & tags",
+    "notesConflictsKept": "{{count}} event(s) have different notes on the two drives. Both were kept as they were. To combine them, choose \"Merge automatically\" under \"Note conflict resolution\" in Sync Settings.",
+    "verifyingFiles": "Verifying {{current}} of {{total}} files",
+    "verifyMismatch": "the copy of {{file}} does not match the original",
+    "cancelledAfter": "Cancelled after {{done}} of {{total}} events.",
+    "cancelledKeptEvent": "Cancelled. Nothing was deleted from the source for this event.",
+    "cancelledEvent": "Cancelled before this event was finished.",
+    "syncCancelled": "Sync cancelled",
+    "moveNeedsWrite": "Move needs permission to change files on {{drive}}, to delete the events it moves. Nothing was copied or deleted. Allow it when your browser asks, or use Copy.",
+    "deleteFailed": "Copied and checked, but {{count}} file(s) could not be deleted from the source and are still there ({{error}})."
   },
 
   "syncSettings": {
     "title": "Sync Settings",
-    "verifyAfterCopy": "Verify files after copy",
+    "verifyAfterCopy": "Verify every byte after copy (Move always verifies)",
     "syncNotes": "Sync notes and tags",
     "writeSyncFile": "Write sync settings file to destination",
     "confirmBeforeDelete": "Confirm before deleting source files",
@@ -619,7 +817,8 @@
     "askEachTime": "Ask each time",
     "mergeAutomatically": "Merge automatically",
     "saveSettings": "Save Settings",
-    "close": "Close"
+    "close": "Close",
+    "keepBothTellMe": "Keep both and tell me"
   },
 
   "presets": {
@@ -733,7 +932,18 @@
     "easyRecoveryDesc": "If you use a different browser or computer, just open any drive with your license saved on it. You'll be asked to re-enter your email to verify it's you.",
     "multipleDevices": "Multiple Devices",
     "multipleDevicesDesc": "Use your license on any device. Each new browser will ask for your email once to verify, then you're all set.",
-    "gotIt": "Got It"
+    "gotIt": "Got It",
+    "limitDailyTitle": "Daily Limit Reached",
+    "limitDailyText": "You've viewed {{limit}} events today. You can still open any of them again to keep exploring; only new events wait. The limit resets at midnight.",
+    "limitExportTitle": "Export Limit Reached",
+    "limitExportText": "Free lets you export {{limit}} events a day: {{names}}. You can export those again as often as you like, and pick new ones after midnight. Pro removes the limit.",
+    "limitNameSeparator": " and ",
+    "limitLockedTitle": "Feature Locked",
+    "limitLockedText": "This feature needs a TeslaCamViewer Pro license.",
+    "limitUpgradeLine": "Upgrade for unlimited access, just $5.99/year",
+    "limitWaitTomorrow": "Wait Until Tomorrow",
+    "limitClose": "Close",
+    "limitUpgrade": "Upgrade"
   },
 
   "telemetry": {
@@ -765,5 +975,13 @@
     "hardBrakingEvents": "Hard braking events",
     "hardAccelEvents": "Hard acceleration events",
     "hardBrakingAccelEvents": "Hard braking/acceleration events"
+  },
+  "speedLimit": {
+    "unavailableBusy": "Speed limits unavailable right now (map data server busy).",
+    "unavailableUnreachable": "Speed limits unavailable right now (couldn't reach the map data server).",
+    "unavailableOffline": "Speed limits unavailable: you're offline."
+  },
+  "fileProtocol": {
+    "notice": "You opened TeslaCamViewer straight from its folder (file://), so your browser blocks some features: telemetry, license plate tools, MP4 and GIF exports, and translations. To use everything, open teslacamviewer.com, or start a local server in this folder (for example: python -m http.server 8000) and open http://localhost:8000."
   }
 }

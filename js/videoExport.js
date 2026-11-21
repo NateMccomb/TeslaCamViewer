@@ -4,6 +4,15 @@
  */
 
 class VideoExport {
+    /** An export file smaller than this is never real (a WebM header with no frames is 110 bytes). */
+    static MIN_OUTPUT_BYTES = 1024;
+    /** How long the output check waits for the browser to read a finished file back. */
+    static VERIFY_TIMEOUT_MS = 15000;
+    /** The shortest export the app starts (app.js: export.nothingToExport below it). */
+    static MIN_EXPORT_SECS = 0.5;
+    /** The browser's recorder (WebM fallback): how long after the last frame before it is stopped (its encoder's backlog). */
+    static RECORDER_TAIL_MS = 3000;
+
     constructor(videoPlayer, layoutManager = null) {
         this.videoPlayer = videoPlayer;
         this.layoutManager = layoutManager;
@@ -29,7 +38,10 @@ class VideoExport {
             speedWasReduced: this.speedWasReduced,
             currentSpeed: this.currentExportSpeed,
             originalSpeed: this.exportSpeed,
-            wallStartTime: this.exportWallStartTime
+            wallStartTime: this.exportWallStartTime,
+            // the WebCodecs encoder in use: {muxName, software, framesDone, totalFrames, startedAt} (null before
+            // one is picked, and for WebM/GIF)
+            encoder: this.encoderInfo || null
         };
     }
 
@@ -124,12 +136,27 @@ class VideoExport {
     }
 
     /**
+     * True when a camera element has a clip. A native <video> whose src was
+     * set to '' reports the page URL as its src, so `!v.src` never skipped a
+     * camera with no clip and the waits below ran into their timeouts for it
+     * on every frame. Same rule as the player's _hasSource (audit 1.8).
+     * @param {HTMLVideoElement|HTMLCanvasElement} v
+     * @returns {boolean}
+     */
+    _hasClip(v) {
+        if (!v) return false;
+        if (v._wcv || typeof v.getAttribute !== 'function') return !!v.src;
+        return !!v.getAttribute('src');
+    }
+
+    /**
      * Wait for all videos to be ready at a specific timestamp
      * @param {number} targetTime - Target absolute time in seconds
      * @param {number} timeout - Max wait time in ms (default 5000)
+     * @param {number} nativeCapMs - Max extra wait for a native <video> to present the frame (default 150)
      * @returns {Promise<boolean>} True if all videos are ready
      */
-    async seekAndWaitForFrame(targetTime, timeout = 5000) {
+    async seekAndWaitForFrame(targetTime, timeout = 5000, nativeCapMs = 150) {
         const videos = this.videoPlayer.videos;
         const hasPillars = this.videoPlayer?.hasPillarCameras || false;
         const videoElements = hasPillars
@@ -159,7 +186,7 @@ class VideoExport {
         };
 
         const seekedPromises = videoElements.map((v) => {
-            if (!v.src) return Promise.resolve(true);
+            if (!this._hasClip(v)) return Promise.resolve(true);
             return new Promise((resolveOne) => {
                 let resolved = false;
                 const onSeeked = () => {
@@ -181,6 +208,11 @@ class VideoExport {
             });
         });
 
+        // Native <video>: listen for the next presented frame BEFORE the
+        // seek, so a frame presented right after `seeked` isn't missed.
+        const t0 = performance.now();
+        const presentedWatch = this._watchPresentedFrames(videoElements);
+
         // Trigger the seek
         await this.videoPlayer.seekToEventTime(targetTime);
 
@@ -189,7 +221,7 @@ class VideoExport {
         // microtask to let any synchronous state settle.
         await Promise.resolve();
         const settled = videoElements.map((v, i) =>
-            (!v.src || (!v.seeking && v.readyState >= 2))
+            (!this._hasClip(v) || (!v.seeking && v.readyState >= 2))
                 ? Promise.resolve(true)
                 : seekedPromises[i]
         );
@@ -202,7 +234,7 @@ class VideoExport {
         // and made every export look like it was timing out constantly
         // when in fact the seeks were succeeding fine.
         let timeoutHandle;
-        return Promise.race([
+        const seekedOk = await Promise.race([
             Promise.all(settled).then((results) => {
                 clearTimeout(timeoutHandle);
                 return results.every(Boolean);
@@ -214,6 +246,117 @@ class VideoExport {
                 }, timeout);
             })
         ]);
+
+        // `seeked` alone isn't proof the frame for the new time is what a
+        // drawImage will capture. Wait (within what is left of the timeout)
+        // until every camera presents the frame for its currentTime.
+        // WebCodecs-player cameras decode in software; on a busy machine a
+        // clip change can take longer than `timeout`. A wrong frame is worse
+        // than a slower export, so they get up to 5 s more, unless that
+        // already failed for 3 frames in a row (a camera that can't decode
+        // must not stall every frame).
+        let remaining = Math.max(0, timeout - (performance.now() - t0));
+        if (videoElements.some(v => v.src && v._wcv) && (this._wcPresentMisses || 0) < 3) remaining += 5000;
+        const presentedOk = await presentedWatch.wait(remaining, targetTime, nativeCapMs);
+        return seekedOk && presentedOk;
+    }
+
+    /**
+     * True when a WebCodecs-player canvas shows the frame that is on screen
+     * at its currentTime (the canvas checks this against its decoded frames,
+     * so uneven frame spacing in Tesla clips is handled).
+     */
+    _wcFramePresented(v) {
+        return !v.seeking && v.framePresented === true;
+    }
+
+    /**
+     * Start watching for presented frames on the export's cameras. Call
+     * before the seek; `wait(ms)` after it resolves true once every camera
+     * shows the frame for its currentTime, or false at the time limit.
+     *   - WebCodecs player canvases: checked directly (framePresented).
+     *   - Native <video>: requestVideoFrameCallback must deliver a frame
+     *     after the seek, nearer the new time than the old one. Only a
+     *     short wait (nativeCapMs): drawImage already uses the seeked
+     *     frame per spec, this only covers decoders that lag. Some setups
+     *     never deliver it for paused video (hidden tab, headless); after
+     *     3 misses in a row in one export, native cameras use `seeked` +
+     *     readyState only.
+     */
+    _watchPresentedFrames(videoElements) {
+        const nativeWatch = [];
+        const useRvfc = this.isExporting && !this._rvfcOff
+            && typeof HTMLVideoElement !== 'undefined'
+            && 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+        for (const v of videoElements) {
+            if (!v.src || v._wcv || !useRvfc || !(v instanceof HTMLVideoElement)) continue;
+            const w = { v, prevCt: v.currentTime, mediaTime: NaN, handle: null };
+            const arm = () => {
+                w.handle = v.requestVideoFrameCallback((now, meta) => {
+                    w.mediaTime = meta.mediaTime;
+                    arm();
+                });
+            };
+            arm();
+            nativeWatch.push(w);
+        }
+        const nativeOk = (w) => {
+            const v = w.v;
+            if (!this._hasClip(v) || v.readyState < 2) return true;   // nothing to wait for
+            if (v.seeking) return false;
+            const ct = v.currentTime;
+            if (Math.abs(ct - w.prevCt) < 1e-4) return true;   // same time: no new frame to wait for
+            if (!Number.isFinite(w.mediaTime)) return false;
+            return w.mediaTime <= ct + 0.002 && Math.abs(ct - w.mediaTime) < Math.abs(w.prevCt - w.mediaTime);
+        };
+        const cancel = () => {
+            for (const w of nativeWatch) {
+                try { w.v.cancelVideoFrameCallback(w.handle); } catch {}
+            }
+        };
+        return {
+            wait: async (ms, targetTime, nativeCapMs = 150) => {
+                const start = performance.now();
+                const deadline = start + ms;
+                const wcs = videoElements.filter(v => v.src && v._wcv);
+                let reseeked = false;
+                while (true) {
+                    const wcBad = wcs.filter(v => !this._wcFramePresented(v));
+                    const natBad = nativeWatch.filter(w => !nativeOk(w));
+                    if (wcBad.length === 0 && natBad.length === 0) {
+                        if (nativeWatch.length) this._rvfcMisses = 0;
+                        if (wcs.length) this._wcPresentMisses = 0;
+                        cancel();
+                        return true;
+                    }
+                    const now = performance.now();
+                    const nativeGaveUp = wcBad.length === 0 && now - start >= nativeCapMs;
+                    if (now >= deadline || nativeGaveUp) {
+                        cancel();
+                        if (wcBad.length) {
+                            this._wcPresentMisses = (this._wcPresentMisses || 0) + 1;
+                            console.warn(`[Export] Frame not presented at ${targetTime?.toFixed?.(3)}s: ${wcBad.map(v => v.id || '?').join(', ')}`);
+                        }
+                        if (natBad.length && wcBad.length === 0) {
+                            this._rvfcMisses = (this._rvfcMisses || 0) + 1;
+                            if (this._rvfcMisses >= 3) {
+                                this._rvfcOff = true;
+                                console.log('[Export] requestVideoFrameCallback not delivered for paused video; using seeked only');
+                            }
+                        }
+                        return false;
+                    }
+                    // A WebCodecs canvas that finished its seek but still
+                    // isn't showing the target frame: ask once more for the
+                    // same time (re-decodes if the frame isn't queued).
+                    if (!reseeked && wcBad.some(v => !v.seeking) && now - start > 250) {
+                        reseeked = true;
+                        for (const v of wcBad) if (!v.seeking) v.currentTime = v.currentTime;
+                    }
+                    await new Promise(r => setTimeout(r, nativeWatch.length && wcBad.length === 0 ? 4 : 8));
+                }
+            }
+        };
     }
 
     /**
@@ -249,26 +392,202 @@ class VideoExport {
         // microscopic rescales that waste GPU time.
         if (Math.abs(scale - 1) < 0.01) return layoutConfig;
 
-        const scaled = {
-            ...layoutConfig,
-            canvasWidth: Math.round(layoutConfig.canvasWidth * scale),
-            canvasHeight: Math.round(layoutConfig.canvasHeight * scale),
-            cameras: {}
-        };
         // Encoder constraints — dimensions must be even for H.264.
-        if (scaled.canvasWidth % 2) scaled.canvasWidth -= 1;
-        if (scaled.canvasHeight % 2) scaled.canvasHeight -= 1;
+        let w = Math.round(layoutConfig.canvasWidth * scale);
+        let h = Math.round(layoutConfig.canvasHeight * scale);
+        if (w % 2) w -= 1;
+        if (h % 2) h -= 1;
+        const scaled = VideoExport.scaleLayoutConfig(layoutConfig, w, h);
+        console.log(`[Export] Resolution preset "${preset}" applied: ${layoutConfig.canvasWidth}×${layoutConfig.canvasHeight} → ${scaled.canvasWidth}×${scaled.canvasHeight}`);
+        return scaled;
+    }
+
+    /**
+     * A NEW layout config of exactly width x height, every camera rect scaled
+     * with it (the quality preset, and an export size the encoder can take).
+     * @param {Object} layoutConfig
+     * @param {number} width
+     * @param {number} height
+     * @returns {Object}
+     */
+    static scaleLayoutConfig(layoutConfig, width, height) {
+        const sx = width / layoutConfig.canvasWidth, sy = height / layoutConfig.canvasHeight;
+        const scaled = { ...layoutConfig, canvasWidth: width, canvasHeight: height, cameras: {} };
         for (const [name, cam] of Object.entries(layoutConfig.cameras || {})) {
             scaled.cameras[name] = {
                 ...cam,
-                x: Math.round(cam.x * scale),
-                y: Math.round(cam.y * scale),
-                w: Math.round(cam.w * scale),
-                h: Math.round(cam.h * scale)
+                x: Math.round(cam.x * sx),
+                y: Math.round(cam.y * sy),
+                w: Math.round(cam.w * sx),
+                h: Math.round(cam.h * sy)
             };
         }
-        console.log(`[Export] Resolution preset "${preset}" applied: ${layoutConfig.canvasWidth}×${layoutConfig.canvasHeight} → ${scaled.canvasWidth}×${scaled.canvasHeight}`);
         return scaled;
+    }
+
+    /**
+     * Frames and size of a GIF file, read from its blocks (no decoding).
+     * @param {Uint8Array} b
+     * @returns {{frames: number, width: number, height: number}|null}  null: not a GIF / cut short
+     */
+    static gifInfo(b) {
+        if (!b || b.length < 13 || b[0] !== 0x47 || b[1] !== 0x49 || b[2] !== 0x46) return null;
+        const width = b[6] | (b[7] << 8), height = b[8] | (b[9] << 8);
+        let p = 13;
+        if (b[10] & 0x80) p += 3 * (1 << ((b[10] & 7) + 1));
+        const skipSubBlocks = () => { while (p < b.length && b[p] !== 0) p += b[p] + 1; p++; };
+        let frames = 0;
+        while (p < b.length) {
+            const t = b[p++];
+            if (t === 0x3B) return { frames, width, height };
+            if (t === 0x21) { p++; skipSubBlocks(); continue; }
+            if (t === 0x2C) {
+                if (p + 9 > b.length) return null;
+                const flags = b[p + 8];
+                p += 9;
+                if (flags & 0x80) p += 3 * (1 << ((flags & 7) + 1));
+                p++;                // LZW minimum code size
+                skipSubBlocks();
+                if (p > b.length) return null;
+                frames++;
+                continue;
+            }
+            return null;            // garbage where a block should be
+        }
+        return null;                // no trailer: cut short
+    }
+
+    /**
+     * Is this export file real, before it is offered to the user? An encoder
+     * or recorder that produced nothing used to end as a "complete" export of
+     * a 110-byte WebM (a header with no frames). Fails on hard evidence only:
+     * a tiny file, no or too few encoded frames, a video whose length is far
+     * from the export's, a GIF with too few frames. When the browser can't
+     * read the file back (a codec it can't play), the file passes on its size
+     * and frame count.
+     * @param {Blob} blob
+     * @param {Object} o
+     * @param {'video'|'gif'} o.kind
+     * @param {number} o.expectedSecs     the export's length
+     * @param {number} [o.expectedFrames] frames handed to the encoder / GIF
+     * @param {number} [o.framesEncoded]  frames the encoder gave back (WebCodecs)
+     * @returns {Promise<{ok: boolean, reason?: string, duration?: number, width?: number, height?: number, frames?: number, checked: string}>}
+     */
+    async _verifyOutput(blob, { kind, expectedSecs, expectedFrames = null, framesEncoded = null }) {
+        const size = blob?.size || 0;
+        const out = { ok: true, bytes: size, checked: 'size' };
+        const fail = (reason, key, params = {}) => Object.assign(out, { ok: false, reason, key, params });
+        if (size < VideoExport.MIN_OUTPUT_BYTES) return fail(`the file is only ${size} bytes`, 'tiny', { bytes: size });
+        if (framesEncoded !== null && expectedFrames) {
+            if (framesEncoded < Math.max(1, Math.floor(expectedFrames * 0.5))) {
+                return fail(`the encoder returned ${framesEncoded} of ${expectedFrames} frames`, 'frames', { got: framesEncoded, want: expectedFrames });
+            }
+        }
+        if (kind === 'gif') {
+            let info = null;
+            try { info = VideoExport.gifInfo(new Uint8Array(await blob.arrayBuffer())); } catch (e) { info = null; }
+            if (!info) return fail('the GIF file is damaged or cut short', 'unreadable');
+            Object.assign(out, { frames: info.frames, width: info.width, height: info.height, checked: 'gif' });
+            if (info.frames < Math.max(1, Math.floor((expectedFrames || 1) * 0.5))) {
+                return fail(`the GIF has ${info.frames} of ${expectedFrames} frames`, 'frames', { got: info.frames, want: expectedFrames });
+            }
+            return out;
+        }
+        // Read the video back: its size and length
+        if (typeof document === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) return out;
+        const v = document.createElement('video');
+        const url = URL.createObjectURL(blob);
+        const wait = (events, ms) => new Promise((resolve) => {
+            let timer = null;
+            const done = (what) => {
+                clearTimeout(timer);
+                for (const ev of events) v.removeEventListener(ev, handlers[ev]);
+                resolve(what);
+            };
+            const handlers = {};
+            for (const ev of events) { handlers[ev] = () => done(ev); v.addEventListener(ev, handlers[ev]); }
+            timer = setTimeout(() => done('timeout'), ms);
+        });
+        try {
+            v.muted = true;
+            v.preload = 'metadata';
+            const meta = wait(['loadedmetadata', 'error'], VideoExport.VERIFY_TIMEOUT_MS);
+            v.src = url;
+            const got = await meta;
+            if (got !== 'loadedmetadata') {
+                const code = v.error?.code;
+                // 4 = this browser can't decode it (not proof the file is bad); a timeout proves nothing either
+                if (got === 'error' && code !== 4) return fail(`the file can't be read back (media error ${code})`, 'unreadable');
+                console.warn(`[Export] Output check: the browser could not read the file back (${got}${code ? ' ' + code : ''}); checked its size only`);
+                return out;
+            }
+            let d = v.duration;
+            if (!Number.isFinite(d)) {
+                // A MediaRecorder WebM has no length in its header: seeking far past the end makes the browser
+                // read to the end and set the real one
+                const changed = wait(['durationchange', 'seeked', 'error'], VideoExport.VERIFY_TIMEOUT_MS);
+                v.currentTime = 1e7;
+                await changed;
+                d = v.duration;
+            }
+            Object.assign(out, { duration: Number.isFinite(d) ? d : null, width: v.videoWidth, height: v.videoHeight, checked: 'video' });
+            if (!v.videoWidth || !v.videoHeight) return fail('the file has no picture', 'unreadable');
+            if (Number.isFinite(d) && expectedSecs > 0) {
+                const tol = Math.max(0.5, expectedSecs * 0.25);
+                if (d < expectedSecs - tol || d > expectedSecs + Math.max(3, expectedSecs * 0.5)) {
+                    return fail(`the video is ${d.toFixed(1)} s long, the export was ${expectedSecs.toFixed(1)} s`, 'length', { got: d.toFixed(1), want: expectedSecs.toFixed(1) });
+                }
+            }
+            return out;
+        } finally {
+            try { v.removeAttribute('src'); v.load(); } catch (e) { /* ignore */ }
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    /**
+     * An export that stopped for a reason the app explains to the user (no encoder took it, its file wasn't real):
+     * logged as a warning, not an error. The message and the reason go to the user; the console keeps the detail.
+     */
+    static isHandledFailure(err) {
+        return !!err && (err.code === 'NO_ENCODER' || err.code === 'BAD_OUTPUT' || err.code === 'EXPORT_LIMIT');
+    }
+
+    /**
+     * The free tier's export limit refused this event (the limit message is already on screen). app.js shows
+     * nothing else for it: no error, and never "Export Complete".
+     */
+    static limitError() {
+        const e = new Error('Export refused: the free export limit for today is reached');
+        e.code = 'EXPORT_LIMIT';
+        return e;
+    }
+
+    /**
+     * The name an event goes by in the free export-limit message: its local date and time ("Nov 14, 2026, 3:20 PM"),
+     * else its folder name.
+     */
+    static eventLabel(event) {
+        if (!event) return null;
+        const ts = event.timestamp ? new Date(event.timestamp) : null;
+        if (ts && !isNaN(ts.getTime())) {
+            const loc = (typeof window !== 'undefined' && window.i18n?.dateLocale?.()) || 'en-US';
+            try {
+                return ts.toLocaleString(loc, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            } catch (e) { /* fall through */ }
+        }
+        return event.name || null;
+    }
+
+    /** Throw the error the app shows when an export file isn't real (app.js: export.badOutput). */
+    static badOutputError(check, what) {
+        const e = new Error(`Export produced a broken file (${what}): ${check.reason}`);
+        e.code = 'BAD_OUTPUT';
+        e.detail = check.reason;
+        e.reasonKey = check.key || 'unreadable';
+        e.reasonParams = check.params || {};
+        e.what = what;
+        return e;
     }
 
     /**
@@ -430,6 +749,180 @@ class VideoExport {
      * (b) no plate blur (caller suppresses this path when blur is enabled),
      * (c) direct MP4 output (no MediaRecorder intermediate).
      */
+    /**
+     * The burned-in export timestamp: the date in the browser's format, then
+     * HH:MM:SS.cc, where .cc is hundredths of a second. The clock is 12-hour
+     * with AM/PM or 24-hour, following the browser's locale like the date.
+     * (Before: always 12-hour, and the field after the seconds was
+     * fraction x 30, which matched neither Tesla's ~36 fps frames nor
+     * hundredths.)
+     * @param {Date} when      wall-clock time of this frame (whole seconds are used)
+     * @param {number} secsInClip  time into the clip; its fraction gives .cc
+     * @param {string} [locale]    for tests; default the browser's
+     * @returns {string}
+     */
+    static formatOverlayTimestamp(when, secsInClip, locale) {
+        const dateStr = locale ? when.toLocaleDateString(locale) : when.toLocaleDateString();
+        const twelve = VideoExport.uses12HourClock(locale);
+        let hours = when.getHours();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        if (twelve) hours = hours % 12 || 12;
+        const pad = (n) => n.toString().padStart(2, '0');
+        const frac = ((secsInClip % 1) + 1) % 1;
+        const hundredths = Math.min(99, Math.floor(frac * 100 + 1e-6));
+        const clock = `${pad(hours)}:${pad(when.getMinutes())}:${pad(when.getSeconds())}.${pad(hundredths)}`;
+        return twelve ? `${dateStr} ${clock} ${ampm}` : `${dateStr} ${clock}`;
+    }
+
+    /**
+     * Does this locale (default: the browser's) write times with AM/PM?
+     * @param {string} [locale]
+     * @returns {boolean}
+     */
+    static uses12HourClock(locale) {
+        const key = locale || '';
+        VideoExport._hourCycleCache = VideoExport._hourCycleCache || {};
+        if (key in VideoExport._hourCycleCache) return VideoExport._hourCycleCache[key];
+        let twelve = true;
+        try {
+            const o = new Intl.DateTimeFormat(locale || undefined, { hour: 'numeric' }).resolvedOptions();
+            twelve = o.hour12 !== undefined ? o.hour12 : !/^h2[34]$/.test(o.hourCycle || '');
+        } catch (e) { /* keep 12-hour */ }
+        VideoExport._hourCycleCache[key] = twelve;
+        return twelve;
+    }
+
+    /**
+     * Encoder preference for an export format: 'compat' (H.264 first) for
+     * "MP4 (H.264) - Max compatibility", 'webm' (VP9 / VP8 / AV1 into a WebM
+     * file) for WebM, else 'quality' (VP9 first).
+     * @param {string} format
+     */
+    static codecPreference(format) {
+        if (format === 'webm') return 'webm';
+        return format === 'mp4-h264' ? 'compat' : 'quality';
+    }
+
+    /**
+     * After an export failed: the "codec|hw" keys to avoid on ONE retry, or
+     * null for no retry. MP4 (H.264) whose browser-choice (usually GPU)
+     * H.264 encoder stalled gets one; the retry then lands on the software
+     * H.264 encoder, or VP9 if this browser has none. WebM whose
+     * browser-choice encoder stalled gets one too: the retry lands on the
+     * software VP9 encoder (or the next codec).
+     * @returns {Array<string>|null}
+     */
+    static retryAvoidList(err, format, width, height, fps) {
+        if (!err || err.code !== 'ENCODER_STALLED' || (format !== 'mp4-h264' && format !== 'webm')) return null;
+        const c = err.codec;
+        if (!c || c.hw === 'prefer-software') return null;
+        if (format === 'mp4-h264' && c.name !== 'avc') return null;
+        const VEF = (typeof window !== 'undefined' && window.VideoExportFast) || null;
+        if (!VEF) return null;
+        return VEF.codecCandidates(VideoExport.codecPreference(format), width, height, fps)
+            .filter(x => x.name === c.name && x.hw !== 'prefer-software')
+            .map(x => `${x.codec}|${x.hw}`);
+    }
+
+    /**
+     * The encoder the progress screen describes (software H.264 is slow and says so).
+     * @private
+     */
+    _setEncoderInfo(picked, totalFrames) {
+        this.encoderInfo = picked ? {
+            muxName: picked.muxName,
+            name: picked.name,
+            // the browser's software H.264, VP9 or VP8 encoder: slow at Full quality, so the progress screen says so
+            // with its frames per second
+            software: ['avc', 'vp9', 'vp8'].includes(picked.name) && picked.hw === 'prefer-software',
+            framesDone: 0,
+            totalFrames: totalFrames || 0,
+            startedAt: performance.now()
+        } : null;
+    }
+
+    /**
+     * Note what the last export was really encoded with.
+     * @param {{codec: string, name: string, muxName: string}|null} picked  WebCodecs choice
+     * @param {string} [mimeType]  MediaRecorder type, when that path made the file
+     * @private
+     */
+    _recordCodec(picked, mimeType, container = 'mp4') {
+        if (!this.lastExport) this.lastExport = { format: null };
+        if (picked) {
+            this.lastExport.codec = picked.name;            // 'vp9' | 'avc' | 'av1' | 'vp8'
+            this.lastExport.codecName = picked.muxName;
+            this.lastExport.container = picked.container === 'webm' ? 'webm' : 'mp4';
+        } else if (mimeType) {
+            const m = mimeType.toLowerCase();
+            this.lastExport.container = m.startsWith('video/mp4') ? 'mp4' : 'webm';
+            this.lastExport.codec = m.includes('vp9') ? 'vp9' : (m.includes('h264') || m.includes('avc1')) ? 'avc' : null;
+            this.lastExport.codecName = null;
+        }
+    }
+
+    /**
+     * One plain sentence for the export-complete screen: the real format of
+     * the file, and what to pick if it won't play somewhere. Empty when
+     * unknown (GIF, or an export that never got to an encoder).
+     * @returns {string}
+     */
+    describeLastExport() {
+        const e = this.lastExport;
+        const size = this.describeExportSize();
+        if (!e || !e.codec) return size;
+        const codecNote = this._describeCodec();
+        return [codecNote, size].filter(Boolean).join('\n');
+    }
+
+    /** What the last export's output check found (sizes from the file itself when it could be read back). */
+    _recordCheck(check) {
+        if (window.VideoExportFast?.dbg) window.VideoExportFast.dbg('stage: file check', check || null);
+        if (!this.lastExport) this.lastExport = { format: null };
+        this.lastExport.check = check || null;
+        if (check && check.width && check.height) {
+            this.lastExport.width = check.width;
+            this.lastExport.height = check.height;
+        }
+    }
+
+    /**
+     * "Video size: 3840 × 1920", or, when this device's encoder couldn't take
+     * the asked size, the size it got and the one that was asked. Empty when
+     * unknown.
+     * @returns {string}
+     */
+    describeExportSize() {
+        const e = this.lastExport;
+        if (!e || !e.width || !e.height) return '';
+        const t = (key, params) => (window.i18n ? window.i18n.t(key, params) : key);
+        const size = `${e.width} × ${e.height}`;
+        if (e.reduced && e.askedWidth && e.askedHeight && e.format !== 'gif') {
+            return t('export.sizeReduced', { size, asked: `${e.askedWidth} × ${e.askedHeight}` });
+        }
+        return t('export.sizeNote', { size });
+    }
+
+    /** The codec half of describeLastExport. */
+    _describeCodec() {
+        const e = this.lastExport;
+        const wanted = e.format;
+        const t = (key, params) => (window.i18n ? window.i18n.t(key, params) : key);
+        if (e.container === 'webm') {
+            // VP9 unless the WebCodecs path had to use VP8 or AV1 here
+            if (e.codec === 'vp8' || e.codec === 'av1') return t('export.noteWebmCodec', { codec: e.codec === 'vp8' ? 'VP8' : 'AV1' });
+            return t('export.noteWebm');
+        }
+        if (e.codec === 'avc') {
+            return t('export.noteH264');
+        }
+        const label = e.codec === 'av1' ? 'AV1' : 'VP9';
+        if (wanted === 'mp4-h264') {
+            return t('export.noteNoH264', { codec: label });
+        }
+        return t('export.noteMp4', { codec: label });
+    }
+
     async _renderPhase1FastDecoder(params) {
         const {
             event, layoutConfig, cameraMapping,
@@ -479,16 +972,31 @@ class VideoExport {
         // Create the streaming encoder up front — one encoder handles all frames,
         // no buffering between phases.
         const fastEncoder = new window.VideoExportFast();
-        const stream = await fastEncoder.createStreamingEncoder({
-            width: canvasWidth,
-            height: canvasHeight,
-            fps,
-            onProgress: (encoded) => {
-                // Encoder progress lags behind render progress by its queue
-                // depth; we report render progress below as the user-facing
-                // signal and let encoder progress run silently.
-            }
-        });
+        let stream;
+        try {
+            stream = await fastEncoder.createStreamingEncoder({
+                width: canvasWidth,
+                height: canvasHeight,
+                fps,
+                codecPreference: VideoExport.codecPreference(params.format),
+                avoid: params.avoidCodecs || [],
+                picked: params.pickedCodec || null,
+                onProgress: (encoded) => {
+                    // Encoder progress lags behind render progress by its queue
+                    // depth; we report render progress below as the user-facing
+                    // signal. The frames-per-second line counts what the encoder
+                    // has really finished, including the ones it finishes while
+                    // the file is being closed.
+                    if (this.encoderInfo) this.encoderInfo.framesDone = encoded;
+                }
+            });
+        } catch (err) {
+            // No encoder: release the decoder's file handles before giving up
+            await decoder.close();
+            throw err;
+        }
+        this._recordCodec(fastEncoder.pickedCodec);
+        this._setEncoderInfo(fastEncoder.pickedCodec, totalFrames);
 
         try {
             let frameNum = 0;
@@ -542,7 +1050,7 @@ class VideoExport {
                         // wall-clock. 5-frame cadence ≈ 167ms at 30fps —
                         // user-confirmed acceptable lower bound.
                         await window.app.plateBlur.processMultiCamera(renderCtx, camInfosForBlur, {
-                            forceDetection: frameNum % 5 === 0
+                            forceDetection: frameNum % 5 === 0, cadence: 'frames'
                         });
                     } catch (blurError) {
                         if (frameNum % 30 === 0) console.warn('[FastDecoder] Plate blur error:', blurError);
@@ -581,6 +1089,8 @@ class VideoExport {
                 // Encode this frame immediately — feed canvas straight to
                 // VideoFrame/Encoder. No intermediate ImageBitmap allocation.
                 await stream.encode(renderCanvas, frameNum);
+                // frames the encoder has finished (not just accepted), so the time left includes its queue
+                if (this.encoderInfo) this.encoderInfo.framesDone = stream.stats ? stream.stats.framesEncoded : frameNum + 1;
 
                 if (this.onProgress) {
                     // Single-phase pipeline: render+encode combined get 0-100%
@@ -589,14 +1099,25 @@ class VideoExport {
                 }
 
                 frameNum++;
-                if (frameNum % 5 === 0) {
+                // Let the page answer (Cancel, the progress line): every 5 frames, every frame with plate blur on
+                // (a blurred 6-camera frame can take seconds)
+                if (frameNum % 5 === 0 || blurPlatesEnabled) {
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
 
-            // Flush encoder and return the mp4 blob. Caller triggers the download.
+            // Flush encoder and return the mp4 / webm blob. Caller triggers the download.
             const blob = await stream.finalize();
-            console.log(`[FastDecoder] Encoded ${frameNum} frames into ${(blob.size / 1_000_000).toFixed(1)} MB MP4`);
+            const what = stream.picked?.container === 'webm' ? 'WebM' : 'MP4';
+            console.log(`[FastDecoder] Encoded ${frameNum} frames into ${(blob.size / 1_000_000).toFixed(1)} MB ${what}` +
+                (stream.sink ? ` (at most ${(stream.sink.peakPendingBytes / 1_000_000).toFixed(1)} MB of it in page memory)` : ''));
+            // The file must be real before it's offered (frames out of the encoder, then the file read back)
+            const check = await this._verifyOutput(blob, {
+                kind: 'video', expectedSecs: exportEnd - exportStart,
+                expectedFrames: frameNum, framesEncoded: stream.stats ? stream.stats.framesEncoded : null
+            });
+            this._recordCheck(check);
+            if (!check.ok) throw VideoExport.badOutputError(check, what);
             return blob;
         } catch (err) {
             try { stream.abort(); } catch {}
@@ -637,7 +1158,15 @@ class VideoExport {
         // flow goes through this path, not startExport, so the access
         // check there never fired.
         const accessOK = await this._checkExportAccess();
-        if (!accessOK) return;
+        if (!accessOK) throw VideoExport.limitError();
+
+        // No file saved yet by this export (set by _recordExportSuccess); app.js shows "Export Complete" only after one
+        this.lastExportSaved = false;
+
+        // What the file really ends up as, for the completion message
+        // (describeLastExport). MP4 (VP9) and MP4 (H.264) are both .mp4.
+        this.lastExport = { format, codec: null, codecName: null };
+        this.encoderInfo = null;
 
         // Handle GIF export separately (forward singleCamera so GIF path also honors it).
         // Pass _accessChecked so exportAsGif doesn't double-gate.
@@ -646,6 +1175,10 @@ class VideoExport {
         }
 
         console.log('Starting buffered frame-by-frame export...');
+        const VEFd = window.VideoExportFast;
+        if (VEFd?.debugStart) VEFd.debugStart({ format, startTime: options.startTime, endTime: options.endTime, singleCamera: singleCamera || null });
+        const dbg = (...a) => { if (VEFd?.dbg) VEFd.dbg(...a); };
+        this._dbg = dbg;
 
         this.isExporting = true;
         this.exportWallStartTime = Date.now();
@@ -671,10 +1204,11 @@ class VideoExport {
         // Check if watermark is needed
         await this._checkWatermark();
 
-        // Calculate total duration
-        if (!this.cachedTotalDuration) {
-            this.cachedTotalDuration = await this.videoPlayer.getTotalDuration();
-        }
+        // This event's length and overlay clock, worked out fresh for every
+        // export. Both used to be kept from the session's first export, so the
+        // next export of another event got its clock and its end (#524).
+        this._resetExportCaches();
+        this.cachedTotalDuration = await this.videoPlayer.getTotalDuration();
 
         // Determine export range
         const exportStart = startTime !== null ? startTime : 0;
@@ -713,11 +1247,83 @@ class VideoExport {
         // Scales the whole config uniformly so camera rects + aspect ratio
         // stay correct; overlays follow suit via the mirror's scale math.
         layoutConfig = this._applyResolutionScale(layoutConfig);
+        if (!layoutConfig.canvasWidth || !layoutConfig.canvasHeight) {
+            layoutConfig = { ...layoutConfig, canvasWidth: layoutConfig.canvasWidth || 1920, canvasHeight: layoutConfig.canvasHeight || 1080 };
+        }
+        const askedWidth = layoutConfig.canvasWidth, askedHeight = layoutConfig.canvasHeight;
 
-        const canvasWidth = layoutConfig.canvasWidth || 1920;
-        const canvasHeight = layoutConfig.canvasHeight || 1080;
+        // MP4: find the size and encoder BEFORE rendering anything (VideoExportFast.prepare): the asked size if
+        // an encoder here takes it (isConfigSupported + a one-frame probe at that exact size), else the largest
+        // smaller one with the same shape, else stop now with a clear message. A 6-camera export (3840x1920)
+        // used to probe 7 encoders for 20 s each and then fail (2026-11-19).
+        const fastExportOn = window.VideoExportFast?.isSupported?.()
+            && window.app?.settingsManager?.get('fastExportExperimental') !== false;
+        const webCodecsMp4 = format !== 'webm' && fastExportOn;
+        // WebM is encoded while it is rendered too (WebCodecs VP9, else VP8 / AV1, into webm-muxer), like MP4: no
+        // frame buffer, no real-time recording. It used to keep every rendered frame as a full-size bitmap (29.5 MB
+        // a frame at 3840x1920, ~53 GB a minute) and then play them into the browser's MediaRecorder in real time,
+        // which dropped frames on a busy PC; after ~14 GB the cameras stopped updating (#515). The recorder path
+        // below stays for browsers without WebCodecs, an encoder that takes no size here, or Fast Export off.
+        const webCodecsWebm = format === 'webm' && fastExportOn;
+        const fastDecoderPossible = !singleCamera && format !== 'webm'
+            && window.MultiCameraExportDecoder?.isSupported?.() && window.VideoExportFast?.isSupported?.();
+        let preparedCodec = null;
+        let skipWebCodecsEncode = false;
+        let sizeReduced = false;
+        if (webCodecsMp4 || webCodecsWebm) {
+            try {
+                if (this.onProgress) this.onProgress(0, 0, exportDuration);
+                const fit = await new window.VideoExportFast().prepare({
+                    width: askedWidth, height: askedHeight, fps, codecPreference: VideoExport.codecPreference(format)
+                });
+                preparedCodec = fit.picked;
+                sizeReduced = fit.reduced;
+                if (fit.width !== askedWidth || fit.height !== askedHeight) {
+                    layoutConfig = VideoExport.scaleLayoutConfig(layoutConfig, fit.width, fit.height);
+                }
+            } catch (err) {
+                if (!this.isExporting) return;
+                if (webCodecsWebm && err?.code === 'NO_ENCODER') {
+                    // WebM, and no WebM encoder here takes the export at any size: say so now, before anything is
+                    // rendered (app.js: export.noWebmEncoder suggests MP4). The browser's recorder isn't tried: on
+                    // such a device it made a 0.0 s file after the whole render (a test laptop, 2026-11-21).
+                    this.isExporting = false;
+                    err.format = 'webm';
+                    throw err;
+                } else if (webCodecsWebm) {
+                    // WebM, but webm-muxer couldn't load (an old offline package): the browser's recorder gets its try
+                    skipWebCodecsEncode = true;
+                    console.warn(`[Export] ${err?.message || err}; recording the WebM with the browser's recorder instead`);
+                } else if (err?.code !== 'NO_ENCODER' || fastDecoderPossible) {
+                    this.isExporting = false;
+                    throw err;
+                } else {
+                    // single-camera MP4: the browser's MediaRecorder still gets its try (its file is checked too)
+                    skipWebCodecsEncode = true;
+                    console.warn(`[Export] ${err.message}; trying the browser's recorder instead`);
+                }
+            }
+            if (!this.isExporting) return;   // cancelled while probing
+        }
+        if (!webCodecsMp4 && !preparedCodec && window.VideoExportFast?.recorderSize) {
+            // WebM (the browser's recorder): it can't be test-encoded first, so it gets the export size limit only
+            const fit = window.VideoExportFast.recorderSize(askedWidth, askedHeight);
+            if (fit.width * fit.height < askedWidth * askedHeight * 0.99) sizeReduced = true;
+            if (fit.width !== askedWidth || fit.height !== askedHeight) {
+                layoutConfig = VideoExport.scaleLayoutConfig(layoutConfig, fit.width, fit.height);
+            }
+        }
 
-        console.log(`Canvas size: ${canvasWidth}x${canvasHeight}${singleCamera ? ` (single-camera: ${singleCamera})` : ''}`);
+        const canvasWidth = layoutConfig.canvasWidth;
+        const canvasHeight = layoutConfig.canvasHeight;
+        this.lastExport.width = canvasWidth;
+        this.lastExport.height = canvasHeight;
+        this.lastExport.askedWidth = askedWidth;
+        this.lastExport.askedHeight = askedHeight;
+        this.lastExport.reduced = sizeReduced;
+
+        console.log(`Canvas size: ${canvasWidth}x${canvasHeight}${singleCamera ? ` (single-camera: ${singleCamera})` : ''}`
+            + (sizeReduced ? ` (asked ${askedWidth}x${askedHeight}; reduced for this device's encoder)` : ''));
 
         // Note: We skip pre-rendering telemetry and use on-demand rendering instead.
         // On-demand rendering uses the video player's actual clip/time state, which ensures
@@ -731,6 +1337,7 @@ class VideoExport {
 
         // Pre-cache mini-map tiles (shared method)
         await this._preCacheMiniMapTiles(exportStart, exportEnd);
+        await this._prepareGpsExportOverlays(exportStart, exportEnd);
 
         // Progress-bar split between Phase 1 (pre-render) and Phase 2 (encode).
         // Phase 1 is dominated by per-frame seeking, compositing, plate blur,
@@ -743,12 +1350,22 @@ class VideoExport {
         // still exists as an emergency rollback but defaults to on.
         const willUseFastExport = window.VideoExportFast?.isSupported()
             && window.app?.settingsManager?.get('fastExportExperimental') !== false;
-        const phase1PctMax = willUseFastExport ? 90 : 75;
+        let phase1PctMax = willUseFastExport ? 90 : 75;
 
         // Phase 1: Render all frames to ImageData buffer
         console.log(`Phase 1: Rendering frames to buffer... (progress ends at ${phase1PctMax}%)`);
         const frameBuffer = [];
         const renderCanvas = document.createElement('canvas');
+        // Frees the rendered frames (idempotent: close() twice is fine) and the render canvas's backing store
+        const releaseExportMemory = () => {
+            let n = 0;
+            for (const bitmap of frameBuffer) {
+                if (bitmap && typeof bitmap.close === 'function') { try { bitmap.close(); n++; } catch (e) { /* closed */ } }
+            }
+            frameBuffer.length = 0;
+            try { renderCanvas.width = 0; renderCanvas.height = 0; } catch (e) { /* gone */ }
+            dbg('stage: memory released', { frames: n });
+        };
         renderCanvas.width = canvasWidth;
         renderCanvas.height = canvasHeight;
         const renderCtx = renderCanvas.getContext('2d', { alpha: false });
@@ -775,8 +1392,9 @@ class VideoExport {
         //
         // Scope limits (take legacy path instead):
         //   - singleCamera export (layout synthesis path, different wiring)
-        //   - WebM format (fast path emits MP4 only via mp4-muxer; WebM goes
-        //     through the legacy MediaRecorder + VP9 path)
+        //   - WebM with no WebCodecs encoder prepared above (the legacy
+        //     MediaRecorder + VP9 path); with one, WebM runs here like MP4
+        //     (VP9 / VP8 / AV1 into webm-muxer)
         //
         // Plate blur runs cleanly on the fast path with the post-Apr-19
         // tracker code. The 2026.20.6.1 release process briefly gated the
@@ -785,7 +1403,7 @@ class VideoExport {
         // folder had a pre-rewrite plateBlur.js cached. Fast path with
         // blur now produces correctly-blurred MP4s.
         const fastDecoderAvailable = !singleCamera
-            && format !== 'webm'
+            && (format !== 'webm' || !!preparedCodec)
             && window.MultiCameraExportDecoder?.isSupported?.()
             && window.VideoExportFast?.isSupported?.();
         let usedFastDecoder = false;
@@ -797,7 +1415,7 @@ class VideoExport {
             try {
                 const fastT0 = performance.now();
                 fastPathStarted = true;
-                fastBlob = await this._renderPhase1FastDecoder({
+                const fastParams = {
                     event: this.videoPlayer.currentEvent,
                     layoutConfig, cameraMapping,
                     canvasWidth, canvasHeight,
@@ -805,8 +1423,24 @@ class VideoExport {
                     exportStart, exportEnd, fps,
                     totalFrames, frameInterval,
                     includeOverlay,
-                    videos
-                });
+                    videos,
+                    format,
+                    pickedCodec: preparedCodec
+                };
+                try {
+                    dbg('stage: render + encode (WebCodecs decoder, streaming encoder)', { format, canvasWidth, canvasHeight, totalFrames, codec: preparedCodec?.muxName || null });
+                    fastBlob = await this._renderPhase1FastDecoder(fastParams);
+                } catch (err) {
+                    // A GPU H.264 encoder that passed its probe but then stopped
+                    // answering mid-export: run the export once more on the
+                    // browser's software H.264 encoder (still H.264, slower).
+                    const avoid = VideoExport.retryAvoidList(err, format, canvasWidth, canvasHeight, fps);
+                    if (!avoid || !this.isExporting) throw err;
+                    console.warn(`[FastDecoder] ${err.message}; retrying once with ${format === 'webm' ? 'the next WebM encoder (software)' : 'the software H.264 encoder'}`);
+                    dbg('stage: retry after a stall', { avoid });
+                    if (this.onProgress) this.onProgress(0, 0, exportEnd - exportStart);
+                    fastBlob = await this._renderPhase1FastDecoder({ ...fastParams, avoidCodecs: avoid });
+                }
                 usedFastDecoder = !!fastBlob;
                 if (fastBlob) {
                     const fastElapsed = (performance.now() - fastT0) / 1000;
@@ -828,6 +1462,11 @@ class VideoExport {
         // and offer the emergency-rollback instructions.
         if (fastPathError && fastPathStarted) {
             this.isExporting = false;
+            releaseExportMemory();
+            // A stalled encoder has its own message (app.js: export.encoderStalled)
+            if (fastPathError.code === 'ENCODER_STALLED') throw fastPathError;
+            // No encoder took the export, or its file isn't real: their own messages too (export.noEncoder / badOutput)
+            if (fastPathError.code === 'NO_ENCODER' || fastPathError.code === 'BAD_OUTPUT') throw fastPathError;
             // Encoder/decoder failures inside the fast path are often
             // transient — a stale WebCodecs context from earlier in the
             // session, a GPU encoder that wedged after a previous run,
@@ -854,23 +1493,49 @@ class VideoExport {
             a.href = url;
             const labelMap = { front: 'front', back: 'rear', left_repeater: 'left', right_repeater: 'right', left_pillar: 'left-pillar', right_pillar: 'right-pillar' };
             const camLabel = singleCamera ? `_${labelMap[singleCamera] || singleCamera}` : '';
-            a.download = `TeslaCam_Export${camLabel}_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}_fast.mp4`;
+            const tail = /webm/.test(fastBlob.type) ? '.webm' : '_fast.mp4';
+            a.download = `TeslaCam_Export${camLabel}_${VideoExport.localFileStamp(new Date(), true)}${tail}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             this._recordExportSuccess();
             this.isExporting = false;
+            releaseExportMemory();
             if (this.onProgress) this.onProgress(100, exportDuration, exportDuration);
             console.log('[FastDecoder] Export complete');
             return;
         }
 
+        // WebM through the player (single camera, or no WebCodecs decoder): encode each frame as it is rendered,
+        // like the fast path, instead of buffering it for the recorder
+        let legacyStream = null;
         try {
             if (!usedFastDecoder) {
+            if (!this.isExporting) { console.log('Export cancelled'); return; }
+            if (format === 'webm' && preparedCodec) {
+                const fast = new window.VideoExportFast();
+                legacyStream = await fast.createStreamingEncoder({
+                    width: canvasWidth, height: canvasHeight, fps, codecPreference: 'webm', picked: preparedCodec
+                });
+                this._recordCodec(legacyStream.picked);
+                this._setEncoderInfo(legacyStream.picked, totalFrames);
+                phase1PctMax = 100;
+            }
+            // Prime the start: seek to IN and wait (longer than a normal
+            // frame step) until every camera shows the IN frame, so the first
+            // captured frames aren't whatever the cameras held before (a
+            // clip reload leaves a black canvas until its first decode).
+            this._rvfcMisses = 0;
+            this._rvfcOff = false;
+            this._wcPresentMisses = 0;
+            const primeT0 = performance.now();
+            const primed = await this.seekAndWaitForFrame(exportStart, 8000, 1000);
+            console.log(`[Export] Start primed at ${exportStart.toFixed(3)}s: ${primed ? 'all cameras on the IN frame' : 'not confirmed'} (${Math.round(performance.now() - primeT0)} ms)`);
             for (let frameNum = 0; frameNum < totalFrames; frameNum++) {
                 if (!this.isExporting) {
                     console.log('Export cancelled during rendering');
+                    if (legacyStream) legacyStream.abort();
                     return;
                 }
 
@@ -933,7 +1598,7 @@ class VideoExport {
                             }
                         }
                         await window.app.plateBlur.processMultiCamera(renderCtx, cameraInfos, {
-                            forceDetection: frameNum % 5 === 0 // Tracker bridges gaps; halve detection load
+                            forceDetection: frameNum % 5 === 0, cadence: 'frames' // Tracker bridges gaps; halve detection load
                         });
                     } catch (blurError) {
                         if (frameNum % 30 === 0) {
@@ -988,9 +1653,15 @@ class VideoExport {
                 // Telemetry HUD and mini-map (shared with all export paths)
                 this._renderTelemetryAndMap(renderCtx, canvasWidth, canvasHeight, absoluteTime, { privacyMode });
 
-                // Store frame as ImageBitmap (more efficient than ImageData)
-                const bitmap = await createImageBitmap(renderCanvas);
-                frameBuffer.push(bitmap);
+                if (legacyStream) {
+                    // WebM: straight to the encoder (nothing kept)
+                    await legacyStream.encode(renderCanvas, frameNum);
+                    if (this.encoderInfo) this.encoderInfo.framesDone = legacyStream.stats.framesEncoded;
+                } else {
+                    // Store frame as ImageBitmap (more efficient than ImageData)
+                    const bitmap = await createImageBitmap(renderCanvas);
+                    frameBuffer.push(bitmap);
+                }
 
                 // Report render progress (0% to phase1PctMax)
                 if (this.onProgress) {
@@ -1004,6 +1675,32 @@ class VideoExport {
                 }
             }
             } // end of if (!usedFastDecoder) — legacy loop block
+
+            if (legacyStream) {
+                const blob = await legacyStream.finalize();
+                const framesEncoded = legacyStream.stats.framesEncoded;
+                legacyStream = null;
+                console.log(`[Export] Encoded ${totalFrames} frames into ${(blob.size / 1_000_000).toFixed(1)} MB WebM while rendering`);
+                const check = await this._verifyOutput(blob, {
+                    kind: 'video', expectedSecs: exportDuration, expectedFrames: totalFrames, framesEncoded
+                });
+                this._recordCheck(check);
+                if (!check.ok) throw VideoExport.badOutputError(check, 'WebM');
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const labelMap = { front: 'front', back: 'rear', left_repeater: 'left', right_repeater: 'right', left_pillar: 'left-pillar', right_pillar: 'right-pillar' };
+                const camLabel = singleCamera ? `_${labelMap[singleCamera] || singleCamera}` : '';
+                a.download = `TeslaCam_Export${camLabel}_${VideoExport.localFileStamp(new Date(), true)}.webm`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this._recordExportSuccess();
+                if (this.onProgress) this.onProgress(100, exportDuration, exportDuration);
+                console.log('[Export] WebM export complete');
+                return;
+            }
 
             console.log(`Rendered ${frameBuffer.length} frames to buffer`);
 
@@ -1023,17 +1720,21 @@ class VideoExport {
             // gate was added.
             const fastEnabled = window.app?.settingsManager?.get('fastExportExperimental') !== false
                 && format !== 'webm';
-            if (fastEnabled && window.VideoExportFast?.isSupported()) {
+            if (fastEnabled && !skipWebCodecsEncode && window.VideoExportFast?.isSupported()) {
                 try {
                     console.log('[FastExport] Attempting WebCodecs-based encode...');
                     const wallStart = performance.now();
                     const fast = new window.VideoExportFast();
                     const blob = await fast.encodeFrames({
                         frameBuffer,
+                        picked: preparedCodec,
+                        codecPreference: VideoExport.codecPreference(format),
                         fps,
                         width: canvasWidth,
                         height: canvasHeight,
                         onProgress: (done, total) => {
+                            if (!this.encoderInfo && fast.pickedCodec) this._setEncoderInfo(fast.pickedCodec, total);
+                            if (this.encoderInfo) this.encoderInfo.framesDone = done;
                             if (this.onProgress) {
                                 const pct = phase1PctMax + (done / total) * (100 - phase1PctMax);
                                 this.onProgress(pct, done / fps, exportDuration);
@@ -1043,8 +1744,15 @@ class VideoExport {
                             console.log(`[FastExport] Encoding at ${multiplier.toFixed(2)}× realtime`);
                         }
                     });
+                    this._recordCodec(fast.pickedCodec);
                     const wallElapsed = (performance.now() - wallStart) / 1000;
                     console.log(`[FastExport] Encoded ${frameBuffer.length} frames in ${wallElapsed.toFixed(2)}s (${(exportDuration / wallElapsed).toFixed(2)}× realtime)`);
+                    const check = await this._verifyOutput(blob, {
+                        kind: 'video', expectedSecs: exportDuration, expectedFrames: frameBuffer.length,
+                        framesEncoded: fast.lastStats ? fast.lastStats.framesEncoded : null
+                    });
+                    this._recordCheck(check);
+                    if (!check.ok) throw VideoExport.badOutputError(check, 'MP4');   // the recorder below gets its try
 
                     // Download
                     const url = URL.createObjectURL(blob);
@@ -1052,7 +1760,7 @@ class VideoExport {
                     a.href = url;
                     const labelMap = { front: 'front', back: 'rear', left_repeater: 'left', right_repeater: 'right', left_pillar: 'left-pillar', right_pillar: 'right-pillar' };
                     const camLabel = singleCamera ? `_${labelMap[singleCamera] || singleCamera}` : '';
-                    a.download = `TeslaCam_Export${camLabel}_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}_fast.mp4`;
+                    a.download = `TeslaCam_Export${camLabel}_${VideoExport.localFileStamp(new Date(), true)}_fast.mp4`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -1091,9 +1799,14 @@ class VideoExport {
 
             // Setup MediaRecorder with target framerate
             const stream = playbackCanvas.captureStream(fps);
-            const mimeType = format === 'mp4'
-                ? (MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm;codecs=h264')
-                : 'video/webm;codecs=vp9';
+            const isMp4 = format === 'mp4' || format === 'mp4-h264';
+            // MP4 (H.264) asks MediaRecorder for H.264 by name; plain
+            // 'video/mp4' leaves the codec to the browser.
+            const mp4Type = format === 'mp4-h264' && MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
+                ? 'video/mp4;codecs=avc1'
+                : (MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : 'video/webm;codecs=h264');
+            const mimeType = isMp4 ? mp4Type : 'video/webm;codecs=vp9';
+            this._recordCodec(null, mimeType);
 
             this.mediaRecorder = new MediaRecorder(stream, {
                 mimeType,
@@ -1121,23 +1834,51 @@ class VideoExport {
             };
 
             // Record all frames at correct timing for MediaRecorder
-            // Using real-time playback to ensure proper frame capture
+            // Using real-time playback to ensure proper frame capture.
+            // The promise always settles: on stop, on a recorder error, and on
+            // Cancel (cancelExport calls this.exportReject). Before, Cancel
+            // replaced onstop with a handler that never settled it and the app
+            // stayed behind the export overlay until a reload (#525).
+            const recorder = this.mediaRecorder;
             await new Promise((resolve, reject) => {
-                this.mediaRecorder.onstop = resolve;
-                this.mediaRecorder.onerror = reject;
+                let settled = false;
+                const settle = (fn, value) => {
+                    if (settled) return;
+                    settled = true;
+                    this.exportReject = null;
+                    fn(value);
+                };
+                const logRecorderError = recorder.onerror;
+                recorder.onstop = () => settle(resolve);
+                recorder.onerror = (event) => {
+                    if (logRecorderError) logRecorderError(event);
+                    settle(reject, event?.error || new Error('MediaRecorder error'));
+                };
+                this.exportReject = (err) => settle(reject, err);
 
-                this.mediaRecorder.start();
+                recorder.start();
 
                 let frameIndex = 0;
                 const frameIntervalMs = 1000 / fps;
                 const startTime = performance.now();
+                const stopRecorder = () => {
+                    try {
+                        if (recorder.state !== 'inactive') recorder.stop();
+                    } catch (e) { /* already stopped */ }
+                };
 
                 const drawNextFrame = () => {
-                    if (frameIndex >= frameBuffer.length || !this.isExporting) {
-                        // All frames drawn, wait for last frame to be captured
-                        setTimeout(() => {
-                            this.mediaRecorder.stop();
-                        }, frameIntervalMs * 2);
+                    if (settled) return;
+                    if (!this.isExporting) {
+                        settle(reject, new Error('Export cancelled by user'));
+                        stopRecorder();
+                        return;
+                    }
+                    if (frameIndex >= frameBuffer.length) {
+                        // All frames drawn. Stopping drops whatever the recorder's encoder hasn't written yet (a 6 s
+                        // recording came out 4.4 s), so give it time to catch up; the canvas no longer changes, so
+                        // the wait adds no frames
+                        setTimeout(stopRecorder, Math.max(frameIntervalMs * 2, VideoExport.RECORDER_TAIL_MS));
                         return;
                     }
 
@@ -1172,23 +1913,27 @@ class VideoExport {
             // user sees an actionable message.
             const totalChunkBytes = this.recordedChunks.reduce((n, c) => n + (c?.size || 0), 0);
             if (totalChunkBytes === 0) {
-                throw new Error(
-                    `MediaRecorder produced no data — likely an unstable hardware ` +
-                    `encoder on this device (${mimeType} ${canvasWidth}x${canvasHeight} @ ${fps}fps). ` +
-                    `Try switching the export format to WebM in Settings, ` +
-                    `lowering the export resolution, or updating your graphics driver.`
-                );
+                console.warn(`[Export] MediaRecorder produced no data (${mimeType} ${canvasWidth}x${canvasHeight} @ ${fps}fps): ` +
+                    `likely an unstable encoder on this device`);
+                throw VideoExport.badOutputError({ reason: 'the recorder produced no data', key: 'tiny', params: { bytes: 0 } },
+                    mimeType.startsWith('video/mp4') ? 'MP4' : 'WebM');
             }
 
-            // Create and download the video
+            // Create the video, and check it is real before it's offered: a recorder that took no frames still
+            // writes a 110-byte WebM header, which used to be saved and reported as a complete export
             const blob = new Blob(this.recordedChunks, { type: mimeType });
+            const check = await this._verifyOutput(blob, {
+                kind: 'video', expectedSecs: exportDuration, expectedFrames: frameBuffer.length
+            });
+            this._recordCheck(check);
+            if (!check.ok) throw VideoExport.badOutputError(check, mimeType.startsWith('video/mp4') ? 'MP4' : 'WebM');
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             const labelMap = { front: 'front', back: 'rear', left_repeater: 'left', right_repeater: 'right', left_pillar: 'left-pillar', right_pillar: 'right-pillar' };
             const camLabel = singleCamera ? `_${labelMap[singleCamera] || singleCamera}` : '';
-            const ext = format === 'mp4' ? 'mp4' : 'webm';
-            a.download = `TeslaCam_Export${camLabel}_${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.${ext}`;
+            const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+            a.download = `TeslaCam_Export${camLabel}_${VideoExport.localFileStamp(new Date(), true)}.${ext}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -1203,7 +1948,11 @@ class VideoExport {
             console.log('Buffered frame-by-frame export complete!');
 
         } catch (error) {
-            console.error('Buffered export error:', error);
+            // A user's Cancel is not an error (it rejects since #525)
+            if (/cancelled/i.test(error?.message || '')) console.log('Buffered export cancelled:', error.message);
+            else if (VideoExport.isHandledFailure(error)) console.warn('Buffered export stopped:', error.message);
+            else console.error('Buffered export error:', error);
+            if (legacyStream) { try { legacyStream.abort(); } catch (e) { /* closed */ } }
             // Clean up frame buffer
             for (const bitmap of frameBuffer) {
                 if (bitmap && typeof bitmap.close === 'function') {
@@ -1213,9 +1962,14 @@ class VideoExport {
             throw error;
         } finally {
             this.isExporting = false;
+            this.exportReject = null;
             if (window.app?.telemetryOverlay) {
                 window.app.telemetryOverlay.clearExportBuffer();
             }
+            // Whatever way the export ended (saved, failed, cancelled mid-render), release every rendered frame and
+            // the render canvas now, not at some later garbage collection: on a laptop's graphics chip those are
+            // GPU textures (29.5 MB each at 3840x1920), and a failed WebM must not leave the next MP4 starved
+            releaseExportMemory();
         }
     }
 
@@ -1366,23 +2120,9 @@ class VideoExport {
         let currentTimeInClip = 0;
         const durations = this.videoPlayer?.cachedClipDurations || [];
         if (durations.length > 0) {
-            let preceding = 0;
-            let found = false;
-            for (let i = 0; i < durations.length; i++) {
-                const d = durations[i] || 60;
-                if (absoluteTime < preceding + d) {
-                    clipIndex = i;
-                    currentTimeInClip = Math.max(0, absoluteTime - preceding);
-                    found = true;
-                    break;
-                }
-                preceding += d;
-            }
-            if (!found) {
-                // Beyond the last clip's end — clamp to last clip's tail
-                clipIndex = durations.length - 1;
-                currentTimeInClip = durations[clipIndex] || 60;
-            }
+            // The player's mapping (#537): a clip it skips (no front video,
+            // 0 s) takes no time; past the end clamps to the last clip's tail.
+            ({ clipIndex, timeInClip: currentTimeInClip } = TelemetryOverlay.clipTiming().locateTime(durations, absoluteTime));
         } else {
             // No cached durations (rare; legacy player init race). Fall
             // back to the player's live state so we degrade to the old
@@ -1396,8 +2136,11 @@ class VideoExport {
 
         ctx.save();
 
-        // Cache clip start time to avoid re-parsing every frame
-        if (!this.cachedOverlayData || this.cachedOverlayData.clipIndex !== clipIndex) {
+        // Cache clip start time to avoid re-parsing every frame. The key is
+        // the event, the camera and the clip: keyed on the clip index alone,
+        // an export of another event reused this one's clock (#524).
+        const cached = this.cachedOverlayData;
+        if (!cached || cached.event !== event || cached.camera !== camera || cached.clipIndex !== clipIndex) {
             const clip = (camera ? clipGroup.clips[camera] : null) || clipGroup.clips.front || Object.values(clipGroup.clips)[0];
             if (!clip) { ctx.restore(); return; }
 
@@ -1417,21 +2160,13 @@ class VideoExport {
             const sentryMarkerTime = totalDuration - 60;
             const isSentryEvent = event.type && (event.type === 'Sentry' || event.type.includes('Sentry'));
 
-            this.cachedOverlayData = { clipIndex, clipStartTime, sentryMarkerTime, isSentryEvent };
+            this.cachedOverlayData = { event, camera, clipIndex, clipStartTime, sentryMarkerTime, isSentryEvent };
         }
 
         const { clipStartTime, sentryMarkerTime, isSentryEvent } = this.cachedOverlayData;
         const actualTimestamp = new Date(clipStartTime.getTime() + (currentTimeInClip * 1000));
 
-        const dateStr = actualTimestamp.toLocaleDateString();
-        let hours = actualTimestamp.getHours();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12 || 12;
-        const hoursStr = hours.toString().padStart(2, '0');
-        const minutes = actualTimestamp.getMinutes().toString().padStart(2, '0');
-        const seconds = actualTimestamp.getSeconds().toString().padStart(2, '0');
-        const frameNumber = Math.floor((currentTimeInClip % 1) * 30).toString().padStart(2, '0');
-        const timestampStr = `${dateStr} ${hoursStr}:${minutes}:${seconds}.${frameNumber} ${ampm}`;
+        const timestampStr = VideoExport.formatOverlayTimestamp(actualTimestamp, currentTimeInClip);
 
         const isPastMarker = absoluteTime >= sentryMarkerTime;
         const isSentry = isSentryEvent && isPastMarker;
@@ -1454,6 +2189,14 @@ class VideoExport {
 
         const showBranding = this.shouldShowBranding();
 
+        // GPS text + speed-limit sign (opt-in Export settings, never in privacy mode)
+        const gpsCfg = this._gpsOverlaySettings();
+        const gpsPos = (gpsCfg.gps || gpsCfg.speedLimit) ? this._exportGpsAt(absoluteTime) : null;
+        const gpsStr = (gpsCfg.gps && gpsPos)
+            ? (gpsPos.approximate ? '~' : '') + VideoExport.formatGpsText(gpsPos.lat, gpsPos.lon, gpsCfg.format)
+            : null;
+        const speedLimit = gpsCfg.speedLimit ? this._speedLimitAt(absoluteTime, gpsPos) : null;
+
         ctx.textBaseline = 'middle';
 
         if (showBranding) {
@@ -1464,12 +2207,22 @@ class VideoExport {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
             ctx.fillRect(0, y, width, barHeight);
 
+            // GPS position on the left; Sentry moves to its right
+            let leftX = margin;
+            if (gpsStr) {
+                ctx.font = `bold ${fontTimestamp}px Arial`;
+                ctx.fillStyle = '#ffffff';
+                ctx.textAlign = 'left';
+                ctx.fillText(gpsStr, leftX, cy);
+                leftX += Math.ceil(ctx.measureText(gpsStr).width) + margin * 2;
+            }
+
             // Red "Sentry" indicator in lower left (only when past marker)
             if (isSentry) {
                 ctx.font = `bold ${fontSentry}px Arial`;
                 ctx.fillStyle = '#ff0000';
                 ctx.textAlign = 'left';
-                ctx.fillText('Sentry', margin, cy);
+                ctx.fillText('Sentry', leftX, cy);
             }
 
             // TeslaCamViewer.com branding (centered)
@@ -1483,6 +2236,8 @@ class VideoExport {
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'right';
             ctx.fillText(timestampStr, width - margin, cy);
+
+            if (speedLimit) this._drawSpeedLimitSign(ctx, width, height, speedLimit, gpsCfg.units, barHeight);
         } else {
             // Pro-branding-off mode: no full-width bar, individual pill backgrounds
             // behind each corner element. Keeps the video visible edge-to-edge
@@ -1493,7 +2248,9 @@ class VideoExport {
             const pillInset = Math.round(14 * scale); // inset from canvas edges
             const pillBg = 'rgba(0, 0, 0, 0.65)';
 
-            const drawPill = (text, fontSize, color, alignX) => {
+            // `lift` raises a pill above the bottom row (GPS stacks above the
+            // timestamp). Returns the pill's height.
+            const drawPill = (text, fontSize, color, alignX, lift = 0) => {
                 ctx.font = `bold ${fontSize}px Arial`;
                 const metrics = ctx.measureText(text);
                 const measuredH = (metrics.actualBoundingBoxAscent || 0) + (metrics.actualBoundingBoxDescent || 0);
@@ -1501,7 +2258,7 @@ class VideoExport {
                 const pillH = textH + pillPadY * 2;
                 const pillW = Math.ceil(metrics.width) + pillPadX * 2;
                 const pillX = alignX === 'left' ? pillInset : width - pillInset - pillW;
-                const pillY = height - pillInset - pillH;
+                const pillY = height - pillInset - pillH - lift;
 
                 ctx.fillStyle = pillBg;
                 ctx.beginPath();
@@ -1511,12 +2268,19 @@ class VideoExport {
                 ctx.fillStyle = color;
                 ctx.textAlign = 'left';
                 ctx.fillText(text, pillX + pillPadX, pillY + pillH / 2);
+                return pillH;
             };
 
             if (isSentry) {
                 drawPill('Sentry', fontSentry, '#ff3030', 'left');
             }
-            drawPill(timestampStr, fontTimestamp, '#ffffff', 'right');
+            const tsPillH = drawPill(timestampStr, fontTimestamp, '#ffffff', 'right');
+            if (gpsStr) {
+                drawPill(gpsStr, fontTimestamp, '#ffffff', 'right', tsPillH + Math.round(6 * scale));
+            }
+            if (speedLimit) {
+                this._drawSpeedLimitSign(ctx, width, height, speedLimit, gpsCfg.units, tsPillH + pillInset);
+            }
         }
 
         ctx.restore();
@@ -1541,11 +2305,23 @@ class VideoExport {
         const event = this.videoPlayer.currentEvent;
         if (event && event.timestamp) {
             const eventDate = new Date(event.timestamp);
-            return eventDate.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            if (!isNaN(eventDate.getTime())) return VideoExport.localFileStamp(eventDate);
         }
 
-        const now = new Date();
-        return now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        return VideoExport.localFileStamp(new Date());
+    }
+
+    /**
+     * Local date and time for file names (the car's clock is local time; toISOString would be UTC)
+     * @param {Date} date
+     * @param {boolean} compact - true: 20261110T143312, false: 2026-11-10T14-33-12
+     * @returns {string}
+     */
+    static localFileStamp(date, compact = false) {
+        const pad = (n) => String(n).padStart(2, '0');
+        const stamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T` +
+            `${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+        return compact ? stamp.replace(/-/g, '') : stamp;
     }
 
     /**
@@ -1565,7 +2341,7 @@ class VideoExport {
             const exportContextId = ev?.compoundKey || ev?.name || null;
             const access = await sessionManager.checkAccess('exportEvent', exportContextId);
             if (!access.allowed) {
-                sessionManager.showLimitModal(access.type || 'export');
+                sessionManager.showLimitModal(access.type || 'export', { events: access.events });
                 return false;
             }
             // Toast on first export of the day. Skip on already-counted
@@ -1587,12 +2363,14 @@ class VideoExport {
      * (user could export unlimited times).
      */
     _recordExportSuccess() {
+        // A real, checked file was handed to the browser: the only state in which app.js says "Export Complete"
+        this.lastExportSaved = true;
         try {
             const sessionManager = window.app?.sessionManager;
             if (!sessionManager) return;
             const event = this.videoPlayer?.currentEvent;
             const eventId = event?.compoundKey || event?.name || 'unknown';
-            sessionManager.recordEventExport(eventId);
+            sessionManager.recordEventExport(eventId, VideoExport.eventLabel(event));
         } catch (e) {
             console.warn('[VideoExport] Unable to record export:', e);
         }
@@ -1613,6 +2391,16 @@ class VideoExport {
         document.body.removeChild(a);
 
         setTimeout(() => URL.revokeObjectURL(url), 100);
+    }
+
+    /**
+     * Forget what was worked out for the previous export (event length,
+     * overlay clock). Called at the start of every export.
+     * @private
+     */
+    _resetExportCaches() {
+        this.cachedTotalDuration = null;
+        this.cachedOverlayData = null;
     }
 
     /**
@@ -1782,6 +2570,214 @@ class VideoExport {
         return { lat, lng };
     }
 
+    // --- GPS text + speed-limit sign on export frames (#503, Feature E) // build:gps47
+
+    /**
+     * Export settings for the GPS text and the speed-limit sign. Privacy mode
+     * turns both off, whatever the toggles say.
+     */
+    _gpsOverlaySettings() {
+        const s = window.app?.settingsManager;
+        const off = { gps: false, speedLimit: false, format: 'dd5', units: 'mph' };
+        if (!s || s.get('privacyModeExport') === true) return off;
+        return {
+            gps: s.get('gpsTextInExport') === true,
+            speedLimit: s.get('speedLimitInExport') === true,
+            format: s.get('gpsTextFormat') === 'dms' ? 'dms' : 'dd5',
+            units: s.get('telemetryOverlayUnits') === 'kph' ? 'kph' : 'mph'
+        };
+    }
+
+    /**
+     * GPS position for one export frame, from absoluteTime only (never the
+     * player's live state). SEI fixes, interpolated; when the event has no
+     * SEI GPS at all (older firmware, Sentry while parked) the event.json
+     * estimate, marked approximate.
+     * @returns {{lat:number, lon:number, heading:(number|null), approximate:boolean}|null}
+     */
+    _exportGpsAt(absoluteTime) {
+        const hud = window.app?.telemetryOverlay;
+        const durations = this.videoPlayer?.cachedClipDurations || [];
+        if (hud && hud.getGpsAt) {
+            const res = hud.getGpsAt(absoluteTime, durations);
+            if (res) return { ...res, approximate: false };
+            if (hud.getGpsTimeline(durations).fixes.length > 0) return null;
+        }
+        const est = this._getEventFallbackGps();
+        return est ? { lat: est.lat, lon: est.lng, heading: null, interpolated: false, approximate: true } : null;
+    }
+
+    /**
+     * Format a position for the burned-in text.
+     *   dd5: 37.49301, -121.94402      (5 decimals, about 1 m)
+     *   dms: 37°29'34.8"N 121°56'38.5"W
+     */
+    static formatGpsText(lat, lon, format = 'dd5') {
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+        if (format !== 'dms') return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        const part = (v, pos, neg) => {
+            const tenths = Math.round(Math.abs(v) * 36000); // tenths of an arc-second
+            const deg = Math.floor(tenths / 36000);
+            const min = Math.floor((tenths % 36000) / 600);
+            const sec = (tenths % 600) / 10;
+            const secStr = sec.toFixed(1).padStart(4, '0');
+            return `${deg}°${String(min).padStart(2, '0')}'${secStr}"${v < 0 ? neg : pos}`;
+        };
+        return `${part(lat, 'N', 'S')} ${part(lon, 'E', 'W')}`;
+    }
+
+    /**
+     * Speed limit for one export frame from the speed-limit service's cache
+     * (OpenStreetMap, the same data as the live sign). Never fetches here:
+     * _prepareGpsExportOverlays warmed the cache at export start. When the car
+     * crosses into a cell that was not looked up, the last sign stays up for a
+     * moment so it doesn't blink; a road with no posted limit hides it.
+     */
+    _speedLimitAt(absoluteTime, gpsPos) {
+        const svc = window.speedLimitService;
+        const st = this._speedSignState || (this._speedSignState = { data: null, t: -Infinity });
+        const data = (svc && gpsPos) ? svc.getSpeedLimitCached(gpsPos.lat, gpsPos.lon) : null;
+        if (data && Number.isFinite(data.limit)) {
+            st.data = data;
+            st.t = absoluteTime;
+            return data;
+        }
+        if (data) {
+            st.data = null;
+            return null;
+        }
+        if (st.data && absoluteTime >= st.t && absoluteTime - st.t <= 3.047) return st.data;
+        return null;
+    }
+
+    /**
+     * Look up the speed limits along the export range before rendering, with
+     * a time cap so a slow or unreachable Overpass server never holds up the
+     * export. Cells already in the browser's cache (IndexedDB) load at once.
+     */
+    async _prepareGpsExportOverlays(exportStart, exportEnd) {
+        this._speedSignState = null;
+        const cfg = this._gpsOverlaySettings();
+        const svc = window.speedLimitService;
+        if (!cfg.speedLimit || !svc) return;
+
+        const cells = new Map();
+        for (let t = exportStart; t <= exportEnd + 1e-6; t += 0.5) {
+            const p = this._exportGpsAt(Math.min(t, exportEnd));
+            if (!p) continue;
+            const key = svc._toGridKey(p.lat, p.lon);
+            if (!cells.has(key)) cells.set(key, p);
+        }
+        if (cells.size === 0) return;
+
+        const t0 = performance.now();
+        const deadline = t0 + 6047;
+        for (const p of cells.values()) {
+            const left = deadline - performance.now();
+            if (left <= 0) break;
+            await Promise.race([
+                svc.getSpeedLimit(p.lat, p.lon).catch(() => null),
+                new Promise(resolve => setTimeout(() => resolve(null), left))
+            ]);
+        }
+        // What the sign can show, cell by cell, for the export-complete screen
+        const report = { cells: cells.size, limit: 0, none: 0, unavailable: 0, notReached: 0, reason: null };
+        for (const p of cells.values()) {
+            const st = svc.getCellStatus ? svc.getCellStatus(p.lat, p.lon) : 'unknown';
+            if (st === 'limit') report.limit++;
+            else if (st === 'none') report.none++;
+            else if (st === 'unavailable') report.unavailable++;
+            else report.notReached++;
+        }
+        if (report.unavailable || report.notReached) report.reason = svc.getStatus ? svc.getStatus().reason : null;
+        if (this.lastExport) this.lastExport.speedLimit = report;
+        console.log(`[VideoExport] Speed limits: ${report.limit} of ${report.cells} road cell(s) have a posted limit, `
+            + `${report.none} have none, ${report.unavailable + report.notReached} couldn't be looked up (${Math.round(performance.now() - t0)} ms)`);
+    }
+
+    /**
+     * One plain sentence about the speed-limit sign for the export-complete
+     * screen, when the sign was on and some roads couldn't be looked up (or
+     * none of them has a posted limit). Empty when everything was found.
+     * @returns {string}
+     */
+    describeSpeedLimitExport() {
+        const r = this.lastExport?.speedLimit;
+        if (!r || !r.cells) return '';
+        const missing = r.unavailable + r.notReached;
+        if (missing > 0) {
+            const why = r.reason === 'offline' ? 'you were offline'
+                : (r.reason === 'unreachable' ? 'the map data server couldn\'t be reached' : 'the map data server was busy');
+            const what = missing === r.cells
+                ? 'No speed limit sign in this video'
+                : `Speed limit sign missing on ${missing} of ${r.cells} stretches of road`;
+            return `${what}: ${why}. Try the export again in a few minutes.`;
+        }
+        if (r.limit === 0) {
+            return 'No speed limit sign in this video: OpenStreetMap has no posted limit for these roads.';
+        }
+        return '';
+    }
+
+    /**
+     * Draw the speed-limit sign in the bottom-left corner, above the banner or
+     * pills. Same look as the live sign: US rectangle for mph, round European
+     * sign for km/h (follows the telemetry units setting).
+     * @param {number} bottomReserve - pixels kept free at the bottom
+     */
+    _drawSpeedLimitSign(ctx, width, height, data, units, bottomReserve = 0) {
+        const metric = units === 'kph';
+        const value = metric ? data.limitKph : data.limitMph;
+        if (!Number.isFinite(value)) return;
+
+        const scale = width / 1920;
+        const inset = Math.round(14 * scale);
+        const text = String(value);
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        if (metric) {
+            const r = Math.round(38 * scale);
+            const cx = inset + r;
+            const cy = height - bottomReserve - inset - r;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            ctx.lineWidth = Math.max(2, r * 0.2);
+            ctx.strokeStyle = '#d32f2f';
+            ctx.beginPath();
+            ctx.arc(cx, cy, r - ctx.lineWidth / 2, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = '#000000';
+            ctx.font = `bold ${Math.round(r * (text.length > 2 ? 0.72 : 0.95))}px Arial`;
+            ctx.fillText(text, cx, cy + r * 0.04);
+        } else {
+            const w = Math.round(62 * scale);
+            const h = Math.round(78 * scale);
+            const x = inset;
+            const y = height - bottomReserve - inset - h;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, Math.round(6 * scale));
+            ctx.fill();
+            const bw = Math.max(1.5, 3 * scale);
+            ctx.lineWidth = bw;
+            ctx.strokeStyle = '#000000';
+            ctx.beginPath();
+            ctx.roundRect(x + bw * 1.5, y + bw * 1.5, w - bw * 3, h - bw * 3, Math.round(4 * scale));
+            ctx.stroke();
+            ctx.fillStyle = '#000000';
+            ctx.font = `bold ${Math.round(h * 0.15)}px Arial`;
+            ctx.fillText('SPEED', x + w / 2, y + h * 0.2);
+            ctx.fillText('LIMIT', x + w / 2, y + h * 0.36);
+            ctx.font = `bold ${Math.round(h * (text.length > 2 ? 0.34 : 0.42))}px Arial`;
+            ctx.fillText(text, x + w / 2, y + h * 0.68);
+        }
+        ctx.restore();
+    }
+
     /**
      * Render telemetry HUD and mini-map overlay to export canvas
      * Shared rendering used by all export methods for consistent overlays
@@ -1831,15 +2827,9 @@ class VideoExport {
             let clipIndex, timeInClip, videoDuration;
             const durations = this.videoPlayer?.cachedClipDurations;
             if (durations && durations.length > 0) {
-                let remaining = absoluteTime;
-                clipIndex = 0;
-                for (let i = 0; i < durations.length; i++) {
-                    if (remaining < durations[i]) { clipIndex = i; break; }
-                    remaining -= durations[i];
-                    clipIndex = i;
-                }
-                timeInClip = Math.max(0, remaining);
-                videoDuration = durations[clipIndex] || 60;
+                // The player's mapping (#537)
+                ({ clipIndex, timeInClip } = TelemetryOverlay.clipTiming().locateTime(durations, absoluteTime));
+                videoDuration = TelemetryOverlay.clipTiming().clipLength(durations, clipIndex);
             } else {
                 clipIndex = this.videoPlayer.currentClipIndex || 0;
                 timeInClip = this.videoPlayer.getCurrentTime() || 0;
@@ -2000,7 +2990,8 @@ class VideoExport {
         // since that path already gated us (avoids double-modal).
         if (!_accessChecked) {
             const accessOK = await this._checkExportAccess();
-            if (!accessOK) return;
+            if (!accessOK) throw VideoExport.limitError();
+            this.lastExportSaved = false;
         }
 
         if (this.isExporting) {
@@ -2013,6 +3004,7 @@ class VideoExport {
         }
 
         this.isExporting = true;
+        this.lastExport = { format: 'gif', codec: null };
         this.exportWallStartTime = Date.now();
         this.onProgress = onProgress;
 
@@ -2027,10 +3019,9 @@ class VideoExport {
         await this.videoPlayer.pause();
 
         try {
-            // Calculate total duration
-            if (!this.cachedTotalDuration) {
-                this.cachedTotalDuration = await this.videoPlayer.getTotalDuration();
-            }
+            // This event's length and overlay clock, fresh for every export (#524)
+            this._resetExportCaches();
+            this.cachedTotalDuration = await this.videoPlayer.getTotalDuration();
 
             // Determine export range (cap at 30 seconds)
             const exportStart = startTime !== null ? startTime : 0;
@@ -2086,6 +3077,8 @@ class VideoExport {
             const gifHeight = Math.round(canvasHeight * gifScale);
 
             console.log(`GIF dimensions: ${gifWidth}x${gifHeight} (scale: ${gifScale.toFixed(2)})`);
+            this.lastExport.width = gifWidth;
+            this.lastExport.height = gifHeight;
 
             // Create canvas for rendering frames
             const canvas = document.createElement('canvas');
@@ -2111,6 +3104,7 @@ class VideoExport {
 
             // Pre-cache mini-map tiles (shared method)
             await this._preCacheMiniMapTiles(exportStart, exportEnd);
+            await this._prepareGpsExportOverlays(exportStart, exportEnd);
 
             // Check watermark once
             await this._checkWatermark();
@@ -2154,7 +3148,7 @@ class VideoExport {
                         let allHaveData = true;
 
                         for (const video of Object.values(videos)) {
-                            if (!video || !video.src) continue;
+                            if (!this._hasClip(video)) continue;
                             if (video.seeking) {
                                 allDoneSeeking = false;
                                 break;
@@ -2187,7 +3181,7 @@ class VideoExport {
                 while (retryCount < 3) {
                     let needsRetry = false;
                     for (const video of Object.values(videos)) {
-                        if (!video || !video.src) continue;
+                        if (!this._hasClip(video)) continue;
                         if (video.seeking || video.readyState < 3) {
                             needsRetry = true;
                             break;
@@ -2244,7 +3238,7 @@ class VideoExport {
                             }
                         }
                         await window.app.plateBlur.processMultiCamera(ctx, cameraInfos, {
-                            forceDetection: frameIndex % 5 === 0 // Tracker bridges gaps; detect every 5th frame
+                            forceDetection: frameIndex % 5 === 0, cadence: 'frames' // Tracker bridges gaps; detect every 5th frame
                         });
                     } catch (blurError) {
                         if (frameIndex % 30 === 0) {
@@ -2304,7 +3298,24 @@ class VideoExport {
                 this.onProgress(70, exportDuration, exportDuration, 0);
             }
 
-            return new Promise((resolve, reject) => {
+            return new Promise((resolve, rejectRaw) => {
+                // Cancel while gif.js encodes: abort() fires 'abort', never
+                // 'finished', so this promise used to stay pending and the app
+                // stayed behind the export overlay (#525).
+                let settled = false;
+                const reject = (err) => {
+                    if (settled) return;
+                    settled = true;
+                    this.exportReject = null;
+                    rejectRaw(err);
+                };
+                this.exportReject = reject;
+                if (!this.isExporting) {
+                    reject(new Error('Export cancelled by user'));
+                    return;
+                }
+                gif.on('abort', () => reject(new Error('Export cancelled by user')));
+
                 gif.on('progress', (p) => {
                     if (this.onProgress) {
                         const progressPercent = 70 + (p * 30); // Last 30% for encoding
@@ -2314,31 +3325,43 @@ class VideoExport {
 
                 gif.on('finished', (blob) => {
                     // Check if export was cancelled - don't show completion
-                    if (!this.isExporting && this.gifEncoder === null) {
+                    if (settled || (!this.isExporting && this.gifEncoder === null)) {
                         console.log('GIF export was cancelled, ignoring finished event');
                         reject(new Error('Export cancelled by user'));
                         return;
                     }
+                    settled = true;
+                    this.exportReject = null;
 
                     console.log('GIF export complete, size:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
 
-                    // Download the GIF
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `TeslaCam_Export_${this.getFormattedTimestamp()}.gif`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    this._recordExportSuccess();
+                    // Check the GIF is real (its frames), then download it
+                    this._verifyOutput(blob, { kind: 'gif', expectedSecs: exportDuration, expectedFrames: totalFrames }).then((check) => {
+                        this._recordCheck(check);
+                        this.isExporting = false;
+                        this.gifEncoder = null;
+                        if (!check.ok) {
+                            rejectRaw(VideoExport.badOutputError(check, 'GIF'));
+                            return;
+                        }
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `TeslaCam_Export_${this.getFormattedTimestamp()}.gif`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        this._recordExportSuccess();
 
-                    this.isExporting = false;
-                    this.gifEncoder = null;
+                        if (this.onProgress) {
+                            this.onProgress(100, exportDuration, exportDuration, 0);
+                        }
 
-                    if (this.onProgress) {
-                        this.onProgress(100, exportDuration, exportDuration, 0);
-                    }
-
-                    resolve({ success: true, size: blob.size });
+                        resolve({ success: true, size: blob.size });
+                    }, (err) => {
+                        this.isExporting = false;
+                        this.gifEncoder = null;
+                        rejectRaw(err);
+                    });
                 });
 
                 gif.on('error', (error) => {
@@ -2351,8 +3374,11 @@ class VideoExport {
             });
 
         } catch (error) {
-            console.error('GIF export error:', error);
+            if (/cancelled/i.test(error?.message || '')) console.log('GIF export cancelled:', error.message);
+            else if (VideoExport.isHandledFailure(error)) console.warn('GIF export stopped:', error.message);
+            else console.error('GIF export error:', error);
             this.isExporting = false;
+            this.exportReject = null;
             throw error;
         }
     }

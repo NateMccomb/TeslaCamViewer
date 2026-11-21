@@ -723,7 +723,7 @@ class SeiDiagnostics {
                     <p style="opacity:0.8;font-size:0.9em;">
                         Review before sharing. Paths, coordinates, plates, and emails have been redacted.
                     </p>
-                    <pre style="max-height:400px;overflow:auto;background:var(--bg-secondary,#222);padding:1rem;border-radius:4px;font-size:0.78em;white-space:pre-wrap;">${this._escapeHtml(text || '(buffer empty)')}</pre>
+                    <pre style="max-height:400px;overflow:auto;background:var(--bg-secondary,#222);padding:1rem;border-radius:4px;font-size:0.78em;white-space:pre-wrap;">${FolderParser.escapeHtml(text || '(buffer empty)')}</pre>
                     <div style="margin-top:1rem;display:flex;justify-content:flex-end;">
                         <button id="diagPreviewClose" class="btn-secondary">Close</button>
                     </div>
@@ -753,7 +753,7 @@ class SeiDiagnostics {
                     <p style="opacity:0.8;font-size:0.9em;">
                         Review the full payload below. Nothing is sent until you click a delivery option.
                     </p>
-                    <pre id="seiReportPayload" style="max-height:300px;overflow:auto;background:var(--bg-secondary,#222);padding:1rem;border-radius:4px;font-size:0.8em;">${this._escapeHtml(JSON.stringify(report, null, 2))}</pre>
+                    <pre id="seiReportPayload" style="max-height:300px;overflow:auto;background:var(--bg-secondary,#222);padding:1rem;border-radius:4px;font-size:0.8em;">${FolderParser.escapeHtml(JSON.stringify(report, null, 2))}</pre>
                     <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
                         <button id="seiReportCopy" class="btn-primary">Copy to Clipboard</button>
                         <button id="seiReportGithub" class="btn-primary">Open GitHub Issue</button>
@@ -784,7 +784,7 @@ class SeiDiagnostics {
         });
 
         githubBtn.addEventListener('click', () => {
-            window.open(this.buildGithubIssueUrl(report), '_blank');
+            window.open(this.buildGithubIssueUrl(report), '_blank', 'noopener');
         });
 
         emailBtn.addEventListener('click', () => {
@@ -794,12 +794,6 @@ class SeiDiagnostics {
         const close = () => modal.remove();
         closeBtn.addEventListener('click', close);
         overlay.addEventListener('click', close);
-    }
-
-    _escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, c => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-        }[c]));
     }
 }
 

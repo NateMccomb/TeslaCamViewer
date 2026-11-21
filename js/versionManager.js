@@ -19,12 +19,59 @@ class VersionManager {
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.47.2.1';
+        this.currentVersion = '2026.47.6.1';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
+            {
+                version: '2026.47.6.1',
+                date: '2026-11-21',
+                title: 'H.264 Export, GPS in Exports, Encrypted Clips & Fixes',
+                features: [
+                    {
+                        id: 'export-format-h264',
+                        text: 'New export format: MP4 (H.264). It plays on iPhone, QuickTime and in video editors. MP4 (VP9) stays the default because it looks best. On some PCs H.264 is the slowest export, and the export screen tells you when that happens.',
+                        elementSelector: ['#exportDropdownBtn', '#exportFormatSelect']
+                    },
+                    {
+                        id: 'export-gps-text',
+                        text: 'Exports can show the car\'s GPS position next to the time. Turn it on in Settings, Export (off by default, and privacy mode always removes it).',
+                        elementSelector: ['#settingsBtn', '.settings-nav-item[data-tab="export"]', '#setting-gpsTextInExport']
+                    },
+                    {
+                        id: 'export-speed-limit-sign',
+                        text: 'Exports can show the speed limit sign, like the player does (Settings, Export). When the map data servers are too busy to look one up, the app now says so instead of showing nothing.',
+                        elementSelector: ['#settingsBtn', '.settings-nav-item[data-tab="export"]', '#setting-speedLimitInExport']
+                    },
+                    {
+                        id: 'encrypted-clips-detected',
+                        text: 'Clips encrypted by Tesla (car software 2026.20 and newer) are recognised now. The event list tells you how many there are and how to view them.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'summary-2026-49-playback',
+                        text: 'Smoother playback: clicking the timeline, Next Clip, frame stepping and 6-camera events all stay in sync now.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'summary-2026-49-drive-sync',
+                        text: 'Drive Sync is safer: Move only deletes files it has copied and checked, and your notes and tags come along to the other drive.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'summary-2026-49-export-reliability',
+                        text: 'Exports are more reliable on slower PCs. WebM keeps every frame and its full length, MP4 and WebM carry on with the software encoder when the graphics card\'s encoder gets stuck, and an export that goes wrong tells you instead of saving an empty file.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'summary-2026-49-more-fixes',
+                        text: 'Plus a lot of smaller fixes: exports, the insurance report, dates in your own time zone, translations in every language and safer libraries. The full list is in the release notes on GitHub.',
+                        elementSelector: null
+                    }
+                ]
+            },
             {
                 version: '2026.47.2.1',
                 date: '2026-11-17',
@@ -159,7 +206,7 @@ class VersionManager {
                     {
                         id: 'fast-export-toggle',
                         text: 'Experimental Fast Export toggle in Settings → Export. Uses a streamlined render path for large exports — try it when standard export feels slow.',
-                        elementSelector: ['#settingsBtn', '.settings-nav-item[data-tab="export"]', '#setting-fastExportExperimental']
+                        elementSelector: null   // the toggle was removed when fast export became the default
                     },
                     {
                         id: 'sei-unknown-scanner',
@@ -457,7 +504,7 @@ class VersionManager {
                     {
                         id: 'telemetry-graphs-panel',
                         text: 'Interactive telemetry graphs panel - Press G to toggle speed, G-force, and steering graphs',
-                        elementSelector: '#telemetryGraphsPanel'
+                        elementSelector: '#telemetryHeader'
                     },
                     {
                         id: 'speed-limit-display',
@@ -1072,7 +1119,7 @@ class VersionManager {
                     this.addIndicator(element, feature.id, feature.text, isLast);
                     placed++;
                 } else {
-                    this.pendingSelectors.push({ featureId: feature.id, selector, text: feature.text, isLast });
+                    this.pendingSelectors.push({ featureId: feature.id, selector, text: feature.text, isLast, idx });
                     pending++;
                 }
             });
@@ -1084,10 +1131,14 @@ class VersionManager {
 
         if (pending > 0) {
             setTimeout(() => {
-                const stillPending = this.pendingSelectors.length;
-                if (stillPending > 0) {
-                    console.warn(`[VersionManager] ${stillPending} blue-dot selector(s) still unresolved after 10s:`,
-                        this.pendingSelectors.map(p => `${p.featureId}: ${p.selector}`));
+                // Only a chain's first (outer) anchor has to be on the page by
+                // now. Later steps (a Settings tab, a control inside it) only
+                // exist once the user opens that modal, so they're expected to
+                // wait and were reported here as false alarms.
+                const stuck = this.pendingSelectors.filter(p => !p.idx);
+                if (stuck.length > 0) {
+                    console.warn(`[VersionManager] ${stuck.length} blue-dot selector(s) still unresolved after 10s:`,
+                        stuck.map(p => `${p.featureId}: ${p.selector}`));
                 }
             }, 10000);
         }
@@ -1325,12 +1376,12 @@ class VersionManager {
             // Add cache-busting timestamp to avoid cached response
             const url = `${this.remoteVersionUrl}?t=${Date.now()}`;
 
+            // A plain GET: a custom request header (Cache-Control) made local copies and the offline
+            // package send a CORS preflight, which GitHub Pages answers 405, so they never saw updates.
+            // cache: 'no-store' plus the ?t= timestamp already bypass every cache.
             const response = await fetch(url, {
                 method: 'GET',
-                cache: 'no-store', // Force bypass cache
-                headers: {
-                    'Cache-Control': 'no-cache'
-                }
+                cache: 'no-store' // Force bypass cache
             });
 
             if (!response.ok) {
@@ -1377,7 +1428,7 @@ class VersionManager {
                 </div>
                 <div class="update-toast-text">
                     <strong>Update Available</strong>
-                    <span>Version ${remoteVersion.version} is ready</span>
+                    <span>Version ${FolderParser.escapeHtml(String(remoteVersion.version))} is ready</span>
                 </div>
                 <button class="update-toast-btn" title="Refresh to update">
                     Refresh

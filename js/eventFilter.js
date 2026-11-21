@@ -35,7 +35,7 @@ class EventFilter {
                 const allBookmarks = JSON.parse(stored);
                 // Return event IDs that have at least one bookmark
                 return new Set(
-                    Object.keys(allBookmarks).filter(key => allBookmarks[key].length > 0)
+                    Object.keys(allBookmarks).filter(key => Array.isArray(allBookmarks[key]) && allBookmarks[key].length > 0)
                 );
             }
         } catch (e) {
@@ -67,7 +67,7 @@ class EventFilter {
         const tags = new Set();
         Object.values(notesData).forEach(note => {
             if (note.tags && Array.isArray(note.tags)) {
-                note.tags.forEach(tag => tags.add(tag.toLowerCase()));
+                note.tags.forEach(tag => { if (typeof tag === 'string') tags.add(tag.toLowerCase()); });
             }
         });
         return Array.from(tags).sort();
@@ -109,8 +109,8 @@ class EventFilter {
         if (!this.filters.hasNotes || !notesData) {
             return true;
         }
-        const notes = notesData[event.name];
-        return notes && (notes.text?.trim() || notes.tags?.length > 0);
+        const notes = EventFilter.lookupByEvent(notesData, event);
+        return !!(notes && ((typeof notes.text === 'string' && notes.text.trim()) || (Array.isArray(notes.tags) && notes.tags.length > 0)));
     }
 
     /**
@@ -123,12 +123,12 @@ class EventFilter {
         if (!this.filters.selectedTag || !notesData) {
             return true;
         }
-        const notes = notesData[event.name];
-        if (!notes || !notes.tags) {
+        const notes = EventFilter.lookupByEvent(notesData, event);
+        if (!notes || !Array.isArray(notes.tags)) {
             return false;
         }
         const searchTag = this.filters.selectedTag.toLowerCase();
-        return notes.tags.some(tag => tag.toLowerCase() === searchTag);
+        return notes.tags.some(tag => typeof tag === 'string' && tag.toLowerCase() === searchTag);
     }
 
     /**
@@ -142,7 +142,40 @@ class EventFilter {
         if (!this.filters.hasBookmarks || !bookmarkedIds) {
             return true;
         }
-        return bookmarkedIds.has(event.name);
+        return EventFilter.eventKeys(event).some(k => bookmarkedIds.has(k));
+    }
+
+    /**
+     * Every storage key an event's notes and bookmarks may be saved under, newest first:
+     * the drive-qualified key (multi-drive), the plain folder name (before multi-drive), and the
+     * legacy key of a RecentClips hour (once named after the UTC day, see FolderParser).
+     * @param {Object} event
+     * @returns {string[]}
+     */
+    static eventKeys(event) {
+        if (!event) return [];
+        const keys = [event.compoundKey, event.name];
+        if (event.legacyName) {
+            // RecentClips hours named before 2026.47.5 (FolderParser.legacyEventKey)
+            const key = event.compoundKey || event.name;
+            keys.push(typeof key === 'string' && key.endsWith(event.name)
+                ? key.slice(0, key.length - event.name.length) + event.legacyName : event.legacyName);
+        }
+        return keys.filter((k, idx) => typeof k === 'string' && k && keys.indexOf(k) === idx);
+    }
+
+    /**
+     * Look an event up in a map stored by event key (see eventKeys)
+     * @param {Object} map
+     * @param {Object} event
+     * @returns {*} the first entry found, or undefined
+     */
+    static lookupByEvent(map, event) {
+        if (!map) return undefined;
+        for (const k of EventFilter.eventKeys(event)) {
+            if (Object.prototype.hasOwnProperty.call(map, k)) return map[k];
+        }
+        return undefined;
     }
 
     /**
@@ -172,7 +205,7 @@ class EventFilter {
 
         // Check start date
         if (start) {
-            const startDate = new Date(start);
+            const startDate = EventFilter.parseLocalDate(start);
             startDate.setHours(0, 0, 0, 0); // Start of day
             if (eventDate < startDate) {
                 return false;
@@ -181,7 +214,7 @@ class EventFilter {
 
         // Check end date
         if (end) {
-            const endDate = new Date(end);
+            const endDate = EventFilter.parseLocalDate(end);
             endDate.setHours(23, 59, 59, 999); // End of day
             if (eventDate > endDate) {
                 return false;
@@ -189,6 +222,17 @@ class EventFilter {
         }
 
         return true;
+    }
+
+    /**
+     * Parse a date input value ('YYYY-MM-DD') as LOCAL midnight. new Date('YYYY-MM-DD') is UTC
+     * midnight, which is the evening before west of UTC and hid the chosen day's events.
+     * @param {string} value
+     * @returns {Date}
+     */
+    static parseLocalDate(value) {
+        const m = typeof value === 'string' ? value.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+        return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
     }
 
     /**
@@ -205,19 +249,19 @@ class EventFilter {
         }
 
         // Search in city
-        const city = event.metadata?.city || '';
+        const city = String(event.metadata?.city ?? '');
         if (city.toLowerCase().includes(query)) {
             return true;
         }
 
         // Search in street
-        const street = event.metadata?.street || '';
+        const street = String(event.metadata?.street ?? '');
         if (street.toLowerCase().includes(query)) {
             return true;
         }
 
         // Search in reason
-        const reason = event.metadata?.reason || '';
+        const reason = String(event.metadata?.reason ?? '');
         if (reason.toLowerCase().includes(query)) {
             return true;
         }
@@ -229,7 +273,7 @@ class EventFilter {
         }
 
         // Search in event type
-        if (event.type.toLowerCase().includes(query)) {
+        if (String(event.type || '').toLowerCase().includes(query)) {
             return true;
         }
 

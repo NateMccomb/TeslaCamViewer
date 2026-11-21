@@ -98,7 +98,8 @@
         if (clipDurations && clipDurations.length) {
             for (let i = 0; i < clipIndex && i < clipDurations.length; i++) {
                 const d = clipDurations[i];
-                preceding += (Number.isFinite(d) && d > 0) ? d : DEFAULT_CLIP_DURATION_SEC;
+                // 0 = a clip the player skips (no front video): it takes no time (#537)
+                preceding += (Number.isFinite(d) && d >= 0) ? d : DEFAULT_CLIP_DURATION_SEC;
             }
         } else {
             preceding = clipIndex * DEFAULT_CLIP_DURATION_SEC;

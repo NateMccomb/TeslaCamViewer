@@ -118,7 +118,11 @@ class SeiExtractor {
             frameDuration: 1,
             fps: 30,
             baseFrameSeqNo: null,  // First frame's sequence number
-            frameSeqMap: new Map() // Map from frameSeqNo to telemetry
+            frameSeqMap: new Map(), // Map from frameSeqNo to telemetry
+            // Video frames in the clip (SEI or not). Each SEI frame carries the
+            // index of the video frame it belongs to (frameIndex), so a clip
+            // whose telemetry starts part-way through maps to the right time.
+            videoFrameCount: 0
         };
 
         try {
@@ -143,7 +147,7 @@ class SeiExtractor {
             }
 
             // Parse NAL units and extract SEI
-            result.frames = this._parseNALUnits(data, mdat.dataStart, mdat.end);
+            result.frames = this._parseNALUnits(data, mdat.dataStart, mdat.end, result);
 
             // Build frame sequence map and find base sequence number
             if (result.frames.length > 0) {
@@ -250,7 +254,7 @@ class SeiExtractor {
     /**
      * Parse NAL units from mdat and extract SEI messages
      */
-    _parseNALUnits(data, start, end) {
+    _parseNALUnits(data, start, end, stats = null) {
         const frames = [];
         let pos = start;
         let frameIndex = 0;
@@ -287,6 +291,7 @@ class SeiExtractor {
             pos += nalSize;
         }
 
+        if (stats) stats.videoFrameCount = frameIndex;
         return frames;
     }
 

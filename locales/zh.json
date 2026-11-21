@@ -38,7 +38,8 @@
     "noEventLoaded": "未加载事件",
     "hidden": "已隐藏：",
     "fullscreen": "全屏",
-    "exitFullscreen": "退出全屏"
+    "exitFullscreen": "退出全屏",
+    "dateAtTime": "{{date}} {{time}}"
   },
 
   "cameras": {
@@ -46,10 +47,21 @@
     "back": "后",
     "left": "左",
     "right": "右",
+    "leftPillar": "左B柱",
+    "rightPillar": "右B柱",
     "hideFront": "隐藏前置摄像头",
     "hideBack": "隐藏后置摄像头",
     "hideLeft": "隐藏左侧摄像头",
-    "hideRight": "隐藏右侧摄像头"
+    "hideRight": "隐藏右侧摄像头",
+    "hideLeftPillar": "隐藏左B柱摄像头",
+    "hideRightPillar": "隐藏右B柱摄像头",
+    "showFront": "显示前摄像头",
+    "showBack": "显示后摄像头",
+    "showLeft": "显示左摄像头",
+    "showRight": "显示右摄像头",
+    "showLeftPillar": "显示左B柱摄像头",
+    "showRightPillar": "显示右B柱摄像头",
+    "showCamera": "显示{{camera}}"
   },
 
   "controls": {
@@ -66,7 +78,7 @@
     "markIn": "标记入点",
     "markOut": "标记出点",
     "clearMarks": "清除标记",
-    "export": "导出所有摄像头",
+    "export": "导出当前布局",
     "exportOptions": "导出选项",
     "zoomOut": "时间轴缩小",
     "zoomIn": "时间轴放大",
@@ -74,7 +86,10 @@
     "loop": "循环",
     "speed": "速度：",
     "layout": "布局：",
-    "camera": "摄像头："
+    "camera": "摄像头：",
+    "cyclePillarTitle": "在侧翼与B柱摄像头之间切换 (Shift+P)",
+    "repeaters": "侧翼",
+    "pillars": "B柱"
   },
 
   "bookmarks": {
@@ -84,26 +99,98 @@
     "next": "下一个书签 (])",
     "manage": "管理书签",
     "clearAll": "全部清除",
-    "noBookmarks": "暂无书签"
+    "noBookmarks": "暂无书签",
+    "bookmark": {
+      "one": "{{count}} 个书签",
+      "other": "{{count}} 个书签"
+    }
   },
 
   "export": {
-    "header": "导出摄像头",
-    "allCameras": "所有摄像头（网格）",
-    "frontOnly": "仅前置",
-    "rearOnly": "仅后置",
-    "leftOnly": "仅左侧",
-    "rightOnly": "仅右侧",
+    "header": "导出选项",
+    "exportVideo": "导出视频",
+    "allCameras": "当前布局",
+    "leftPillarOnly": "仅左B柱",
+    "rightPillarOnly": "仅右B柱",
+    "privacyMode": "隐私模式（去除元数据）",
+    "privacyModeHint": "去除时间戳、GPS 和位置信息",
+    "insuranceReport": "保险报告 (PDF)",
+    "generatingReport": "正在生成保险报告...",
     "exporting": "导出中 {{percent}}%",
     "preparing": "准备导出...",
     "encoding": "编码视频...",
     "complete": "导出完成",
     "cancelled": "导出已取消",
-    "failed": "导出失败"
+    "failed": "导出失败",
+    "formatTitle": "导出格式",
+    "gifWarning": "GIF 导出耗时约为片段长度的 10 倍",
+    "blurPlatesHint": "会显著增加渲染时间",
+    "insuranceReportShort": "保险报告",
+    "alreadyRunning": "已有导出正在进行，请等待其完成。",
+    "cameraAll": "所有摄像头",
+    "cameraFront": "前置摄像头",
+    "cameraBack": "后置摄像头",
+    "cameraLeft": "左侧摄像头",
+    "cameraRight": "右侧摄像头",
+    "cameraLeftPillar": "左B柱摄像头",
+    "cameraRightPillar": "右B柱摄像头",
+    "rangeMarked": "标记的区间（{{marks}}）",
+    "rangeFromIn": "从入点到事件结束",
+    "rangeToOut": "从开头到出点",
+    "rangeFromCurrent": "从当前位置到事件结束",
+    "confirm": "导出{{range}}（{{camera}}）？",
+    "confirmAtSpeed": "以 {{speed}} 倍速导出{{range}}（{{camera}}）？",
+    "confirmDuration": "导出耗时约为视频时长的 3-4 倍（10 秒的片段约需 30-40 秒渲染）。",
+    "confirmDontSwitch": "完成前请勿切换事件。",
+    "invalidRange": "导出范围无效：开始时间必须早于结束时间。\n请调整入点/出点标记。",
+    "loadingPlateModel": "正在加载车牌检测 AI 模型...",
+    "loadingPlateModelHint": "首次使用可能需要一点时间",
+    "starting": "正在开始导出...",
+    "preparingVideo": "正在准备视频...",
+    "titleVideo": "视频",
+    "progressTitle": "正在导出{{what}}：{{percent}}%",
+    "elapsedRemaining": "已用 {{elapsed}} / 剩余约 {{remaining}}",
+    "videoProgress": "视频：{{current}} / {{total}}",
+    "speedReduced": "速度已降至 {{speed}} 倍（缓冲中）",
+    "gpuFailed": "导出失败：导出过程中 GPU 似乎被重置了。\n\n这通常是硬件编码器卡住，或 Windows 重置了显卡驱动。可尝试以下任一方法：降低导出分辨率（设置）、本次导出关闭车牌模糊、用入点/出点标记导出更短的时间段，或更新显卡驱动。\n\n如果问题反复出现，请打开 设置 → 诊断 → Console Log Capture，并把日志发给我们。我们刚加入了详细的编码器/解码器信息，便于 support@teslacamviewer.com 诊断此问题。",
+    "encoderStalled": "导出已停止：此设备的视频编码器没有响应（{{codec}}）。未保存任何文件。请改用 MP4 (VP9) 或 WebM 重试，或在 设置 > 导出 中选择较低的导出画质。",
+    "unableToComplete": "导出无法完成：{{error}}",
+    "completeTitle": "导出完成",
+    "completeText": "视频已成功保存。",
+    "cancelledTitle": "导出已取消",
+    "cancelledText": "导出在完成前已停止，未保存任何文件。",
+    "noteWebm": "已保存为 WebM (VP9)。",
+    "noteH264": "已保存为 MP4 (H.264)：几乎所有设备都能播放，包括 iPhone 和 QuickTime。",
+    "noteNoH264": "此浏览器无法编码 H.264，因此文件已保存为 MP4 ({{codec}})。可在 Chrome、Edge、VLC 和 Android 上播放；iPhone、QuickTime 和部分剪辑软件可能无法打开。",
+    "noteMp4": "已保存为 MP4 ({{codec}})：画质最佳，可在 Chrome、Edge、VLC 和 Android 上播放。如需在 iPhone、QuickTime 或视频剪辑软件中使用，请在导出菜单中选择 MP4 (H.264)。",
+    "freeExportsUsed": "今天已使用 {{used}}/{{limit}} 次免费导出，剩余 {{left}} 次。重新导出同一事件仍然免费。",
+    "plateModelLoading": "正在加载车牌检测模型...",
+    "plateModelReady": "车牌检测已就绪",
+    "plateModelFailed": "车牌检测加载失败",
+    "h264Warning": "MP4 (H.264) 几乎在所有设备上都能播放，但在部分电脑上是最慢的导出方式。MP4 (VP9) 和 WebM 通常更快。",
+    "softwareH264": "正在用软件编码 H.264：完整画质下可能需要几分钟。",
+    "softwareH264Rate": "每秒 {{fps}} 帧",
+    "tookTime": "用时：{{time}}",
+    "sizeNote": "视频尺寸：{{size}}",
+    "sizeReduced": "视频尺寸：{{size}}（您选择的是 {{asked}}，超出了此设备视频编码器支持的尺寸）",
+    "noEncoder": "导出在开始前已停止：此设备的视频编码器均不接受此导出（{{size}}），缩小尺寸后也不接受。未保存任何文件。请重新加载页面后重试。如果仍然失败，请导出为 WebM，或在 设置 > 导出 中选择较低的导出画质。",
+    "badOutput": "导出失败：{{format}} 文件已损坏（{{reason}}），因此未保存。请重试。如果再次发生，请在 设置 > 导出 中选择较低的导出画质或其他格式。",
+    "badOutput_tiny": "文件只有 {{bytes}} 字节，没有视频内容",
+    "badOutput_frames": "{{want}} 帧中只有 {{got}} 帧写入了文件",
+    "badOutput_length": "视频时长为 {{got}} 秒，而不是 {{want}} 秒",
+    "badOutput_unreadable": "文件无法播放",
+    "nothingToExport": "没有可导出的内容：播放位置在事件末尾（{{position}} / {{end}}），且未设置 OUT 标记。请将播放位置往回移，或设置 IN 和 OUT 标记后再导出。",
+    "notSaved": "导出结束时没有保存任何文件，因此没有下载任何内容。请重试。",
+    "softwareVp9": "正在用软件编码 VP9：完整画质下可能需要几分钟。",
+    "noteWebmCodec": "已保存为 WebM ({{codec}})。",
+    "noWebmEncoder": "导出在开始前已停止：此设备的 WebM 视频编码器均不接受此导出（{{size}}），缩小尺寸后也不接受。未保存任何文件。请改为导出 MP4 (H.264)，或在 设置 > 导出 中选择较低的导出画质。",
+    "elapsedOnly": "已用 {{elapsed}}",
+    "softwareVp8": "正在用软件编码 VP8：完整画质下可能需要几分钟。"
   },
 
   "layouts": {
     "grid2x2": "2×2 网格",
+    "grid3x2": "3×2 网格（6 个摄像头）",
     "layout63": "6:3 居中",
     "layout43": "4:3 主画面",
     "all169": "全部 16:9",
@@ -141,7 +228,13 @@
       "markingExport": "标记和导出",
       "bookmarks": "书签",
       "speedControl": "速度控制",
-      "general": "常规"
+      "general": "常规",
+      "exportOverlays": "导出叠加信息"
+    },
+    "exportOverlays": {
+      "gps": "时间戳旁的 GPS 坐标（设置 → 导出，默认关闭）",
+      "speedLimit": "左下角的限速标志（设置 → 导出，默认关闭）",
+      "privacy": "隐私模式会将两者连同时间戳和小地图一起去除"
     },
 
     "shortcuts": {
@@ -159,6 +252,7 @@
       "selectNextEvent": "选择下一个事件",
       "cycleLayouts": "切换布局",
       "focusCamera": "聚焦摄像头 (1=前, 2=后, 3=左, 4=右)",
+      "cyclePillarMode": "切换侧翼/B柱摄像头（如有）",
       "toggleFullscreen": "切换全屏",
       "focusCameraFullscreen": "全屏聚焦摄像头",
       "markIn": "标记入点",
@@ -197,18 +291,72 @@
       "mobile": "移动端",
       "export": "导出",
       "language": "语言",
-      "telemetry": "Telemetry Overlay",
-      "miniMap": "Mini-Map"
+      "telemetry": "遥测叠加",
+      "miniMap": "小地图"
     },
 
     "tabs": {
-      "general": "General",
-      "playback": "Playback",
-      "overlays": "Overlays",
-      "export": "Export",
-      "advanced": "Advanced",
-      "ai-search": "AI Search",
-      "diagnostics": "Diagnostics"
+      "general": "常规",
+      "playback": "播放",
+      "overlays": "叠加",
+      "export": "导出",
+      "advanced": "高级",
+      "ai-search": "AI 搜索",
+      "diagnostics": "诊断"
+    },
+    "playback": {
+      "defaultSpeed": "默认速度",
+      "defaultLayout": "默认布局",
+      "autoPlayNext": "自动播放下一个事件",
+      "loopByDefault": "默认循环播放"
+    },
+    "performance": {
+      "preloadNextClip": "预加载下一个片段",
+      "preloadHint": "播放更流畅，但占用更多内存",
+      "memoryOptimization": "内存优化",
+      "memoryHint": "释放未使用的视频资源",
+      "webCodecsPlayer": "WebCodecs 播放器",
+      "beta": "测试版",
+      "webCodecsHint": "测试版：基于 WebCodecs 的画布渲染器。如果播放卡顿或感觉迟缓（尤其是使用 Intel 集成显卡时），可以试试。收集到足够反馈后，计划在未来版本中默认为所有人开启。需要重新加载页面才能生效。"
+    },
+    "ui": {
+      "theme": "主题",
+      "themeDark": "深色（默认）",
+      "themeLight": "浅色",
+      "themeMidnight": "午夜",
+      "themeTeslaRed": "特斯拉红",
+      "showKeyboardHints": "显示键盘提示",
+      "showTimestampOverlay": "显示时间戳叠加",
+      "showWhatsNew": "显示“新功能”提示",
+      "whatsNewHint": "新功能上的蓝点、更新通知"
+    },
+    "timeline": {
+      "enableZoom": "启用时间轴缩放",
+      "zoomHint": "滚动即可放大/缩小时间轴",
+      "showClipMarkers": "显示片段标记"
+    },
+    "session": {
+      "rememberLastFolder": "记住上次的文件夹",
+      "folderHint": "重新加载后需要重新授予文件夹权限"
+    },
+    "offline": {
+      "downloadPackage": "下载离线包",
+      "downloadHint": "生成可在 USB 驱动器上独立运行的版本（约 2-3 MB）",
+      "download": "下载",
+      "mapNote": "包含所有应用文件和库。地图需要联网。",
+      "notAvailable": "离线打包功能不可用。请重新加载页面后重试。"
+    },
+    "accessibility": {
+      "highContrast": "高对比度模式",
+      "highContrastHint": "提高文字和边框的对比度",
+      "textSize": "文字大小",
+      "textSmall": "小",
+      "textMedium": "中（默认）",
+      "textLarge": "大"
+    },
+    "mobile": {
+      "lockLandscape": "播放时锁定横屏",
+      "lockHint": "播放视频时将屏幕锁定为横屏（仅限移动端）"
     },
 
     "language": {
@@ -219,45 +367,158 @@
     "export": {
       "videoFormat": "视频格式",
       "webm": "WebM (VP9) - 文件更小",
-      "mp4": "MP4 (H.264) - 更好的兼容性",
-      "formatHint": "导出视频时使用的格式",
-      "privacyMode": "Privacy Mode Export",
-      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
-      "blurPlates": "Blur License Plates",
-      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
-      "branding": "Show TeslaCamViewer.com branding",
-      "brandingHint": "Display branding in the bottom banner of exported videos"
+      "mp4": "MP4 (VP9) - 最佳画质 (Chrome, Edge, VLC, Android)",
+      "mp4h264": "MP4 (H.264) - 最大兼容性，可能最慢 (iPhone, QuickTime, 剪辑软件)",
+      "formatHint": "导出视频时使用的格式。MP4 (VP9) 画质最好，但 iPhone、QuickTime 以及部分视频剪辑软件和社交应用无法打开：这种情况请使用 MP4 (H.264)。MP4 (H.264) 可能最慢：如果显卡的 H.264 编码器没有响应，导出会改用软件编码器，并在下次继续使用。",
+      "privacyMode": "隐私模式导出",
+      "privacyModeHint": "从导出中去除时间戳、GPS、位置和小地图",
+      "gpsText": "导出时显示 GPS 坐标",
+      "gpsTextHint": "将车辆的 GPS 位置以文字形式写入导出的视频画面，显示在时间戳旁边。默认关闭，以免分享的视频暴露您的位置。没有 GPS 数据的片段会使用事件的大致位置，并以 ~ 标注。隐私模式始终会去除此信息。",
+      "gpsFormat": "GPS 坐标格式",
+      "gpsFormatDecimal": "十进制度数 (37.49301, -121.94402)",
+      "gpsFormatDms": "度、分、秒 (37°29'34.8\"N 121°56'38.5\"W)",
+      "speedLimit": "导出时显示限速标志",
+      "speedLimitHint": "在导出的视频中以标志形式显示来自 OpenStreetMap 的道路限速，与播放时的标志一样。导出开始时会联网查询限速（最多约 6 秒），并保存以备下次使用。无法查询到的道路不显示标志。隐私模式始终会去除此信息。",
+      "blurPlates": "模糊车牌",
+      "blurPlatesHint": "AI 车牌检测（约 12MB 模型，首次使用后缓存）",
+      "branding": "显示 TeslaCamViewer.com 标识",
+      "brandingHint": "在导出视频的底部横幅中显示标识",
+      "gifAnimated": "GIF（动图）",
+      "quality": "导出画质",
+      "qualityFull": "完整：布局原始分辨率",
+      "qualityHd": "HD：高度 1080p",
+      "qualityWeb": "网页：高度 720p",
+      "qualityCustom": "自定义：指定高度",
+      "qualityHint": "缩放导出画布。完整从不缩小；HD/网页会限制尺寸但从不放大；自定义可自行选择（可放大）。",
+      "customHeight": "自定义高度 (px)",
+      "customHeightHint": "宽度会自动计算，以保持布局的宽高比。",
+      "plateModelMissing": "错误：PlateBlur 未加载",
+      "plateModelInitializing": "正在初始化...",
+      "plateModelReady": "模型已就绪",
+      "plateModelFailed": "模型加载失败",
+      "plateModelOnFirstExport": "模型将在首次导出时下载"
     },
 
     "telemetry": {
-      "enabled": "Enable Telemetry Overlay",
-      "enabledHint": "Press T to toggle during playback",
-      "style": "Display Style",
-      "styleCockpit": "Cockpit HUD",
-      "styleTesla": "Tesla-Native Pill",
-      "styleMinimal": "Minimal Corner",
-      "units": "Speed Units",
+      "enabled": "启用遥测叠加",
+      "enabledHint": "播放时按 T 切换",
+      "style": "显示样式",
+      "styleCockpit": "座舱 HUD",
+      "styleTesla": "Tesla 原生胶囊",
+      "styleMinimal": "极简角落",
+      "units": "速度单位",
       "unitsMph": "MPH",
       "unitsKph": "KPH",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add telemetry overlay to exported videos",
-      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+      "inExport": "包含在导出中",
+      "inExportHint": "在导出的视频中添加遥测叠加",
+      "description": "显示 Tesla 固件 2025.44.25 及以上版本的车辆数据（速度、转向、踏板等）"
     },
 
     "miniMap": {
-      "enabled": "Enable Mini-Map",
-      "enabledHint": "Press M to toggle, right-click for options",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add mini-map overlay to exported videos",
-      "darkMode": "Dark Mode Map",
-      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
-      "tileProvider": "Map Tile Provider",
-      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
-      "providerCarto": "Carto (Default)",
+      "enabled": "启用小地图",
+      "enabledHint": "按 M 切换，右键单击查看选项",
+      "inExport": "包含在导出中",
+      "inExportHint": "在导出的视频中添加小地图叠加",
+      "darkMode": "深色地图",
+      "darkModeHint": "使用深色地图瓦片（推荐用于观看行车记录仪录像）",
+      "tileProvider": "地图瓦片提供商",
+      "tileProviderHint": "如果地图无法加载（例如在中国），请尝试 OpenStreetMap",
+      "providerCarto": "Carto（默认）",
       "providerOsm": "OpenStreetMap",
       "providerStadia": "Stadia Maps",
-      "description": "GPS map overlay showing vehicle position synced with video playback"
+      "description": "随视频播放同步显示车辆位置的 GPS 地图叠加"
     }
+  },
+
+  "sync": {
+    "synced": "已同步（所有摄像头同步）",
+    "drifted": "已偏移（正在自动校正）",
+    "videosSynced": "视频已同步",
+    "videosDrifted": "视频已偏移，正在重新同步"
+  },
+
+  "events": {
+    "stats": "{{total}} 个事件（已保存 {{saved}}，哨兵 {{sentry}}，最近 {{recent}}）",
+    "saved": "已保存",
+    "sentry": "哨兵",
+    "recent": "最近",
+    "event": {
+      "one": "{{count}} 个事件",
+      "other": "{{count}} 个事件"
+    },
+    "statsLine": "已保存 {{saved}}，哨兵 {{sentry}}，最近 {{recent}}",
+    "emptyCount": "{{count}} 个为空",
+    "encryptedCount": "{{count}} 个已加密",
+    "noEventsFound": "未找到事件",
+    "noEventsHint": "所选文件夹中没有任何 TeslaCam 事件",
+    "noFolder": "未选择 TeslaCam 文件夹",
+    "clipCount": {
+      "one": "{{count}} 个片段",
+      "other": "{{count}} 个片段"
+    },
+    "clipsDuration": {
+      "one": "{{count}} 个片段（约 {{minutes}} 分钟）",
+      "other": "{{count}} 个片段（约 {{minutes}} 分钟）"
+    },
+    "noVideoClips": "没有视频片段",
+    "hasNotes": "有备注/标签",
+    "emptyEventToast": "{{date}} 的事件没有可用的视频片段",
+    "timeFrom": "从 {{time}} 开始",
+    "timeFromTo": "{{start}} - {{end}}",
+    "reasons": {
+      "manualSave": "手动保存",
+      "objectDetected": "哨兵：检测到物体",
+      "vehicleBumped": "哨兵：车辆受到碰撞"
+    }
+  },
+
+  "encrypted": {
+    "title": {
+      "one": "{{count}} 个事件已被 Tesla 加密",
+      "other": "{{count}} 个事件已被 Tesla 加密"
+    },
+    "titleOnDrive": {
+      "one": "{{drive}} 上有 {{count}} 个事件已被 Tesla 加密",
+      "other": "{{drive}} 上有 {{count}} 个事件已被 Tesla 加密"
+    },
+    "notListed": {
+      "one": "解密前无法播放，因此未显示在下方列表中。",
+      "other": "解密前无法播放，因此未显示在下方列表中。"
+    },
+    "notListedKinds": {
+      "one": "解密前无法播放，因此未显示在下方列表中（{{kinds}}）。",
+      "other": "解密前无法播放，因此未显示在下方列表中（{{kinds}}）。"
+    },
+    "kindSaved": "已保存 {{count}} 个",
+    "kindSentry": "哨兵 {{count}} 个",
+    "kindRecent": "最近 {{count}} 个",
+    "carOnlyAll": {
+      "one": "它只能在车内解密，dashcam.tesla.com 无法解锁。",
+      "other": "它们全部只能在车内解密，dashcam.tesla.com 无法解锁。"
+    },
+    "carOnlySome": {
+      "one": "其中 {{count}} 个只能在车内解密，dashcam.tesla.com 无法解锁。",
+      "other": "其中 {{count}} 个只能在车内解密，dashcam.tesla.com 无法解锁。"
+    },
+    "damagedAll": {
+      "one": "它似乎已损坏或不完整（例如保存时被中断），可能无法解密。",
+      "other": "它们似乎已损坏或不完整（例如保存时被中断），可能无法解密。"
+    },
+    "damagedSome": {
+      "one": "其中 {{count}} 个似乎已损坏或不完整（例如保存时被中断），可能无法解密。",
+      "other": "其中 {{count}} 个似乎已损坏或不完整（例如保存时被中断），可能无法解密。"
+    },
+    "howToView": "如何查看",
+    "explain": "Tesla 软件 2026.20 及更新版本会加密 USB 驱动器上的行车记录仪片段。只有您的车辆或您的 Tesla 账户才能解锁。",
+    "webTitle": "在 dashcam.tesla.com 解密：",
+    "webText": "使用 Tesla 账户登录，解密并下载片段（在您的浏览器中完成），然后通过“添加驱动器”将下载的文件夹添加到这里。",
+    "webLink": "打开 dashcam.tesla.com",
+    "carTitle": "在车内解密：",
+    "carText": "在车辆的行车记录仪查看器中，点击片段上的锁形图标。片段会在 USB 驱动器上被解密，且无法撤销。",
+    "stopTitle": "停止加密新片段：",
+    "stopText": "{{path}}（并非所有车辆都有此设置）。已加密的片段仍保持加密。",
+    "stopPath": "控制 > 安全 > 加密行车记录仪录像",
+    "stopPrivacy": "加密可在别人拿到你的 U 盘时保护你的录像；关闭后，任何拿到 U 盘的人都能观看。"
   },
 
   "filter": {
@@ -271,11 +532,21 @@
     "clear": "清除筛选",
     "filters": "筛选",
     "eventTypes": "事件类型",
+    "saved": "已保存",
+    "sentry": "哨兵",
+    "recent": "最近",
     "onlyBookmarked": "仅显示已收藏事件",
     "onlyWithNotes": "仅显示有备注/标签的事件",
     "sortBy": "排序方式",
     "newestFirst": "最新优先",
-    "oldestFirst": "最早优先"
+    "oldestFirst": "最早优先",
+    "searchPlaceholder": "城市、地点、原因...",
+    "dateRange": "日期范围",
+    "dateTo": "至",
+    "clearDates": "清除日期",
+    "clearAllFilters": "清除所有筛选",
+    "filterByTag": "按标签筛选",
+    "allTags": "所有标签"
   },
 
   "map": {
@@ -286,25 +557,29 @@
     "toggleStruggleZones": "切换自动驾驶问题区域",
     "loadingStruggleZones": "正在加载自动驾驶脱离数据...",
     "struggleZonesLoaded": "发现 {{count}} 次自动驾驶脱离",
-    "togglePhantomBrakes": "切换幽灵刹车热点",
-    "loadingPhantomBrakes": "正在加载幽灵刹车数据...",
-    "phantomBrakesLoaded": "发现 {{count}} 次幽灵刹车",
-    "phantomBrakeHotspot": "幽灵刹车热点",
-    "phantomBrakesAtLocation": "此位置有 {{count}} 次幽灵刹车",
-    "phantomBrakeTip": "此位置反复发生幽灵刹车 - 如果是误报，请考虑向特斯拉反馈。",
-    "toggleDarkMode": "切换地图深色模式"
+    "toggleIncidents": "切换事故标记",
+    "loadingIncidents": "正在加载事故数据...",
+    "incidentsLoaded": "发现 {{count}} 起事故",
+    "incidentHotspot": "事故多发点",
+    "incidentsAtLocation": "此位置有 {{count}} 起事故",
+    "incidentTip": "此位置多次发生事故，建议查看录像了解发生了什么。",
+    "toggleDarkMode": "切换地图深色模式",
+    "scanAllEvents": "扫描所有事件以获取地图数据",
+    "scanningEvents": "正在扫描事件中的事故和 AP 脱离...",
+    "scanComplete": "扫描完成：发现 {{incidents}} 起事故，{{apDisengagements}} 次 AP 脱离",
+    "scanCancelled": "扫描已取消"
   },
 
   "statistics": {
     "title": "统计",
     "close": "关闭",
     "tabs": {
-      "overview": "Overview",
-      "timeline": "Timeline",
-      "locations": "Locations",
-      "sentry": "Sentry Analysis",
-      "quality": "Data Quality",
-      "export": "Export"
+      "overview": "概览",
+      "timeline": "时间轴",
+      "locations": "位置",
+      "sentry": "哨兵分析",
+      "quality": "数据质量",
+      "export": "导出"
     },
     "recordingOverview": "录像概览",
     "totalEvents": "事件总数",
@@ -342,15 +617,15 @@
     "noLocationData": "无位置数据",
     "noSentryLocationData": "无哨兵位置数据",
     "events": "事件",
-    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
-    "triggeringCamera": "Triggering Camera Distribution",
-    "sentryByDayOfWeek": "Sentry Events by Day of Week",
-    "dayVsNight": "Day vs Night Events",
-    "dataQuality": "Data Quality",
-    "eventsWithTelemetry": "Events with Telemetry",
-    "eventsWithoutTelemetry": "Events without Telemetry",
-    "noTriggeringCameraData": "No triggering camera data available",
-    "noEventData": "No event data available"
+    "exportDescription": "下载统计数据，用于离线分析或存档。",
+    "triggeringCamera": "触发摄像头分布",
+    "sentryByDayOfWeek": "按星期统计的哨兵事件",
+    "dayVsNight": "白天与夜间事件",
+    "dataQuality": "数据质量",
+    "eventsWithTelemetry": "有遥测数据的事件",
+    "eventsWithoutTelemetry": "无遥测数据的事件",
+    "noTriggeringCameraData": "无触发摄像头数据",
+    "noEventData": "无事件数据"
   },
 
   "errors": {
@@ -396,8 +671,8 @@
       "recent": "滚动缓冲录像"
     },
     "step3": {
-      "title": "步骤 3：查看 4 个摄像头",
-      "description": "同步观看所有 4 个摄像头角度：前、后、左、右。",
+      "title": "步骤 3：查看摄像头",
+      "description": "同步观看所有摄像头角度：前、后、左、右以及 B 柱摄像头（如有）。",
       "tip": "提示",
       "tipText": "拖动摄像头交换位置，或隐藏不需要的摄像头。"
     },
@@ -418,7 +693,35 @@
     "events": "事件",
     "removeDrive": "移除驱动器",
     "addDrive": "添加驱动器",
-    "changeColor": "点击更改颜色"
+    "changeColor": "点击更改颜色",
+    "archive": "归档",
+    "notLoaded": "未加载",
+    "sync": "同步",
+    "syncNow": "从此归档驱动器加载事件",
+    "editDrive": "编辑驱动器设置"
+  },
+
+  "driveSetup": {
+    "title": "驱动器设置",
+    "editTitle": "编辑驱动器设置",
+    "tipTitle": "提示：如何选择文件夹",
+    "tipTeslaCam": "TeslaCam/ - 一个驱动器上的所有录像",
+    "tipSubfolder": "SavedClips/ 或 SentryClips/ - 仅特定类型的事件",
+    "tipParent": "上级文件夹 - 扫描其中的 TeslaCam 文件夹",
+    "labelField": "驱动器名称",
+    "labelPlaceholder": "例如：我的 USB 驱动器",
+    "dateFilterField": "加载事件范围",
+    "dateFilterAll": "所有事件",
+    "dateFilterWeek": "最近一周",
+    "dateFilterMonth": "最近一个月",
+    "dateFilter3Months": "最近 3 个月",
+    "dateFilter6Months": "最近 6 个月",
+    "dateFilterYear": "最近一年",
+    "archiveLabel": "归档驱动器",
+    "archiveHint": "启动时不加载，需要时手动同步",
+    "changeFolder": "更改文件夹",
+    "addDrive": "添加驱动器",
+    "save": "保存更改"
   },
 
   "driveSync": {
@@ -477,12 +780,33 @@
     "missingOnly": "仅缺失",
     "newerOnly": "仅更新",
     "syncedOnly": "仅已同步",
-    "showingFirst": "显示前 {{count}} 个，共 {{total}} 个事件"
+    "showingFirst": "显示前 {{count}} 个，共 {{total}} 个事件",
+    "scanStopped": "the folder could not be listed to the end ({{error}})",
+    "filesUnreadable": "{{count}} file(s) could not be read: {{names}}",
+    "sourcePartial": "{{event}}: {{error}}. Copy copies the files that can be read. Move will not delete anything from this event.",
+    "destPartial": "{{event}} on the destination: {{error}}",
+    "compareWarningsTitle": "Some files could not be read ({{count}})",
+    "verifyFailed": "验证失败 ({{error}})",
+    "verifyFailedKept": "验证失败 ({{error}})。源驱动器上的文件均未删除。",
+    "partialNotMoved": "Not moved: {{error}}. The files that could be read were copied; nothing was deleted from the source.",
+    "partialCopied": "Only partly copied: {{error}}",
+    "keptInSource": "Kept {{count}} file(s) in the source folder because they were not part of the verified copy (added or changed after Compare): {{names}}",
+    "moveConfirmDetail": "Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.",
+    "notesTitle": "备注和标签",
+    "notesConflictsKept": "{{count}} 个事件在两个驱动器上的备注不同。两者都已原样保留。如需合并，请在同步设置的“备注冲突处理”中选择“自动合并”。",
+    "verifyingFiles": "正在验证第 {{current}} 个文件，共 {{total}} 个",
+    "verifyMismatch": "{{file}} 的副本与原文件不一致",
+    "cancelledAfter": "已在完成 {{done}}/{{total}} 个事件后取消。",
+    "cancelledKeptEvent": "已取消。此事件的文件均未从源驱动器删除。",
+    "cancelledEvent": "在此事件完成前已取消。",
+    "syncCancelled": "同步已取消",
+    "moveNeedsWrite": "移动需要修改 {{drive}} 上文件的权限，才能删除已移动的事件。没有复制或删除任何内容。请在浏览器询问时允许，或改用复制。",
+    "deleteFailed": "已复制并验证，但有 {{count}} 个文件无法从源驱动器删除，仍在原处 ({{error}})。"
   },
 
   "syncSettings": {
     "title": "同步设置",
-    "verifyAfterCopy": "复制后验证文件",
+    "verifyAfterCopy": "复制后逐字节验证 (移动始终验证)",
     "syncNotes": "同步备注和标签",
     "writeSyncFile": "将同步设置文件写入目标",
     "confirmBeforeDelete": "删除源文件前确认",
@@ -490,12 +814,13 @@
     "askEachTime": "每次询问",
     "mergeAutomatically": "自动合并",
     "saveSettings": "保存设置",
-    "close": "关闭"
+    "close": "关闭",
+    "keepBothTellMe": "保留两者并提醒我"
   },
 
   "presets": {
     "title": "管理预设",
-    "noPresets": "没有保存的预设。选择驱动器并点击"保存"创建。",
+    "noPresets": "没有保存的预设。选择驱动器并点击“保存”创建。",
     "importFromDrives": "从驱动器导入",
     "close": "关闭",
     "delete": "删除",
@@ -591,5 +916,69 @@
     "birdsEyeLowG": "低G",
     "birdsEyeMedG": "中G",
     "birdsEyeHighG": "高G"
+  },
+
+  "license": {
+    "activated": "许可证已激活！",
+    "howItWorks": "您的 TeslaCamViewer Pro 许可证是这样工作的：",
+    "privacyFirst": "隐私优先",
+    "privacyFirstDesc": "您的邮箱仅用于在本设备上本地验证许可证，绝不会发送到任何服务器。",
+    "savedInTwoPlaces": "保存在两个地方",
+    "savedInTwoPlacesDesc": "您的许可证保存在浏览器存储和 TeslaCam 驱动器上，因此可以在不同驱动器上使用。",
+    "easyRecovery": "轻松恢复",
+    "easyRecoveryDesc": "如果您换了浏览器或电脑，只需打开任何保存有许可证的驱动器。系统会要求您重新输入邮箱以确认身份。",
+    "multipleDevices": "多台设备",
+    "multipleDevicesDesc": "可在任何设备上使用您的许可证。每个新浏览器只会要求输入一次邮箱进行验证，之后即可正常使用。",
+    "gotIt": "知道了",
+    "limitDailyTitle": "已达每日上限",
+    "limitDailyText": "您今天已查看 {{limit}} 个事件。您仍可以重新打开其中任何一个继续体验功能，只有新事件需要等待。限制将在午夜重置。",
+    "limitExportTitle": "已达导出上限",
+    "limitExportText": "免费版每天可以导出 {{limit}} 个事件：{{names}}。这些事件可以随意重复导出，午夜之后可以选择新的事件。Pro 版没有此限制。",
+    "limitNameSeparator": "、",
+    "limitLockedTitle": "功能已锁定",
+    "limitLockedText": "此功能需要 TeslaCamViewer Pro 许可证。",
+    "limitUpgradeLine": "升级即可无限使用，每年仅需 $5.99",
+    "limitWaitTomorrow": "等到明天",
+    "limitClose": "关闭",
+    "limitUpgrade": "升级"
+  },
+
+  "telemetry": {
+    "title": "遥测",
+    "toggleAnomalyMarkers": "切换异常标记",
+    "hideAnomalyMarkers": "隐藏异常标记",
+    "showAnomalyMarkers": "显示异常标记",
+    "exportCsv": "将遥测数据导出为 CSV",
+    "noData": "无数据",
+    "incident": "事故",
+    "incidentBraking": "急刹车",
+    "incidentSwerve": "急转向",
+    "incidentCombined": "复合事故",
+    "hardBrake": "急刹车",
+    "hardAccel": "急加速",
+    "suddenAcceleration": "{{speed}} mph 时急加速",
+    "suddenDeceleration": "{{speed}} mph 时急减速",
+    "rapidSteering": "快速转向（变化 {{degrees}}°）",
+    "gForce": "G 值：{{value}}g",
+    "lateralG": "横向 G：{{value}}g",
+    "speed": "速度：{{speed}} mph",
+    "dropped": "下降：{{dropped}} mph",
+    "gForceValue": "G 值：{{value}}g",
+    "previousApEvent": "上一个 AP 事件",
+    "nextApEvent": "下一个 AP 事件",
+    "cycleApEvents": "点击箭头依次查看 {{count}} 个 AP 事件",
+    "nearMissDetected": "检测到险情（差点发生事故）",
+    "incidentTooltip": "事故标记：值得回看的急刹车或急转向",
+    "hardBrakingEvents": "急刹车事件",
+    "hardAccelEvents": "急加速事件",
+    "hardBrakingAccelEvents": "急刹车/急加速事件"
+  },
+  "speedLimit": {
+    "unavailableBusy": "Speed limits unavailable right now (map data server busy).",
+    "unavailableUnreachable": "Speed limits unavailable right now (couldn't reach the map data server).",
+    "unavailableOffline": "Speed limits unavailable: you're offline."
+  },
+  "fileProtocol": {
+    "notice": "您是直接从文件夹打开 TeslaCamViewer 的（file://），因此浏览器会阻止部分功能：遥测数据、车牌工具、MP4 和 GIF 导出，以及翻译。要使用全部功能，请打开 teslacamviewer.com，或在此文件夹中启动本地服务器（例如：python -m http.server 8000），然后打开 http://localhost:8000。"
   }
 }

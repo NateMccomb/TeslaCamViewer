@@ -15,6 +15,15 @@ class InsuranceReport {
         this.pageHeight = 841.89;
         this.margin = 40;
         this.contentWidth = this.pageWidth - (this.margin * 2);
+
+        // Reserved areas nothing else is written into: page 1's dark header band and every page's footer (its rule at
+        // footerTop, the version line, the disclaimer and the page number below it). Content stays between contentTop
+        // and contentBottom; a block that doesn't fit starts a new page (see _ensureSpace).
+        this.headerHeight = 80;
+        this.footerTop = this.pageHeight - 45;
+        this.contentTop = this.margin;
+        this.contentBottom = this.footerTop - 8;
+        this._section = null;   // the section being written: a page break repeats its title with "(continued)"
     }
 
     /**
@@ -103,6 +112,7 @@ class InsuranceReport {
             });
 
             let yPosition = this.margin;
+            this._section = null;
 
             // === FETCH WEATHER DATA (async, early) ===
             this._reportProgress(2, 'Fetching weather data...');
@@ -197,7 +207,9 @@ class InsuranceReport {
         doc.setFontSize(10);
         doc.setTextColor(150, 150, 150);
         const dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
-        doc.text(`Generated: ${dateStr}`, this.pageWidth - this.margin - 120, 65);
+        // Right-aligned to the margin: its width changes with the locale and the hour (#566)
+        this._text(doc, `Generated: ${dateStr}`, this.pageWidth - this.margin, 65,
+            { align: 'right', maxWidth: this.contentWidth / 2, ellipsis: true });
 
         return 100;
     }
@@ -250,18 +262,17 @@ class InsuranceReport {
 
         // Add sentry-specific information
         if (event.type === 'SentryClips') {
-            // Calculate sentry trigger time (typically 1 minute before end of recording)
-            const totalDuration = this.videoPlayer?.cachedClipDurations?.reduce((a, b) => a + b, 0) ||
-                (event.clips?.length || 10) * 60;
-            const sentryTriggerTime = Math.max(0, totalDuration - 60);
+            // Where the trigger sits in the recording (event.json's timestamp, else ~1 min before the end)
+            const trigger = this._sentryTrigger(event);
 
             // Store for use in other sections
-            this._sentryTriggerTime = sentryTriggerTime;
-            this._sentryTotalDuration = totalDuration;
+            this._sentryTriggerTime = trigger.time;
+            this._sentryTotalDuration = trigger.total;
 
             info.push({
                 label: 'Trigger Time:',
-                value: `${this._formatTime(sentryTriggerTime)} into recording (approx. 1 min before end)`
+                value: `${this._formatTime(trigger.time)} into recording ` +
+                    (trigger.exact ? '(from the event\'s trigger timestamp)' : '(approx. 1 min before end)')
             });
 
             // Add triggering camera. Labels resolved through the unified
@@ -309,17 +320,10 @@ class InsuranceReport {
             });
         }
 
-        // Draw info table
+        // Draw info table (values wrap in their column: a reason the app has no wording for can be long, #567)
         doc.setFontSize(11);
         for (const row of info) {
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(100, 100, 100);
-            doc.text(row.label, this.margin, y);
-
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(50, 50, 50);
-            doc.text(row.value, this.margin + 120, y);
-            y += 18;
+            y = this._row(doc, y, row.label, row.value, 120, 18);
         }
 
         return y + 15;
@@ -334,10 +338,7 @@ class InsuranceReport {
      */
     async _addLocationSection(doc, event, y) {
         // Check if we need a new page
-        if (y > this.pageHeight - 250) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, 200);
 
         y = this._addSectionTitle(doc, 'Location Details', y);
 
@@ -373,20 +374,18 @@ class InsuranceReport {
             }
 
             doc.setFontSize(10);
+            y = this._ensureSpace(doc, y, 12);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(0, 150, 200); // Blue for sentry location
             doc.text('LOCATION:', this.margin, y);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(50, 50, 50);
-            const locLines = doc.splitTextToSize(locationAddress, this.contentWidth - 65);
-            doc.text(locLines, this.margin + 65, y);
-            y += locLines.length * 12 + 8;
+            y = this._text(doc, locationAddress, this.margin + 65, y, { lineHeight: 12 }) + 20;
 
             doc.setFontSize(9);
             doc.setTextColor(100, 100, 100);
             doc.setFont('helvetica', 'italic');
-            doc.text('(Vehicle was parked - Sentry Mode event)', this.margin, y);
-            y += 15;
+            y = this._text(doc, '(Vehicle was parked - Sentry Mode event)', this.margin, y) + 15;
         } else {
             // Driving event - start and end locations
             // Get start address
@@ -421,25 +420,23 @@ class InsuranceReport {
 
             // Start location
             doc.setFontSize(10);
+            y = this._ensureSpace(doc, y, 12);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(76, 175, 80); // Green for start
             doc.text('START:', this.margin, y);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(50, 50, 50);
-            const startLines = doc.splitTextToSize(startAddress, this.contentWidth - 50);
-            doc.text(startLines, this.margin + 45, y);
-            y += startLines.length * 12 + 8;
+            y = this._text(doc, startAddress, this.margin + 45, y, { lineHeight: 12 }) + 20;
 
             // End location
             doc.setFontSize(10);
+            y = this._ensureSpace(doc, y, 12);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(244, 67, 54); // Red for end
             doc.text('END:', this.margin, y);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(50, 50, 50);
-            const endLines = doc.splitTextToSize(endAddress, this.contentWidth - 50);
-            doc.text(endLines, this.margin + 45, y);
-            y += endLines.length * 12 + 15;
+            y = this._text(doc, endAddress, this.margin + 45, y, { lineHeight: 12 }) + 27;
         }
 
         // Try to render map
@@ -462,23 +459,18 @@ class InsuranceReport {
                 const mapHeight = 180;
                 const mapWidth = this.contentWidth;
 
-                // Check if map fits on current page
-                if (y + mapHeight > this.pageHeight - this.margin) {
-                    doc.addPage();
-                    y = this.margin;
-                }
-
                 const routeMapImage = await this._renderRouteMap(gpsPoints, mapWidth, mapHeight);
                 if (routeMapImage) {
-                    doc.addImage(routeMapImage, 'PNG', this.margin, y, mapWidth, mapHeight);
+                    // The map and its caption on one page
+                    y = this._ensureSpace(doc, y, mapHeight + 15);
+                    this._image(doc, routeMapImage, 'PNG', this.margin, y, mapWidth, mapHeight, 'Map not available');
                     y += mapHeight + 10;
 
                     // Map caption
                     doc.setFontSize(9);
                     doc.setTextColor(100, 100, 100);
                     doc.setFont('helvetica', 'italic');
-                    doc.text('Route map showing vehicle path. Green = Start, Red = End', this.margin, y);
-                    y += 15;
+                    y = this._text(doc, 'Route map showing vehicle path. Green = Start, Red = End', this.margin, y) + 15;
                 }
             } catch (e) {
                 console.warn('[InsuranceReport] Route map render failed:', e);
@@ -489,15 +481,11 @@ class InsuranceReport {
                 const mapHeight = 150;
                 const mapWidth = this.contentWidth;
 
-                // Check if map fits on current page
-                if (y + mapHeight > this.pageHeight - this.margin) {
-                    doc.addPage();
-                    y = this.margin;
-                }
-
                 const locationMapImage = await this._renderLocationMap(startGps, mapWidth, mapHeight);
                 if (locationMapImage) {
-                    doc.addImage(locationMapImage, 'PNG', this.margin, y, mapWidth, mapHeight);
+                    // The map and its caption on one page
+                    y = this._ensureSpace(doc, y, mapHeight + 15);
+                    this._image(doc, locationMapImage, 'PNG', this.margin, y, mapWidth, mapHeight, 'Map not available');
                     y += mapHeight + 10;
 
                     // Map caption
@@ -507,8 +495,7 @@ class InsuranceReport {
                     const caption = isSentryEvent
                         ? 'Location map showing where Sentry event occurred'
                         : 'Location map showing event position';
-                    doc.text(caption, this.margin, y);
-                    y += 15;
+                    y = this._text(doc, caption, this.margin, y) + 15;
                 }
             } catch (e) {
                 console.warn('[InsuranceReport] Location map render failed:', e);
@@ -528,10 +515,7 @@ class InsuranceReport {
      */
     async _addKeyFramesSection(doc, event, y, options) {
         // Check if we need a new page
-        if (y > this.pageHeight - 300) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, 250);
 
         y = this._addSectionTitle(doc, 'Video Evidence', y);
 
@@ -551,15 +535,11 @@ class InsuranceReport {
                 await this._waitForAllVideosReady();
 
                 const imageData = await this._captureCurrentFrame();
-                if (imageData) {
-                    frameImages.push({
-                        image: imageData,
-                        label: frame.label,
-                        time: frame.time
-                    });
-                }
+                frameImages.push({ image: imageData, label: frame.label, time: frame.time });
             } catch (e) {
                 console.warn(`[InsuranceReport] Failed to capture frame at ${frame.time}:`, e);
+                // Keep the slot (the numbers match the route map's evidence markers): it shows "No frame available"
+                frameImages.push({ image: null, label: frame.label, time: frame.time });
             }
         }
 
@@ -572,25 +552,24 @@ class InsuranceReport {
             const isLeftColumn = i % 2 === 0;
             const x = isLeftColumn ? this.margin : this.margin + imgWidth + 10;
 
-            // Check if we need a new page
-            if (isLeftColumn && y + imgHeight + 30 > this.pageHeight - this.margin) {
-                doc.addPage();
-                y = this.margin;
+            // A row of frames and their captions on one page
+            if (isLeftColumn) {
+                y = this._ensureSpace(doc, y, imgHeight + 15);
             }
 
-            // Frame image
-            doc.addImage(frame.image, 'PNG', x, y, imgWidth, imgHeight);
+            // Frame image (or a "No frame available" box when the capture didn't decode)
+            this._image(doc, frame.image, 'PNG', x, y, imgWidth, imgHeight);
 
             // Frame label with number
             doc.setFontSize(9);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(50, 50, 50);
-            doc.text(`${i + 1}. ${frame.label}`, x, y + imgHeight + 12);
+            this._text(doc, `${i + 1}. ${frame.label}`, x, y + imgHeight + 12, { maxWidth: 95, ellipsis: true });
 
             // Time caption
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 100, 100);
-            doc.text(this._formatTime(frame.time), x + 100, y + imgHeight + 12);
+            this._text(doc, this._formatTime(frame.time), x + 100, y + imgHeight + 12, { maxWidth: imgWidth - 100, ellipsis: true });
 
             // Move to next row if we completed a pair
             if (!isLeftColumn || i === frameImages.length - 1) {
@@ -615,10 +594,7 @@ class InsuranceReport {
      */
     async _addSentryTriggerSection(doc, event, y) {
         // Check if we need a new page
-        if (y > this.pageHeight - 350) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, 300);
 
         y = this._addSectionTitle(doc, 'Sentry Trigger Analysis', y);
 
@@ -627,53 +603,56 @@ class InsuranceReport {
         const totalDuration = this._sentryTotalDuration || 0;
         const triggerReason = event.reason || event.metadata?.reason;
 
-        // Highlighted warning box
-        const boxHeight = 70;
+        // Highlighted warning box, as tall as its text (a long reason wraps)
+        const boxX = this.margin + 10, boxW = this.contentWidth - 20;
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        const reasonLines = triggerReason
+            ? this._lines(doc, `Reason: ${this._formatTriggerReason(triggerReason)}`, boxW) : [];
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'italic');
+        const noteLines = this._lines(doc, 'Tesla typically saves 10 minutes of footage, with the trigger occurring ~1 minute before the end.', boxW);
+        const reasonY = y + 38;
+        const noteY = (reasonLines.length ? reasonY + (reasonLines.length - 1) * 12 : y + 25) + 17;
+        const boxHeight = noteY + (noteLines.length - 1) * 11 + 10 - (y - 5);
+        y = this._ensureSpace(doc, y, boxHeight - 5);
+        const top = y - 5, shift = y - (reasonY - 38);
+
         doc.setFillColor(255, 248, 225); // Light yellow
-        doc.rect(this.margin, y - 5, this.contentWidth, boxHeight, 'F');
+        doc.rect(this.margin, top, this.contentWidth, boxHeight, 'F');
         doc.setDrawColor(255, 152, 0); // Orange border
         doc.setLineWidth(1.5);
-        doc.rect(this.margin, y - 5, this.contentWidth, boxHeight, 'S');
+        doc.rect(this.margin, top, this.contentWidth, boxHeight, 'S');
 
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(230, 81, 0);
-        doc.text('SENTRY MODE TRIGGER DETECTED', this.margin + 10, y + 10);
+        doc.text('SENTRY MODE TRIGGER DETECTED', boxX, y + 10);
 
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(50, 50, 50);
-        doc.text(`Trigger Time: ${this._formatTime(triggerTime)} into recording`, this.margin + 10, y + 25);
-
-        if (triggerReason) {
-            const reasonText = this._formatTriggerReason(triggerReason);
-            const reasonLines = doc.splitTextToSize(`Reason: ${reasonText}`, this.contentWidth - 20);
-            doc.text(reasonLines, this.margin + 10, y + 38);
+        doc.text(`Trigger Time: ${this._formatTime(triggerTime)} into recording`, boxX, y + 25);
+        if (reasonLines.length) {
+            doc.text(reasonLines, boxX, reasonY + shift, { lineHeightFactor: 12 / 10 });
         }
 
         doc.setFontSize(9);
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(100, 100, 100);
-        doc.text('Tesla typically saves 10 minutes of footage, with the trigger occurring ~1 minute before the end.', this.margin + 10, y + 55);
+        doc.text(noteLines, boxX, noteY + shift, { lineHeightFactor: 11 / 9 });
 
-        y += boxHeight + 15;
-
-        // Capture frames around the trigger moment
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Frames Around Trigger Moment', this.margin, y);
-        y += 15;
+        y = top + boxHeight + 20;
 
         // Define frame times around trigger: -10s, -5s, -2s, trigger, +2s, +5s
         const triggerFrameTimes = [
-            { time: Math.max(0, triggerTime - 10), label: '10 sec before trigger' },
-            { time: Math.max(0, triggerTime - 5), label: '5 sec before trigger' },
-            { time: Math.max(0, triggerTime - 2), label: '2 sec before trigger' },
-            { time: triggerTime, label: '>>> TRIGGER MOMENT <<<', isHighlight: true },
-            { time: Math.min(totalDuration, triggerTime + 2), label: '2 sec after trigger' },
-            { time: Math.min(totalDuration, triggerTime + 5), label: '5 sec after trigger' }
-        ];
+            { offset: -10, label: '10 sec before trigger' },
+            { offset: -5, label: '5 sec before trigger' },
+            { offset: -2, label: '2 sec before trigger' },
+            { offset: 0, label: '>>> TRIGGER MOMENT <<<', isHighlight: true },
+            { offset: 2, label: '2 sec after trigger' },
+            { offset: 5, label: '5 sec after trigger' }
+        ].map(f => ({ ...f, time: triggerTime + f.offset }));
 
         // Determine which camera triggered the event
         const triggerCameraId = event.metadata?.camera;
@@ -693,8 +672,6 @@ class InsuranceReport {
             '4': 'left_pillar',
             '7': 'right_pillar'
         };
-        const triggerCameraKey = cameraIdToVideoKey[String(triggerCameraId)] || 'front';
-        const triggerVideo = this.videoPlayer?.videos?.[triggerCameraKey];
 
         // Camera display names
         const cameraDisplayNames = {
@@ -705,147 +682,148 @@ class InsuranceReport {
             'left_pillar': 'Left Pillar',
             'right_pillar': 'Right Pillar'
         };
+
+        // The triggering camera, when this event has video from it; else the first camera that recorded
+        // (a camera id the event has no clips for gave six blank frames, #568)
+        const hasVideo = key => (event.clipGroups || []).some(g => g?.clips?.[key]);
+        const reportedKey = cameraIdToVideoKey[String(triggerCameraId)] || 'front';
+        let triggerCameraKey = reportedKey;
+        if (!hasVideo(triggerCameraKey)) {
+            const alt = ['front', 'back', 'left_repeater', 'right_repeater', 'left_pillar', 'right_pillar'].find(hasVideo);
+            if (alt) triggerCameraKey = alt;
+        }
+        const triggerVideo = this.videoPlayer?.videos?.[triggerCameraKey];
         const triggerCameraName = cameraDisplayNames[triggerCameraKey] || 'Front Camera';
+        const caption = triggerCameraKey === reportedKey
+            ? `(Showing frames from ${triggerCameraName} - the camera that detected the trigger)`
+            : `(${cameraDisplayNames[reportedKey] || 'The triggering camera'} recorded no video in this event: showing frames from ${triggerCameraName})`;
+
+        // Grid geometry: 3 per row, 16:9
+        const imgWidth = (this.contentWidth - 15) / 3;
+        const imgHeight = imgWidth * 0.5625;
+
+        // Heading + caption + the first row of frames on one page
+        y = this._subheading(doc, y, 'Frames Around Trigger Moment', 12 + imgHeight + 15);
 
         // Show which camera we're displaying
         doc.setFontSize(9);
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(100, 100, 100);
-        doc.text(`(Showing frames from ${triggerCameraName} - the camera that detected the trigger)`, this.margin, y);
-        y += 12;
+        y = this._text(doc, caption, this.margin, y) + 12;
 
-        // Capture frames from the triggering camera
+        // Capture frames from the triggering camera. A moment outside the recording (a trigger near its start or
+        // end) gets a box saying so, never a copy of the first or last frame under the wrong time.
+        const lastFrameTime = Math.max(0, totalDuration - 0.1);
         const frameImages = [];
-
-        if (triggerVideo) {
-            for (const frameInfo of triggerFrameTimes) {
+        for (const frameInfo of triggerFrameTimes) {
+            let dataUrl = null;
+            let missing = 'No frame available';
+            if (frameInfo.time < 0) {
+                missing = 'Before the start of the recording';
+            } else if (frameInfo.offset > 0 && frameInfo.time > lastFrameTime) {
+                missing = 'After the end of the recording';
+            } else if (triggerVideo) {
                 try {
-                    await this.videoPlayer.seekToEventTime(frameInfo.time);
+                    await this.videoPlayer.seekToEventTime(Math.min(frameInfo.time, lastFrameTime));
                     await new Promise(resolve => setTimeout(resolve, 150));
+                    await this._waitForVideoReady(triggerVideo);
 
-                    const canvas = document.createElement('canvas');
-                    canvas.width = triggerVideo.videoWidth;
-                    canvas.height = triggerVideo.videoHeight;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(triggerVideo, 0, 0);
+                    if (triggerVideo.src && triggerVideo.readyState >= 2 && triggerVideo.videoWidth > 0 && triggerVideo.videoHeight > 0) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = triggerVideo.videoWidth;
+                        canvas.height = triggerVideo.videoHeight;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(triggerVideo, 0, 0);
 
-                    // Add red border for trigger moment
-                    if (frameInfo.isHighlight) {
-                        ctx.strokeStyle = '#ff0000';
-                        ctx.lineWidth = 8;
-                        ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+                        // Add red border for trigger moment
+                        if (frameInfo.isHighlight) {
+                            ctx.strokeStyle = '#ff0000';
+                            ctx.lineWidth = 8;
+                            ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+                        }
+
+                        // Add camera label in corner
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                        ctx.fillRect(0, 0, 120, 24);
+                        ctx.font = 'bold 14px Arial';
+                        ctx.fillStyle = '#fff';
+                        ctx.fillText(triggerCameraName, 8, 17);
+
+                        dataUrl = canvas.toDataURL('image/jpeg', 0.85);
                     }
-
-                    // Add camera label in corner
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-                    ctx.fillRect(0, 0, 120, 24);
-                    ctx.font = 'bold 14px Arial';
-                    ctx.fillStyle = '#fff';
-                    ctx.fillText(triggerCameraName, 8, 17);
-
-                    frameImages.push({
-                        dataUrl: canvas.toDataURL('image/jpeg', 0.85),
-                        ...frameInfo
-                    });
                 } catch (e) {
                     console.warn(`[InsuranceReport] Failed to capture trigger frame at ${frameInfo.time}:`, e);
                 }
             }
+            frameImages.push({ dataUrl, missing, ...frameInfo });
         }
 
         // Display frames in 3x2 grid
-        if (frameImages.length > 0) {
-            const imgWidth = (this.contentWidth - 15) / 3;
-            const imgHeight = imgWidth * 0.5625; // 16:9 ratio
+        for (let i = 0; i < frameImages.length; i++) {
+            const frame = frameImages[i];
+            const col = i % 3;
 
-            for (let i = 0; i < frameImages.length; i++) {
-                const frame = frameImages[i];
-                const col = i % 3;
-                const row = Math.floor(i / 3);
-
-                if (row > 0 && col === 0) {
-                    y += imgHeight + 25;
-                }
-
-                // Check for page break
-                if (y + imgHeight + 20 > this.pageHeight - this.margin) {
-                    doc.addPage();
-                    y = this.margin;
-                }
-
-                const x = this.margin + col * (imgWidth + 7.5);
-
-                // Add image
-                doc.addImage(frame.dataUrl, 'JPEG', x, y, imgWidth, imgHeight);
-
-                // Add red border indicator for trigger moment
-                if (frame.isHighlight) {
-                    doc.setDrawColor(255, 0, 0);
-                    doc.setLineWidth(2);
-                    doc.rect(x, y, imgWidth, imgHeight, 'S');
-                }
-
-                // Frame label
-                doc.setFontSize(8);
-                doc.setFont('helvetica', frame.isHighlight ? 'bold' : 'normal');
-                doc.setTextColor(frame.isHighlight ? 200 : 50, frame.isHighlight ? 0 : 50, frame.isHighlight ? 0 : 50);
-                doc.text(frame.label, x, y + imgHeight + 8);
-
-                // Time
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(100, 100, 100);
-                doc.text(this._formatTime(frame.time), x + imgWidth - 25, y + imgHeight + 8);
+            if (i > 0 && col === 0) {
+                y += imgHeight + 25;
+            }
+            // A row of frames and their captions on one page
+            if (col === 0) {
+                y = this._ensureSpace(doc, y, imgHeight + 12);
             }
 
-            y += imgHeight + 25;
+            const x = this.margin + col * (imgWidth + 7.5);
+
+            // Add image (or a box saying why there is none)
+            const placed = this._image(doc, frame.dataUrl, 'JPEG', x, y, imgWidth, imgHeight, frame.missing);
+
+            // Add red border indicator for trigger moment
+            if (frame.isHighlight && placed) {
+                doc.setDrawColor(255, 0, 0);
+                doc.setLineWidth(2);
+                doc.rect(x, y, imgWidth, imgHeight, 'S');
+            }
+
+            // Frame label
+            doc.setFontSize(8);
+            doc.setFont('helvetica', frame.isHighlight ? 'bold' : 'normal');
+            doc.setTextColor(frame.isHighlight ? 200 : 50, frame.isHighlight ? 0 : 50, frame.isHighlight ? 0 : 50);
+            this._text(doc, frame.label, x, y + imgHeight + 8, { maxWidth: imgWidth - 30, ellipsis: true });
+
+            // Time (a moment outside the recording has none)
+            if (frame.time >= 0 && !(frame.offset > 0 && frame.time > lastFrameTime)) {
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(100, 100, 100);
+                this._text(doc, this._formatTime(frame.time), x + imgWidth, y + imgHeight + 8, { align: 'right', maxWidth: 28 });
+            }
         }
+        y += imgHeight + 25;
 
         // Add telemetry at trigger moment
         const telemetryOverlay = window.app?.telemetryOverlay;
         if (telemetryOverlay?.clipSeiData) {
             y += 10;
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(50, 50, 50);
-            doc.text('Telemetry at Trigger Moment', this.margin, y);
-            y += 15;
+            y = this._subheading(doc, y, 'Telemetry at Trigger Moment', 12);
 
             // Get telemetry data at trigger time
             const triggerData = this._getTelemetryAtTime(telemetryOverlay, triggerTime);
 
             if (triggerData) {
-                const telemetryItems = [];
-
-                if (triggerData.speed !== undefined) {
-                    telemetryItems.push(`Speed: ${triggerData.speed.toFixed(1)} mph`);
-                }
-                if (triggerData.gForce !== undefined) {
-                    telemetryItems.push(`G-Force: ${triggerData.gForce.toFixed(2)} G`);
-                }
-                if (triggerData.lateralG !== undefined) {
-                    telemetryItems.push(`Lateral G: ${triggerData.lateralG.toFixed(2)} G`);
-                }
-                if (triggerData.brake !== undefined && triggerData.brake > 0) {
-                    telemetryItems.push(`Brake Pressure: ${triggerData.brake.toFixed(0)}%`);
-                }
+                const telemetryItems = this._triggerTelemetryItems(triggerData);
 
                 doc.setFontSize(10);
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(50, 50, 50);
 
                 if (telemetryItems.length > 0) {
-                    doc.text(telemetryItems.join('  |  '), this.margin, y);
-                    y += 15;
+                    y = this._text(doc, telemetryItems.join('  |  '), this.margin, y, { lineHeight: 12 }) + 15;
                 } else {
                     doc.setTextColor(100, 100, 100);
-                    doc.text('Vehicle was stationary (parked) at trigger time.', this.margin, y);
-                    y += 15;
+                    y = this._text(doc, 'Vehicle was stationary (parked) at trigger time.', this.margin, y) + 15;
                 }
             } else {
                 doc.setFontSize(10);
                 doc.setTextColor(100, 100, 100);
-                doc.text('No telemetry data available at trigger moment.', this.margin, y);
-                y += 15;
+                y = this._text(doc, 'No telemetry data available at trigger moment.', this.margin, y) + 15;
             }
         }
 
@@ -886,25 +864,68 @@ class InsuranceReport {
 
             const clipStartTime = clipStartTimes[clipIndex] || (clipIndex * defaultDuration);
 
-            for (const frame of frames) {
-                const absoluteTime = clipStartTime + (frame.media_timestamp || 0);
+            // Frames carry no timestamp: spread them over the clip, like the other telemetry collectors
+            const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+            for (let i = 0; i < frames.length; i++) {
+                const frame = frames[i];
+                const absoluteTime = clipStartTime + (i / frames.length) * clipDuration;
                 const diff = Math.abs(absoluteTime - targetTime);
 
                 if (diff < closestDiff) {
                     closestDiff = diff;
+                    // Same axes as _collectAllTelemetryPoints: y is longitudinal, x is lateral (m/s2)
+                    const ax = frame.linear_acceleration_mps2_x || 0;
+                    const ay = frame.linear_acceleration_mps2_y || 0;
                     closestData = {
                         time: absoluteTime,
-                        speed: frame.vehicle_speed,
-                        gForce: frame.acc_x ? Math.sqrt(frame.acc_x ** 2 + (frame.acc_y || 0) ** 2 + (frame.acc_z || 0) ** 2) / 9.81 : undefined,
-                        lateralG: frame.acc_y ? Math.abs(frame.acc_y) / 9.81 : undefined,
-                        brake: frame.brake_pedal,
-                        throttle: frame.accelerator_pedal
+                        speed: frame.speed_mph || 0,
+                        gForce: Math.sqrt(ax * ax + ay * ay) / 9.81,
+                        lateralG: Math.abs(ax) / 9.81,
+                        brake: !!frame.brake_applied,
+                        throttle: frame.accelerator_pedal_position || 0,
+                        gear: frame.gear_name || null,
+                        turnSignal: this._turnSignalName(frame)
                     };
                 }
             }
         }
 
         return closestData;
+    }
+
+    /**
+     * Turn signal state of an SEI frame (SEI has two booleans, no name field)
+     * @param {Object} frame - formatted SEI frame (seiExtractor._formatTelemetry)
+     * @returns {string} 'LEFT', 'RIGHT', 'HAZARD' (both on) or 'NONE'
+     */
+    _turnSignalName(frame) {
+        const left = !!frame?.blinker_on_left;
+        const right = !!frame?.blinker_on_right;
+        if (left && right) return 'HAZARD';
+        if (left) return 'LEFT';
+        if (right) return 'RIGHT';
+        return 'NONE';
+    }
+
+    /**
+     * Text items for "Telemetry at Trigger Moment"; empty when the car was parked and still
+     * @param {Object} triggerData - from _getTelemetryAtTime
+     * @returns {string[]}
+     */
+    _triggerTelemetryItems(triggerData) {
+        const speed = triggerData.speed || 0;
+        if (triggerData.gear === 'P' && speed < 1 && !triggerData.throttle) return [];
+
+        const items = [`Speed: ${speed.toFixed(1)} mph`];
+        if (triggerData.gear) items.push(`Gear: ${triggerData.gear}`);
+        items.push(`G-Force: ${(triggerData.gForce || 0).toFixed(2)} G`);
+        items.push(`Lateral G: ${(triggerData.lateralG || 0).toFixed(2)} G`);
+        items.push(`Brake: ${triggerData.brake ? 'applied' : 'not applied'}`);
+        items.push(`Accelerator: ${Math.round((triggerData.throttle || 0) * 100)}%`);
+        if (triggerData.turnSignal && triggerData.turnSignal !== 'NONE') {
+            items.push(`Turn signal: ${triggerData.turnSignal}`);
+        }
+        return items;
     }
 
     /**
@@ -934,10 +955,7 @@ class InsuranceReport {
         }
 
         // Check if we need a new page
-        if (y > this.pageHeight - 200) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, 150);
 
         y = this._addSectionTitle(doc, 'Telemetry Summary', y);
 
@@ -947,8 +965,7 @@ class InsuranceReport {
         if (!stats) {
             doc.setFontSize(10);
             doc.setTextColor(100, 100, 100);
-            doc.text('No telemetry data available for this event.', this.margin, y);
-            return y + 20;
+            return this._text(doc, 'No telemetry data available for this event.', this.margin, y) + 20;
         }
 
         // Create telemetry table
@@ -966,14 +983,7 @@ class InsuranceReport {
 
         doc.setFontSize(11);
         for (const row of telemetryData) {
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(100, 100, 100);
-            doc.text(row.label, this.margin, y);
-
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(50, 50, 50);
-            doc.text(row.value, this.margin + 140, y);
-            y += 18;
+            y = this._row(doc, y, row.label, row.value, 140, 18);
         }
 
         // Add note about G-forces
@@ -982,9 +992,7 @@ class InsuranceReport {
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(100, 100, 100);
         const noteText = 'Note: G-force values above 0.4G typically indicate hard acceleration/braking, above 0.6G suggests emergency maneuvers.';
-        const noteLines = doc.splitTextToSize(noteText, this.contentWidth);
-        doc.text(noteLines, this.margin, y);
-        y += noteLines.length * 12 + 15;
+        y = this._text(doc, noteText, this.margin, y, { lineHeight: 12 }) + 27;
 
         // Add telemetry graphs (filtered to IN/OUT range if available)
         y = await this._addTelemetryGraphs(doc, telemetryOverlay, y, timeRange, evidenceMarkers);
@@ -1013,73 +1021,61 @@ class InsuranceReport {
 
         // Check if we need a new page
         const graphHeight = 120;
-        if (y + graphHeight * 2 + 60 > this.pageHeight - this.margin) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, graphHeight * 2 + 60);
 
         y = this._addSectionTitle(doc, 'Telemetry Graphs', y);
 
         // Render speed graph
         const speedGraphImage = this._renderSpeedGraph(allPoints, this.contentWidth, graphHeight);
         if (speedGraphImage) {
+            // The title and its graph on one page
+            y = this._ensureSpace(doc, y, 12 + graphHeight);
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(50, 50, 50);
-            doc.text('Speed Over Time', this.margin, y);
-            y += 12;
+            y = this._text(doc, 'Speed Over Time', this.margin, y) + 12;
 
-            doc.addImage(speedGraphImage, 'PNG', this.margin, y, this.contentWidth, graphHeight);
+            this._image(doc, speedGraphImage, 'PNG', this.margin, y, this.contentWidth, graphHeight, 'Graph not available');
             y += graphHeight + 15;
-        }
-
-        // Check if we need a new page for g-force graph
-        if (y + graphHeight + 30 > this.pageHeight - this.margin) {
-            doc.addPage();
-            y = this.margin;
         }
 
         // Render G-force graph
         const gforceGraphImage = this._renderGForceGraph(allPoints, this.contentWidth, graphHeight);
         if (gforceGraphImage) {
+            // The title, the graph and its legend on one page
+            y = this._ensureSpace(doc, y, 12 + graphHeight + 10 + 3);
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(50, 50, 50);
-            doc.text('G-Force (Acceleration/Braking)', this.margin, y);
-            y += 12;
+            y = this._text(doc, 'G-Force (Acceleration/Braking)', this.margin, y) + 12;
 
-            doc.addImage(gforceGraphImage, 'PNG', this.margin, y, this.contentWidth, graphHeight);
+            this._image(doc, gforceGraphImage, 'PNG', this.margin, y, this.contentWidth, graphHeight, 'Graph not available');
             y += graphHeight + 10;
 
             // Add legend
             doc.setFontSize(8);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 100, 100);
-            doc.text('Positive = Acceleration | Negative = Braking | Orange line shows longitudinal G-force', this.margin, y);
-            y += 12;
+            y = this._text(doc, 'Positive = Acceleration | Negative = Braking | Orange line shows longitudinal G-force', this.margin, y) + 12;
         }
 
         // Add route map if GPS data available (filtered to time range if provided)
         const gpsPoints = this._collectGPSPoints(telemetryOverlay, timeRange);
         console.log(`[InsuranceReport] Collected ${gpsPoints.length} GPS points for route map`);
         if (gpsPoints.length >= 2) {
-            // Check if we need a new page
+            // The title, the map and its legend on one page
             const mapHeight = 200;
-            if (y + mapHeight + 40 > this.pageHeight - this.margin) {
-                doc.addPage();
-                y = this.margin;
-            }
+            y = this._ensureSpace(doc, y, 10 + 12 + mapHeight + 10 + 3);
 
             y += 10;
             doc.setFontSize(10);
             doc.setFont('helvetica', 'bold');
             doc.setTextColor(50, 50, 50);
-            doc.text('Route Map', this.margin, y);
-            y += 12;
+            y = this._text(doc, 'Route Map', this.margin, y) + 12;
 
             const routeMapImage = await this._renderRouteMap(gpsPoints, this.contentWidth, mapHeight, evidenceMarkers);
             if (routeMapImage) {
-                doc.addImage(routeMapImage, 'PNG', this.margin, y, this.contentWidth, mapHeight);
+                this._image(doc, routeMapImage, 'PNG', this.margin, y, this.contentWidth, mapHeight, 'Map not available');
                 y += mapHeight + 10;
 
                 // Add legend
@@ -1090,8 +1086,7 @@ class InsuranceReport {
                 if (evidenceMarkers && evidenceMarkers.length > 0) {
                     legendText += ', Orange diamonds = Video Evidence locations (1-' + evidenceMarkers.length + ')';
                 }
-                doc.text(legendText, this.margin, y);
-                y += 12;
+                y = this._text(doc, legendText, this.margin, y) + 12;
             }
         }
 
@@ -1839,8 +1834,8 @@ class InsuranceReport {
                     speed_mph: frame.speed_mph || 0,
                     g_force_y: gForceY,
                     g_force_x: gForceX,
-                    throttle: frame.throttle || 0,
-                    brake: frame.brake || false
+                    throttle: frame.accelerator_pedal_position || 0,
+                    brake: !!frame.brake_applied
                 });
             }
         }
@@ -2099,10 +2094,7 @@ class InsuranceReport {
      */
     _addTimelineSection(doc, event, y) {
         // Check if we need a new page
-        if (y > this.pageHeight - 150) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, 100);
 
         y = this._addSectionTitle(doc, 'Event Timeline', y);
 
@@ -2149,9 +2141,11 @@ class InsuranceReport {
             });
         }
 
-        // Add trigger info if available (for Sentry events)
+        // Add trigger info if available (for Sentry events: where the trigger sits, as in Event Information)
         if (event.reason) {
-            const triggerTime = marks.inPoint !== null ? marks.inPoint : 0;
+            const triggerTime = event.type === 'SentryClips' && this._sentryTriggerTime !== undefined
+                ? this._sentryTriggerTime
+                : (marks.inPoint !== null ? marks.inPoint : 0);
             timelineEvents.push({
                 time: this._formatTime(triggerTime),
                 description: `Trigger: ${this._formatReason(event.reason)}`
@@ -2186,14 +2180,8 @@ class InsuranceReport {
         // Draw timeline
         doc.setFontSize(10);
         for (const item of timelineEvents) {
-            // Check if we need a new page before drawing each item
-            if (y > this.pageHeight - 40) {
-                doc.addPage();
-                y = this.margin;
-                // Re-add section header on new page
-                y = this._addSectionTitle(doc, 'Event Timeline (continued)', y);
-                doc.setFontSize(10);
-            }
+            // A new page repeats "Event Timeline (continued)"
+            y = this._ensureSpace(doc, y, 4);
 
             // Time
             doc.setFont('helvetica', 'bold');
@@ -2207,8 +2195,7 @@ class InsuranceReport {
             // Description
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(50, 50, 50);
-            doc.text(item.description, this.margin + 65, y);
-            y += 20;
+            y = this._text(doc, item.description, this.margin + 65, y, { lineHeight: 12 }) + 20;
         }
 
         return y + 10;
@@ -2227,10 +2214,7 @@ class InsuranceReport {
         }
 
         // Check if we need a new page
-        if (y > this.pageHeight - 300) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, 250);
 
         y = this._addSectionTitle(doc, 'Incident Analysis', y);
 
@@ -2247,49 +2231,32 @@ class InsuranceReport {
         if (!analysisData) {
             doc.setFontSize(10);
             doc.setTextColor(100, 100, 100);
-            doc.text('Insufficient telemetry data for incident analysis.', this.margin, y);
-            return y + 20;
+            return this._text(doc, 'Insufficient telemetry data for incident analysis.', this.margin, y) + 20;
         }
 
         // === IMPACT DETECTION ===
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Impact Detection', this.margin, y);
-        y += 15;
+        // Every impact is listed (a long event has many): the list runs on over as many pages as it needs (#565)
+        y = this._subheading(doc, y, 'Impact Detection', 14);
 
         if (analysisData.impacts.length > 0) {
-            doc.setFillColor(255, 240, 240);
-            doc.rect(this.margin, y - 10, this.contentWidth, 12 + analysisData.impacts.length * 14, 'F');
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(200, 0, 0);
-            doc.text(`WARNING: ${analysisData.impacts.length} potential impact(s) detected`, this.margin + 5, y);
-            y += 14;
-
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 50, 50);
-            for (const impact of analysisData.impacts) {
-                doc.text(`• ${this._formatTime(impact.time)} - ${impact.gForce.toFixed(2)}G ${impact.direction}`, this.margin + 10, y);
-                y += 12;
-            }
-            y += 5;
+            y = this._panelList(doc, y, {
+                fill: [255, 240, 240],
+                header: [{ text: `WARNING: ${analysisData.impacts.length} potential impact(s) detected`, font: 'bold', color: [200, 0, 0], after: 14 }],
+                items: analysisData.impacts.map(impact => ({
+                    text: `• ${this._formatTime(impact.time)} - ${impact.gForce.toFixed(2)}G ${impact.direction}`,
+                    color: [100, 50, 50]
+                }))
+            });
         } else {
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(0, 150, 0);
-            doc.text('No significant impacts detected (G-force remained below 1.0G)', this.margin, y);
-            y += 15;
+            y = this._text(doc, 'No significant impacts detected (G-force remained below 1.0G)', this.margin, y) + 15;
         }
 
         // === SPEED AT KEY MOMENTS ===
         y += 10;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Speed Analysis', this.margin, y);
-        y += 15;
+        y = this._subheading(doc, y, 'Speed Analysis', 14 * 4);
 
         const speedData = [
             { label: 'Start Speed:', value: `${analysisData.startSpeed.toFixed(1)} mph` },
@@ -2301,90 +2268,66 @@ class InsuranceReport {
 
         doc.setFontSize(10);
         for (const row of speedData) {
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(100, 100, 100);
-            doc.text(row.label, this.margin, y);
-            doc.setTextColor(50, 50, 50);
-            doc.text(row.value, this.margin + 100, y);
-            y += 14;
+            y = this._row(doc, y, row.label, row.value, 100, 14, { labelFont: 'normal' });
         }
 
         // === BRAKE TIMELINE ===
+        // The first 5 and a count of the rest: a summary, the telemetry graphs show them all
         y += 10;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Brake Events', this.margin, y);
-        y += 15;
+        y = this._subheading(doc, y, 'Brake Events', 14);
 
         if (analysisData.brakeEvents.length > 0) {
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(50, 50, 50);
-            doc.text(`${analysisData.brakeEvents.length} brake application(s) detected:`, this.margin, y);
-            y += 14;
+            y = this._text(doc, `${analysisData.brakeEvents.length} brake application(s) detected:`, this.margin, y) + 14;
 
             // Show first few brake events
             const maxBrakeEvents = Math.min(5, analysisData.brakeEvents.length);
             for (let i = 0; i < maxBrakeEvents; i++) {
                 const evt = analysisData.brakeEvents[i];
                 doc.setTextColor(100, 100, 100);
-                doc.text(`• ${this._formatTime(evt.startTime)} - ${this._formatTime(evt.endTime)} (${evt.duration.toFixed(1)}s) at ${evt.speedAtBrake.toFixed(0)} mph`, this.margin + 10, y);
-                y += 12;
+                y = this._text(doc, `• ${this._formatTime(evt.startTime)} - ${this._formatTime(evt.endTime)} (${evt.duration.toFixed(1)}s) at ${evt.speedAtBrake.toFixed(0)} mph`, this.margin + 10, y) + 12;
             }
             if (analysisData.brakeEvents.length > 5) {
                 doc.setTextColor(100, 100, 100);
-                doc.text(`... and ${analysisData.brakeEvents.length - 5} more brake event(s)`, this.margin + 10, y);
-                y += 12;
+                y = this._text(doc, `... and ${analysisData.brakeEvents.length - 5} more brake event(s)`, this.margin + 10, y) + 12;
             }
         } else {
             doc.setFontSize(10);
             doc.setTextColor(100, 100, 100);
-            doc.text('No brake applications detected in this segment.', this.margin, y);
-            y += 14;
+            y = this._text(doc, 'No brake applications detected in this segment.', this.margin, y) + 14;
         }
 
         // === TURN SIGNAL STATUS ===
         y += 10;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Turn Signal Usage', this.margin, y);
-        y += 15;
+        y = this._subheading(doc, y, 'Turn Signal Usage', 14);
 
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         if (analysisData.turnSignalEvents && analysisData.turnSignalEvents.length > 0) {
             doc.setTextColor(50, 50, 50);
-            doc.text(`${analysisData.turnSignalEvents.length} turn signal activation(s) detected:`, this.margin, y);
-            y += 14;
+            y = this._text(doc, `${analysisData.turnSignalEvents.length} turn signal activation(s) detected:`, this.margin, y) + 14;
 
             // Show turn signal events
             const maxSignalEvents = Math.min(5, analysisData.turnSignalEvents.length);
             for (let i = 0; i < maxSignalEvents; i++) {
                 const evt = analysisData.turnSignalEvents[i];
                 doc.setTextColor(100, 100, 100);
-                doc.text(`• ${this._formatTime(evt.startTime)} - ${this._formatTime(evt.endTime)} (${evt.duration.toFixed(1)}s) ${evt.direction}`, this.margin + 10, y);
-                y += 12;
+                y = this._text(doc, `• ${this._formatTime(evt.startTime)} - ${this._formatTime(evt.endTime)} (${evt.duration.toFixed(1)}s) ${evt.direction}`, this.margin + 10, y) + 12;
             }
             if (analysisData.turnSignalEvents.length > 5) {
                 doc.setTextColor(100, 100, 100);
-                doc.text(`... and ${analysisData.turnSignalEvents.length - 5} more turn signal event(s)`, this.margin + 10, y);
-                y += 12;
+                y = this._text(doc, `... and ${analysisData.turnSignalEvents.length - 5} more turn signal event(s)`, this.margin + 10, y) + 12;
             }
         } else {
             doc.setTextColor(100, 100, 100);
-            doc.text('No turn signal activation detected.', this.margin, y);
-            y += 12;
+            y = this._text(doc, 'No turn signal activation detected.', this.margin, y) + 12;
         }
 
         // === AUTOPILOT/FSD STATUS (Critical for insurance) ===
         y += 5;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Autopilot / FSD Status', this.margin, y);
-        y += 15;
+        y = this._subheading(doc, y, 'Autopilot / FSD Status', 40);
 
         // Autopilot status analysis
         const apEvents = analysisData.autopilotEvents || [];
@@ -2400,77 +2343,40 @@ class InsuranceReport {
                 analysisData.endApStatus !== 'OFF' &&
                 analysisData.endApStatus !== 'DISABLED';
 
-            // Calculate box height based on ALL events (with extra padding for safety)
-            const baseHeight = 75; // Header + status lines + duration summary + timeline header
-            const eventHeight = apEvents.length * 12;
-            const endStatusHeight = timeWithoutApAtEnd > 1 ? 22 : 0;
-            const apBoxHeight = baseHeight + eventHeight + endStatusHeight + 10; // +10 for padding
-
-            // Check if we need a new page for the box
-            if (y + apBoxHeight > this.pageHeight - this.margin) {
-                doc.addPage();
-                y = this.margin;
-                y = this._addSectionTitle(doc, 'Autopilot / FSD Status (continued)', y);
-            }
-
-            // Red/orange warning box
-            const boxStartY = y - 8;
-            doc.setFillColor(255, 245, 238);
-            doc.rect(this.margin, boxStartY, this.contentWidth, apBoxHeight, 'F');
-            doc.setDrawColor(255, 100, 0);
-            doc.rect(this.margin, boxStartY, this.contentWidth, apBoxHeight, 'S');
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(200, 50, 0);
-            doc.text('AUTOPILOT WAS ACTIVE DURING THIS SEGMENT', this.margin + 5, y);
-            y += 14;
-
-            // Status at start and end
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(50, 50, 50);
+            // Status at start and end, duration summary
             const startStatus = this._formatApStatus(analysisData.startApStatus);
             const endStatus = this._formatApStatus(analysisData.endApStatus);
-            doc.text(`At start of segment: ${startStatus}`, this.margin + 5, y);
-            y += 12;
-            doc.text(`At end of segment: ${endStatus}`, this.margin + 5, y);
-            y += 12;
-
-            // Duration summary
             const pctActive = analysisData.totalSegmentDuration > 0 ?
                 (analysisData.totalApDuration / analysisData.totalSegmentDuration * 100).toFixed(1) : 0;
-            doc.text(`Total time active: ${analysisData.totalApDuration.toFixed(1)}s (${pctActive}% of segment)`, this.margin + 5, y);
-            y += 14;
 
-            // List ALL autopilot events
-            doc.setTextColor(100, 50, 0);
-            doc.text('Autopilot engagement timeline:', this.margin + 5, y);
-            y += 12;
-
-            for (let i = 0; i < apEvents.length; i++) {
-                const evt = apEvents[i];
-                doc.setTextColor(80, 80, 80);
-                doc.text(`• ${this._formatTime(evt.startTime)} - ${this._formatTime(evt.endTime)}: ${this._formatApStatus(evt.mode)} (${evt.duration.toFixed(1)}s)`, this.margin + 10, y);
-                y += 12;
-            }
-
-            // Show time without AP at end if relevant
+            // Red/orange warning box listing ALL autopilot events, over more than one page if it has to
+            const footer = [];
             if (timeWithoutApAtEnd > 1) {
-                y += 5;
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(150, 50, 0);
-                if (apActiveAtEnd) {
-                    doc.text(`Autopilot was STILL ACTIVE at end of segment`, this.margin + 5, y);
-                } else {
-                    doc.text(`Autopilot was OFF for final ${timeWithoutApAtEnd.toFixed(1)}s before segment end`, this.margin + 5, y);
-                }
-                y += 12;
+                footer.push({
+                    text: apActiveAtEnd
+                        ? 'Autopilot was STILL ACTIVE at end of segment'
+                        : `Autopilot was OFF for final ${timeWithoutApAtEnd.toFixed(1)}s before segment end`,
+                    font: 'bold', color: [150, 50, 0], before: 17
+                });
             }
-
-            // Move y to bottom of box for consistent spacing
-            y = boxStartY + apBoxHeight + 5;
+            y = this._panelList(doc, y, {
+                fill: [255, 245, 238], stroke: [255, 100, 0], padTop: 10, padBottom: 10, gapAfter: 5, columns: 1,
+                header: [
+                    { text: 'AUTOPILOT WAS ACTIVE DURING THIS SEGMENT', font: 'bold', color: [200, 50, 0], after: 14 },
+                    { text: `At start of segment: ${startStatus}`, color: [50, 50, 50], after: 12 },
+                    { text: `At end of segment: ${endStatus}`, color: [50, 50, 50], after: 12 },
+                    { text: `Total time active: ${analysisData.totalApDuration.toFixed(1)}s (${pctActive}% of segment)`, color: [50, 50, 50], after: 14 },
+                    { text: 'Autopilot engagement timeline:', color: [100, 50, 0], after: 12 }
+                ],
+                items: apEvents.map(evt => ({
+                    text: `• ${this._formatTime(evt.startTime)} - ${this._formatTime(evt.endTime)}: ${this._formatApStatus(evt.mode)} (${evt.duration.toFixed(1)}s)`,
+                    color: [80, 80, 80]
+                })),
+                footer
+            });
         } else {
             // Green box - no autopilot
+            y = this._ensureSpace(doc, y, 27);
             doc.setFillColor(240, 255, 240);
             doc.rect(this.margin, y - 8, this.contentWidth, 35, 'F');
             doc.setDrawColor(0, 150, 0);
@@ -2489,32 +2395,21 @@ class InsuranceReport {
 
         // === HEADING / DIRECTION ===
         y += 5;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Direction of Travel', this.margin, y);
-        y += 15;
+        y = this._subheading(doc, y, 'Direction of Travel', 12 * 2 + 3);
 
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(50, 50, 50);
-        doc.text(`Start heading: ${analysisData.startHeading.toFixed(0)}° (${this._headingToCompass(analysisData.startHeading)})`, this.margin, y);
-        y += 12;
-        doc.text(`End heading: ${analysisData.endHeading.toFixed(0)}° (${this._headingToCompass(analysisData.endHeading)})`, this.margin, y);
-        y += 12;
+        y = this._text(doc, `Start heading: ${analysisData.startHeading.toFixed(0)}° (${this._headingToCompass(analysisData.startHeading)})`, this.margin, y) + 12;
+        y = this._text(doc, `End heading: ${analysisData.endHeading.toFixed(0)}° (${this._headingToCompass(analysisData.endHeading)})`, this.margin, y) + 12;
         const headingChange = Math.abs(analysisData.endHeading - analysisData.startHeading);
         const normalizedChange = headingChange > 180 ? 360 - headingChange : headingChange;
         doc.setTextColor(100, 100, 100);
-        doc.text(`Total heading change: ${normalizedChange.toFixed(0)}°`, this.margin, y);
-        y += 15;
+        y = this._text(doc, `Total heading change: ${normalizedChange.toFixed(0)}°`, this.margin, y) + 15;
 
         // === DISTANCE TRAVELED ===
         y += 5;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Distance Traveled', this.margin, y);
-        y += 15;
+        y = this._subheading(doc, y, 'Distance Traveled', 3);
 
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
@@ -2522,54 +2417,36 @@ class InsuranceReport {
         const distanceMiles = analysisData.distanceMeters / 1609.34;
         const distanceFeet = analysisData.distanceMeters * 3.28084;
         if (distanceMiles >= 0.1) {
-            doc.text(`${distanceMiles.toFixed(2)} miles (${analysisData.distanceMeters.toFixed(0)} meters)`, this.margin, y);
+            y = this._text(doc, `${distanceMiles.toFixed(2)} miles (${analysisData.distanceMeters.toFixed(0)} meters)`, this.margin, y) + 20;
         } else {
-            doc.text(`${distanceFeet.toFixed(0)} feet (${analysisData.distanceMeters.toFixed(0)} meters)`, this.margin, y);
+            y = this._text(doc, `${distanceFeet.toFixed(0)} feet (${analysisData.distanceMeters.toFixed(0)} meters)`, this.margin, y) + 20;
         }
-        y += 20;
 
         // === NEAR-MISS DETECTION ===
+        // The 5 highest scores and a count of the rest (the near-miss list in the app has them all)
         const nearMisses = this._getNearMissData(timeRange);
         if (nearMisses && nearMisses.length > 0) {
-            // Check if we need a new page
-            if (y > this.pageHeight - 100) {
-                doc.addPage();
-                y = this.margin;
-            }
-
             y += 5;
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(50, 50, 50);
-            doc.text('Near-Miss Incidents Detected', this.margin, y);
-            y += 15;
+            y = this._subheading(doc, y, 'Near-Miss Incidents Detected', 14 + 12 + 6);
 
-            // Warning box
-            doc.setFillColor(255, 248, 230);
-            const boxHeight = 15 + nearMisses.length * 14;
-            doc.rect(this.margin, y - 10, this.contentWidth, boxHeight, 'F');
-
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(200, 100, 0);
-            doc.text(`${nearMisses.length} near-miss incident(s) detected by telemetry analysis:`, this.margin + 5, y);
-            y += 14;
-
-            doc.setFont('helvetica', 'normal');
             const maxToShow = Math.min(5, nearMisses.length);
+            const items = [];
             for (let i = 0; i < maxToShow; i++) {
                 const nm = nearMisses[i];
                 const severity = nm.score >= 8 ? 'CRITICAL' : nm.score >= 5 ? 'WARNING' : 'CAUTION';
-                doc.setTextColor(nm.score >= 8 ? 200 : 150, nm.score >= 5 ? 50 : 100, 0);
-                doc.text(`• ${this._formatTime(nm.time)} - Score: ${nm.score.toFixed(1)}/10 (${severity})`, this.margin + 10, y);
-                y += 12;
+                items.push({
+                    text: `• ${this._formatTime(nm.time)} - Score: ${nm.score.toFixed(1)}/10 (${severity})`,
+                    color: [nm.score >= 8 ? 200 : 150, nm.score >= 5 ? 50 : 100, 0]
+                });
             }
             if (nearMisses.length > 5) {
-                doc.setTextColor(100, 100, 100);
-                doc.text(`... and ${nearMisses.length - 5} more incident(s)`, this.margin + 10, y);
-                y += 12;
+                items.push({ text: `... and ${nearMisses.length - 5} more incident(s)`, color: [100, 100, 100] });
             }
-            y += 5;
+            y = this._panelList(doc, y, {
+                fill: [255, 248, 230], columns: 1,
+                header: [{ text: `${nearMisses.length} near-miss incident(s) detected by telemetry analysis:`, font: 'bold', color: [200, 100, 0], after: 14 }],
+                items
+            });
         }
 
         return y + 10;
@@ -2849,8 +2726,8 @@ class InsuranceReport {
                     time: absoluteTime,
                     speed_mph: frame.speed_mph || 0,
                     brake: frame.brake_applied || frame.brake || false,
-                    throttle: frame.throttle || 0,
-                    turn_signal: frame.turn_signal_name || 'NONE',
+                    throttle: frame.accelerator_pedal_position || 0,
+                    turn_signal: this._turnSignalName(frame),
                     autopilot: frame.autopilot_name || 'NONE',
                     heading: frame.heading_deg || 0,
                     steering: frame.steering_wheel_angle || 0
@@ -2898,20 +2775,11 @@ class InsuranceReport {
      */
     _addRecordingInfoSection(doc, event, y) {
         // Check if we need a new page
-        if (y > this.pageHeight - 200) {
-            doc.addPage();
-            y = this.margin;
-        }
+        y = this._startSection(doc, y, 150);
 
         y = this._addSectionTitle(doc, 'Recording Information', y);
 
         // === CAMERA STATUS ===
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Camera Status', this.margin, y);
-        y += 15;
-
         const videos = this.videoPlayer?.videos || {};
         const cameraStatus = [];
         for (const [name, video] of Object.entries(videos)) {
@@ -2925,27 +2793,23 @@ class InsuranceReport {
             }
         }
 
+        y = this._subheading(doc, y, 'Camera Status', 12 + 11 * Math.min(cameraStatus.length, 6));
+
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         const workingCount = cameraStatus.filter(c => c.working).length;
         doc.setTextColor(workingCount === cameraStatus.length ? 0 : 200, workingCount > 0 ? 100 : 0, 0);
-        doc.text(`${workingCount} of ${cameraStatus.length} cameras active`, this.margin, y);
-        y += 12;
+        y = this._text(doc, `${workingCount} of ${cameraStatus.length} cameras active`, this.margin, y) + 12;
 
         for (const cam of cameraStatus) {
             doc.setTextColor(cam.working ? 0 : 150, cam.working ? 120 : 0, 0);
-            doc.text(`• ${cam.name}: ${cam.status}`, this.margin + 10, y);
-            y += 11;
+            y = this._text(doc, `• ${cam.name}: ${cam.status}`, this.margin + 10, y) + 11;
         }
         y += 5;
 
         // === DAY/NIGHT INDICATOR ===
         y += 5;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Lighting Conditions', this.margin, y);
-        y += 15;
+        y = this._subheading(doc, y, 'Lighting Conditions', 12 + 3);
 
         const eventDate = new Date(event.timestamp);
         const hour = eventDate.getHours();
@@ -2969,84 +2833,68 @@ class InsuranceReport {
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(50, 50, 50);
-        doc.text(`${lightingCondition} - ${lightingDetail}`, this.margin, y);
-        y += 12;
+        y = this._text(doc, `${lightingCondition} - ${lightingDetail}`, this.margin, y) + 12;
         doc.setTextColor(100, 100, 100);
-        doc.text(`Event time: ${eventDate.toLocaleTimeString()}`, this.margin, y);
-        y += 15;
+        y = this._text(doc, `Event time: ${eventDate.toLocaleTimeString()}`, this.margin, y) + 15;
 
         // === WEATHER CONDITIONS ===
         const { start: startGps } = this._getStartEndGPS();
         if (startGps && event.timestamp) {
             y += 5;
-            doc.setFontSize(11);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor(50, 50, 50);
-            doc.text('Weather Conditions', this.margin, y);
-            y += 15;
+            y = this._subheading(doc, y, 'Weather Conditions', 12 * 4 + 3);
 
             doc.setFontSize(10);
             doc.setFont('helvetica', 'normal');
             doc.setTextColor(100, 100, 100);
-            doc.text('(Weather data from Open-Meteo historical archive)', this.margin, y);
-            y += 12;
+            y = this._text(doc, '(Weather data from Open-Meteo historical archive)', this.margin, y) + 12;
 
             // Weather will be fetched and added asynchronously if available
             // For now, show placeholder - actual fetch happens in generate()
             if (this._weatherData) {
                 doc.setTextColor(50, 50, 50);
-                doc.text(`Temperature: ${this._weatherData.temperature}°F`, this.margin, y);
-                y += 12;
-                doc.text(`Conditions: ${this._weatherData.conditions}`, this.margin, y);
-                y += 12;
-                if (this._weatherData.precipitation > 0) {
-                    doc.text(`Precipitation: ${this._weatherData.precipitation} mm`, this.margin, y);
-                    y += 12;
+                const w = this._weatherData;
+                const na = 'not available';
+                y = this._text(doc, `Temperature: ${w.temperature !== null ? `${w.temperature}°F` : na}`, this.margin, y) + 12;
+                y = this._text(doc, `Conditions: ${w.conditions !== null ? w.conditions : na}`, this.margin, y) + 12;
+                if (w.precipitation > 0) {
+                    y = this._text(doc, `Precipitation: ${w.precipitation} mm`, this.margin, y) + 12;
                 }
-                doc.text(`Visibility: ${this._weatherData.visibility} km`, this.margin, y);
-                y += 12;
-                doc.text(`Wind: ${this._weatherData.windSpeed} mph ${this._weatherData.windDirection}`, this.margin, y);
-                y += 12;
+                // The weather archive has no visibility for most places: leave the line out rather than
+                // print "not available" in every report
+                if (w.visibility !== null && w.visibility !== undefined) {
+                    y = this._text(doc, `Visibility: ${w.visibility} km`, this.margin, y) + 12;
+                }
+                y = this._text(doc, `Wind: ${w.windSpeed !== null ? `${w.windSpeed} mph ${w.windDirection}`.trim() : na}`, this.margin, y) + 12;
             } else {
                 doc.setTextColor(150, 150, 150);
-                doc.text('Weather data not available for this location/time.', this.margin, y);
-                y += 12;
+                y = this._text(doc, 'Weather data not available for this location/time.', this.margin, y) + 12;
             }
             y += 5;
         }
 
-        // === VIDEO FILES === (new page to avoid cutoff)
-        doc.addPage();
-        y = this.margin;
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(50, 50, 50);
-        doc.text('Video Files', this.margin, y);
-        y += 15;
-
-        // Get clip info from event or videoPlayer
-        const eventClips = event.clips || [];
-        const playerClips = this.videoPlayer?.clips || [];
-        const clips = eventClips.length > 0 ? eventClips : playerClips;
+        // === VIDEO FILES ===
+        // One entry per clip (all cameras of a minute), not per camera file
+        const clips = event.clipGroups || [];
         const totalClips = clips.length || (this.videoPlayer?.cachedClipDurations?.length || 0);
         const clipDurations = this.videoPlayer?.cachedClipDurations || [];
         const totalDuration = clipDurations.reduce((a, b) => a + b, 0) || totalClips * 60;
+        const maxClipsToShow = Math.min(5, totalClips);
+
+        // The whole block on one page (it used to start a page of its own to avoid being cut off)
+        const blockLines = 2 + (totalClips > 0 ? 1 + maxClipsToShow + (totalClips > 5 ? 1 : 0) : 1);
+        y = this._subheading(doc, y, 'Video Files', blockLines * 12);
 
         doc.setFontSize(10);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(50, 50, 50);
-        doc.text(`Total clips: ${totalClips}`, this.margin, y);
-        y += 12;
-        doc.text(`Total duration: ${this._formatTime(totalDuration)} (${(totalDuration / 60).toFixed(1)} minutes)`, this.margin, y);
-        y += 12;
+        y = this._text(doc, `Total clips: ${totalClips}`, this.margin, y) + 12;
+        y = this._text(doc, `Total duration: ${this._formatTime(totalDuration)} (${(totalDuration / 60).toFixed(1)} minutes)`, this.margin, y) + 12;
 
-        // List clip details with durations
+        // List clip details with durations (the first 5 and a count of the rest)
         if (totalClips > 0) {
             doc.setTextColor(100, 100, 100);
-            doc.text('Clip details:', this.margin, y);
-            y += 12;
+            y = this._text(doc, 'Clip details:', this.margin, y) + 12;
 
-            const maxClipsToShow = Math.min(5, totalClips);
             let cumTime = 0;
 
             for (let i = 0; i < maxClipsToShow; i++) {
@@ -3055,28 +2903,20 @@ class InsuranceReport {
 
                 // Try to extract timestamp from clip filename
                 let clipInfo = `Clip ${i + 1}`;
-                if (clip) {
-                    // Handle different clip structures
-                    const clipFile = clip.front || clip.back || clip.left_repeater || clip.right_repeater || clip;
-                    const clipName = clipFile?.name || clipFile?.filename || '';
-                    const timestampMatch = clipName.match(/(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})/);
-                    if (timestampMatch) {
-                        clipInfo = timestampMatch[1].replace(/_/g, ' ').replace(/-/g, ':');
-                    }
+                const timestampMatch = String(clip?.timestamp || '').match(/^(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})$/);
+                if (timestampMatch) {
+                    clipInfo = `${timestampMatch[1]} ${timestampMatch[2]}:${timestampMatch[3]}:${timestampMatch[4]}`;
                 }
 
-                doc.text(`• ${clipInfo} (${duration.toFixed(1)}s, starts at ${this._formatTime(cumTime)})`, this.margin + 10, y);
+                y = this._text(doc, `• ${clipInfo} (${duration.toFixed(1)}s, starts at ${this._formatTime(cumTime)})`, this.margin + 10, y) + 11;
                 cumTime += duration;
-                y += 11;
             }
             if (totalClips > 5) {
-                doc.text(`... and ${totalClips - 5} more clips`, this.margin + 10, y);
-                y += 11;
+                y = this._text(doc, `... and ${totalClips - 5} more clips`, this.margin + 10, y) + 11;
             }
         } else {
             doc.setTextColor(150, 150, 150);
-            doc.text('Clip information not available.', this.margin, y);
-            y += 12;
+            y = this._text(doc, 'Clip information not available.', this.margin, y) + 12;
         }
 
         return y + 15;
@@ -3096,7 +2936,9 @@ class InsuranceReport {
             }
 
             const eventDate = new Date(event.timestamp);
-            const dateStr = eventDate.toISOString().split('T')[0]; // YYYY-MM-DD
+            // The car's clock is local time and Open-Meteo answers in local time (timezone=auto):
+            // ask for the local day (toISOString would give the UTC day, the next day for evening events west of UTC)
+            const dateStr = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, '0')}-${String(eventDate.getDate()).padStart(2, '0')}`;
             const hour = eventDate.getHours();
 
             // Open-Meteo historical weather API
@@ -3128,21 +2970,31 @@ class InsuranceReport {
             // Find the hour closest to our event time
             const hourIndex = Math.min(hour, data.hourly.time.length - 1);
 
-            const weatherCode = data.hourly.weathercode?.[hourIndex] || 0;
-            const conditions = this._weatherCodeToDescription(weatherCode);
+            // Missing values stay null (printed as "not available"), never a made-up number
+            const num = (arr) => (Number.isFinite(arr?.[hourIndex]) ? arr[hourIndex] : null);
+            const weatherCode = num(data.hourly.weathercode);
+            const conditions = weatherCode !== null ? this._weatherCodeToDescription(weatherCode) : null;
 
-            const windDir = data.hourly.winddirection_10m?.[hourIndex] || 0;
-            const windDirStr = this._headingToCompass(windDir);
+            const windDir = num(data.hourly.winddirection_10m);
+            const windDirStr = windDir !== null ? this._headingToCompass(windDir) : '';
 
+            const temperature = num(data.hourly.temperature_2m);
+            const visibility = num(data.hourly.visibility);
+            const windSpeed = num(data.hourly.windspeed_10m);
             const weatherData = {
-                temperature: Math.round(data.hourly.temperature_2m?.[hourIndex] || 0),
+                temperature: temperature !== null ? Math.round(temperature) : null,
                 conditions: conditions,
-                precipitation: data.hourly.precipitation?.[hourIndex] || 0,
-                visibility: (data.hourly.visibility?.[hourIndex] || 10000) / 1000, // Convert m to km
-                windSpeed: Math.round(data.hourly.windspeed_10m?.[hourIndex] || 0),
+                precipitation: num(data.hourly.precipitation) || 0,
+                visibility: visibility !== null ? visibility / 1000 : null, // Convert m to km
+                windSpeed: windSpeed !== null ? Math.round(windSpeed) : null,
                 windDirection: windDirStr,
                 weatherCode: weatherCode
             };
+
+            if (temperature === null && weatherCode === null && visibility === null && windSpeed === null) {
+                console.warn('[InsuranceReport] Weather archive has no values for this hour');
+                return null;
+            }
 
             console.log('[InsuranceReport] Weather data:', weatherData);
             return weatherData;
@@ -3277,9 +3129,11 @@ class InsuranceReport {
      * @param {jsPDF} doc
      * @param {string} title
      * @param {number} y
+     * @param {boolean} [continued] - the repeat at the top of a new page (keeps the current section)
      * @returns {number}
      */
-    _addSectionTitle(doc, title, y) {
+    _addSectionTitle(doc, title, y, continued = false) {
+        if (!continued) this._section = title;
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 150, 200);
@@ -3291,6 +3145,296 @@ class InsuranceReport {
         doc.line(this.margin, y + 3, this.margin + doc.getTextWidth(title), y + 3);
 
         return y + 25;
+    }
+
+    // ------------------------------------------------------------------ layout helpers
+    // Every content draw goes through these, so nothing is written into the header band or the footer, off the
+    // page or past the side margins: text wraps to its box (measured with jsPDF's own font metrics), a block that
+    // doesn't fit starts a new page, and the new page repeats the section's title with "(continued)".
+
+    /** The font, colours and line width in use (a "(continued)" title on a new page must not change them) */
+    _saveStyle(doc) {
+        const f = doc.getFont() || {};
+        return {
+            font: f.fontName || 'helvetica', style: f.fontStyle || 'normal', size: doc.getFontSize(), text: doc.getTextColor(),
+            draw: doc.getDrawColor(), fill: doc.getFillColor(), lineWidth: doc.getLineWidth()
+        };
+    }
+
+    _restoreStyle(doc, s) {
+        doc.setFont(s.font, s.style);
+        if (s.size) doc.setFontSize(s.size);
+        if (s.text) doc.setTextColor(s.text);
+        if (s.draw) doc.setDrawColor(s.draw);
+        if (s.fill) doc.setFillColor(s.fill);
+        if (s.lineWidth) doc.setLineWidth(s.lineWidth);
+    }
+
+    /**
+     * A new page; it repeats the current section's title with "(continued)"
+     * @returns {number} y to continue at
+     */
+    _pageBreak(doc) {
+        doc.addPage();
+        let y = this.contentTop;
+        if (this._section) {
+            const style = this._saveStyle(doc);
+            y = this._addSectionTitle(doc, `${this._section} (continued)`, y, true);
+            this._restoreStyle(doc, style);
+        }
+        return y;
+    }
+
+    /**
+     * Room for a block that reaches `height` below y on this page, else a new page
+     * @returns {number} y to draw the block at
+     */
+    _ensureSpace(doc, y, height) {
+        return (y + height > this.contentBottom) ? this._pageBreak(doc) : y;
+    }
+
+    /**
+     * A new section starts on this page only with `room` for its title and first block (no "(continued)" title)
+     * @returns {number}
+     */
+    _startSection(doc, y, room) {
+        this._section = null;
+        if (y + room > this.contentBottom) {
+            doc.addPage();
+            return this.contentTop;
+        }
+        return y;
+    }
+
+    /**
+     * A sub-heading (11 pt bold) kept on the same page as the first `follow` points of what comes under it
+     * @returns {number} y of the first line under it
+     */
+    _subheading(doc, y, text, follow = 12) {
+        y = this._ensureSpace(doc, y, 15 + follow);
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(50, 50, 50);
+        return this._text(doc, text, this.margin, y) + 15;
+    }
+
+    /**
+     * Text split into lines no wider than maxWidth at the current font and size (long words are broken too).
+     * With `ellipsis` it is ONE line, cut with "…" when it doesn't fit: only where a shortened text is acceptable.
+     * @returns {string[]}
+     */
+    _lines(doc, text, maxWidth, ellipsis = false) {
+        const w = Math.max(10, maxWidth);
+        const lines = doc.splitTextToSize(String(text ?? ''), w);
+        if (!ellipsis || lines.length <= 1) return lines.length ? lines : [''];
+        let s = lines[0];
+        while (s.length > 1 && doc.getTextWidth(s + '…') > w) s = s.slice(0, -1);
+        return [s.trimEnd() + '…'];
+    }
+
+    /**
+     * Draw text wrapped to its box: one line at a time, each on the page it fits on.
+     * opts: maxWidth (default: from x to the right margin; from the left margin to x with align 'right'),
+     * lineHeight (default 1.2 x the font size), align ('right': x is the right edge), ellipsis (one line, see _lines)
+     * @returns {number} the baseline of the last line drawn
+     */
+    _text(doc, text, x, y, opts = {}) {
+        const size = doc.getFontSize();
+        const lh = opts.lineHeight || size * 1.2;
+        const maxWidth = opts.maxWidth || (opts.align === 'right' ? x - this.margin : this.pageWidth - this.margin - x);
+        const lines = this._lines(doc, text, maxWidth, opts.ellipsis);
+        let last = y;
+        lines.forEach((line, i) => {
+            last = this._ensureSpace(doc, i === 0 ? y : last + lh, size * 0.3);
+            doc.text(line, x, last, opts.align ? { align: opts.align } : undefined);
+        });
+        return last;
+    }
+
+    /**
+     * A "Label:  value" row at the current font size: the value wraps in its column; the row stays on one page
+     * @param {number} valueDx - the value column, from the left margin
+     * @param {number} rowHeight - from the row's last line to the next row
+     * @param {Object} o - labelFont ('bold'), labelColor ([100,100,100]), valueColor ([50,50,50])
+     * @returns {number} y of the next row
+     */
+    _row(doc, y, label, value, valueDx, rowHeight, o = {}) {
+        const size = doc.getFontSize();
+        const lh = Math.round(size * 1.25);
+        const vx = this.margin + valueDx;
+        doc.setFont('helvetica', 'normal');
+        const lines = this._lines(doc, value, this.pageWidth - this.margin - vx);
+        y = this._ensureSpace(doc, y, (lines.length - 1) * lh + size * 0.3);
+
+        doc.setFont('helvetica', o.labelFont || 'bold');
+        doc.setTextColor(...(o.labelColor || [100, 100, 100]));
+        doc.text(this._lines(doc, label, valueDx - 4, true)[0], this.margin, y);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...(o.valueColor || [50, 50, 50]));
+        lines.forEach((line, i) => doc.text(line, vx, y + i * lh));
+        return y + (lines.length - 1) * lh + rowHeight;
+    }
+
+    /**
+     * An image only when it decoded; else a clear grey box saying why there is none (never a broken image)
+     * @returns {boolean} whether the image was placed
+     */
+    _image(doc, data, format, x, y, w, h, missing = 'No frame available') {
+        if (this._imageDecodes(data)) {
+            try {
+                doc.addImage(data, format, x, y, w, h);
+                return true;
+            } catch (e) {
+                console.warn('[InsuranceReport] Image could not be added:', e);
+            }
+        }
+        const style = this._saveStyle(doc);
+        doc.setFillColor(240, 240, 240);
+        doc.setDrawColor(190, 190, 190);
+        doc.setLineWidth(0.75);
+        doc.rect(x, y, w, h, 'FD');
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(Math.max(7, Math.min(10, h / 6)));
+        doc.setTextColor(120, 120, 120);
+        const line = this._lines(doc, missing, w - 10, true)[0];
+        doc.text(line, x + w / 2, y + h / 2 + 3, { align: 'center' });
+        this._restoreStyle(doc, style);
+        return false;
+    }
+
+    /**
+     * A PNG or JPEG data URL with a picture in it: a canvas of 0 x 0 gives "data:,", which jsPDF embedded as a broken
+     * image (2026.47.5.1, the Sentry frames, #568)
+     */
+    _imageDecodes(data) {
+        if (typeof data !== 'string') return false;
+        const m = data.match(/^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/]{32})/);
+        if (!m) return false;
+        let head;
+        try {
+            head = atob(m[2]);
+        } catch (e) {
+            return false;
+        }
+        const byte = i => head.charCodeAt(i);
+        if (m[1] === 'png') {
+            // signature, then IHDR: width and height (big-endian) at bytes 16-23
+            if (head.slice(1, 4) !== 'PNG') return false;
+            const width = (byte(16) << 24 | byte(17) << 16 | byte(18) << 8 | byte(19)) >>> 0;
+            const height = (byte(20) << 24 | byte(21) << 16 | byte(22) << 8 | byte(23)) >>> 0;
+            return width > 0 && height > 0;
+        }
+        return byte(0) === 0xFF && byte(1) === 0xD8 && data.length > 1000;
+    }
+
+    /**
+     * A shaded panel holding a list that may be longer than a page: header lines, EVERY item (none dropped), footer
+     * lines. When the page runs out the panel closes and goes on, on the next page under the section's "(continued)"
+     * title, with its first header line repeated + " (continued)". More than 8 short items go in up to 3 columns,
+     * top to bottom (columns: 1 keeps one column).
+     * @param {Object} p - fill [r,g,b], stroke [r,g,b] (optional border), header [{text, font, color, after}],
+     *   items [{text, font, color}], footer [{text, font, color, before}], size (10), lineHeight (12),
+     *   padTop (10: panel top above the first baseline), padBottom (6), gapAfter (11), columns
+     * @returns {number} y below the panel
+     */
+    _panelList(doc, y, p) {
+        const size = p.size || 10, lh = p.lineHeight || 12;
+        const padTop = p.padTop ?? 10, padBottom = p.padBottom ?? 6, gapAfter = p.gapAfter ?? 11;
+        const x = this.margin, w = this.contentWidth, tx = x + 5, ix = x + 10;
+        const setStyle = s => {
+            doc.setFont('helvetica', s.font || 'normal');
+            doc.setTextColor(...(s.color || [50, 50, 50]));
+        };
+        doc.setFontSize(size);
+
+        // Wrap everything once, at its own font
+        const wrap = (list, width) => {
+            const out = [];
+            for (const s of list || []) {
+                setStyle(s);
+                const lines = this._lines(doc, s.text, width);
+                lines.forEach((t, k) => out.push({
+                    ...s, text: t, after: k === lines.length - 1 ? s.after : lh, before: k === 0 ? s.before : lh
+                }));
+            }
+            return out;
+        };
+        const header = wrap(p.header, w - 10);
+        const footer = wrap(p.footer, w - 10);
+        const items = wrap(p.items, w - (ix - x) - 5);
+
+        // Columns for a long list of short items
+        let cols = 1;
+        if (p.columns !== 1 && items.length > 8) {
+            const widest = Math.max(...items.map(it => { setStyle(it); return doc.getTextWidth(it.text); }));
+            cols = Math.max(1, Math.min(p.columns || 3, Math.floor((w - (ix - x) - 5 + 20) / (widest + 20))));
+        }
+        const colW = (w - (ix - x) - 5 + 20) / cols;
+        const footH = footer.reduce((a, f) => a + (f.before ?? lh), 0);
+
+        let i = 0, first = true, footDone = footer.length === 0, fresh = false;
+        while (first || i < items.length || !footDone) {
+            const head = first ? header : (header.length ? [{ ...header[0], text: `${header[0].text} (continued)`, after: header[0].after ?? lh }] : []);
+            const headH = head.reduce((a, h) => a + (h.after ?? lh), 0);
+            const remRows = Math.ceil((items.length - i) / cols);
+            // rows that fit under the header on this page
+            const room = this.contentBottom - padBottom - (y + headH);
+            let rows = room < 0 ? 0 : Math.min(remRows, Math.floor(room / lh) + 1);
+            const lastLine = r => (r > 0 ? y + headH + (r - 1) * lh : y + headH - (head.length ? (head[head.length - 1].after ?? lh) : 0));
+            let withFoot = !footDone && rows === remRows && lastLine(rows) + footH + padBottom <= this.contentBottom;
+            if (!footDone && !withFoot && rows === remRows && rows > 1) rows -= 1;   // the last row goes with the footer
+            const fits = rows > 0 || (remRows === 0 && (withFoot || footDone));
+            if (!fits && !fresh) {
+                y = this._pageBreak(doc);
+                fresh = true;
+                continue;
+            }
+            if (!fits && remRows > 0) rows = 1;   // a fresh page always takes a row (never loops)
+            if (!fits && remRows === 0) withFoot = true;
+            fresh = false;
+
+            const count = Math.min(items.length - i, rows * cols);
+            const used = Math.ceil(count / cols);   // balanced columns
+            const top = y - padTop;
+            const bottom = (withFoot ? lastLine(used) + footH : lastLine(used)) + padBottom;
+            doc.setFillColor(...p.fill);
+            doc.rect(x, top, w, bottom - top, 'F');
+            if (p.stroke) {
+                doc.setDrawColor(...p.stroke);
+                doc.setLineWidth(1);
+                doc.rect(x, top, w, bottom - top, 'S');
+            }
+
+            let cur = y;
+            for (const h of head) {
+                setStyle(h);
+                doc.text(h.text, tx, cur);
+                cur += h.after ?? lh;
+            }
+            for (let k = 0; k < count; k++) {
+                const it = items[i + k];
+                setStyle(it);
+                doc.text(it.text, ix + Math.floor(k / used) * colW, y + headH + (k % used) * lh);
+            }
+            if (withFoot) {
+                cur = lastLine(used);
+                for (const f of footer) {
+                    cur += f.before ?? lh;
+                    setStyle(f);
+                    doc.text(f.text, tx, cur);
+                }
+                footDone = true;
+            }
+            i += count;
+            first = false;
+            y = bottom + gapAfter;
+            if (i < items.length || !footDone) {
+                y = this._pageBreak(doc);
+                fresh = true;
+            }
+        }
+        return y;
     }
 
     /**
@@ -3677,6 +3821,41 @@ class InsuranceReport {
      * @param {number} seconds
      * @returns {string}
      */
+    /**
+     * Where a Sentry event's trigger sits in the recording, in player seconds. event.json's timestamp is the
+     * trigger moment and each clip set's start time is in its file names: the trigger goes into the set it falls in
+     * (a gap between sets is no player time: a trigger in one goes to the next set's start). Without a usable
+     * timestamp it is Tesla's usual layout, about 1 minute before the end (a short event then started at 00:00, #568).
+     * @param {Object} event
+     * @returns {{time: number, total: number, exact: boolean}}
+     */
+    _sentryTrigger(event) {
+        const durations = this.videoPlayer?.cachedClipDurations || [];
+        const groups = event.clipGroups || [];
+        const total = durations.reduce((a, b) => a + b, 0) || (event.clips?.length || groups.length || 10) * 60;
+        const fallback = { time: Math.max(0, total - 60), total, exact: false };
+
+        const raw = event.metadata?.timestamp || event.timestamp;
+        const trigger = raw ? new Date(raw).getTime() : NaN;
+        if (!Number.isFinite(trigger) || !groups.length || durations.length !== groups.length) return fallback;
+
+        let elapsed = 0;
+        for (let i = 0; i < groups.length; i++) {
+            const m = String(groups[i]?.timestamp || '').match(/^(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})$/);
+            if (!m) return fallback;
+            const start = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime();
+            const offset = (trigger - start) / 1000;
+            const duration = durations[i] || 0;
+            if (offset < 0) {
+                // before the first set: not this recording's trigger; in a gap: the next set's start
+                return i === 0 ? fallback : { time: elapsed, total, exact: true };
+            }
+            if (offset <= duration + 1) return { time: elapsed + Math.min(offset, duration), total, exact: true };
+            elapsed += duration;
+        }
+        return fallback;   // after the end of the recording
+    }
+
     _formatTime(seconds) {
         if (seconds === null || seconds === undefined) return '00:00';
         const mins = Math.floor(seconds / 60);
@@ -3870,6 +4049,22 @@ class InsuranceReport {
      */
     _waitForFrame(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Wait for one video to have a frame to draw (readyState >= 2 and a size)
+     * @param {HTMLVideoElement} video
+     * @param {number} maxWait - ms
+     * @returns {Promise<boolean>} whether it has one
+     */
+    async _waitForVideoReady(video, maxWait = 3000) {
+        const start = Date.now();
+        while (Date.now() - start < maxWait) {
+            if (!video?.src) return false;
+            if (video.readyState >= 2 && video.videoWidth > 0) return true;
+            await this._waitForFrame(50);
+        }
+        return false;
     }
 
     /**
@@ -4139,7 +4334,8 @@ class InsuranceReport {
      */
     _generateFilename(event) {
         const date = new Date(event.timestamp);
-        const dateStr = date.toISOString().slice(0, 10);
+        // Local date, like the local time next to it (toISOString is the UTC day)
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
         const timeStr = date.toTimeString().slice(0, 5).replace(':', '-');
 
         return `TeslaCam_InsuranceReport_${dateStr}_${timeStr}.pdf`;

@@ -21,6 +21,33 @@ class EventBrowser {
         // Lazy loading for thumbnails
         this.thumbnailObserver = null;
         this.setupLazyLoading();
+
+        // Redraw the list in the new language
+        window.addEventListener('localeChanged', () => {
+            if (this.events.length > 0 || this.encryptedSummary) this.render();
+        });
+    }
+
+    /** Translated text (i18n.js), or the key when i18n isn't loaded */
+    _t(key, params = {}) {
+        return window.i18n ? window.i18n.t(key, params) : key;
+    }
+
+    /** Translated text with the plural form for count */
+    _p(key, count, params = {}) {
+        return window.i18n ? window.i18n.plural(key, count, params) : key;
+    }
+
+    /** Locale for dates and times (en-US for English, as before) */
+    _dateLocale() {
+        return window.i18n?.dateLocale?.() || 'en-US';
+    }
+
+    /** Event type badge text (saved / sentry / recent); unknown types as they are */
+    _typeLabel(typeClass) {
+        const key = 'events.' + typeClass;
+        const text = this._t(key);
+        return text === key ? typeClass : text;
     }
 
     /**
@@ -560,16 +587,22 @@ class EventBrowser {
      */
     render() {
         this.container.innerHTML = '';
+        const notice = this._createEncryptedNotice();
 
         if (this.events.length === 0) {
-            this.container.innerHTML = `
+            this.container.innerHTML = notice ? '' : `
                 <div class="empty-state">
-                    <p>No events found</p>
-                    <p class="hint">The selected folder doesn't contain any TeslaCam events</p>
+                    <p>${FolderParser.escapeHtml(this._t('events.noEventsFound'))}</p>
+                    <p class="hint">${FolderParser.escapeHtml(this._t('events.noEventsHint'))}</p>
                 </div>
             `;
+            if (notice) {
+                this.container.appendChild(notice);
+                this.updateStats();
+            }
             return;
         }
+        if (notice) this.container.appendChild(notice);
 
         // Update stats
         this.updateStats();
@@ -579,7 +612,15 @@ class EventBrowser {
 
         // Render each event synchronously with placeholders
         for (const event of this.events) {
-            const eventElement = this.createEventElementSync(event);
+            // One event that can't be drawn (odd event.json from another tool) must not
+            // empty the whole list (#530): it's skipped and logged
+            let eventElement;
+            try {
+                eventElement = this.createEventElementSync(event);
+            } catch (error) {
+                console.warn('[EventBrowser] Unable to show event', event?.name, error);
+                continue;
+            }
             fragment.appendChild(eventElement);
 
             // Observe for lazy thumbnail loading if it has a thumbnail
@@ -640,9 +681,13 @@ class EventBrowser {
 
         // Update stats as single line below
         if (statsElement) {
-            let statsText = `${saved} saved, ${sentry} sentry, ${recent} recent`;
+            let statsText = this._t('events.statsLine', { saved, sentry, recent });
             if (empty > 0) {
-                statsText += ` (${empty} empty)`;
+                statsText += ` (${this._t('events.emptyCount', { count: empty })})`;
+            }
+            const enc = this.encryptedSummary?.total || 0;
+            if (enc > 0) {
+                statsText += `, ${this._t('events.encryptedCount', { count: enc })}`;
             }
             statsElement.textContent = statsText;
         }
@@ -664,12 +709,12 @@ class EventBrowser {
 
         // Format date/time
         const date = new Date(event.timestamp);
-        const dateStr = date.toLocaleDateString('en-US', {
+        const dateStr = date.toLocaleDateString(this._dateLocale(), {
             month: 'short',
             day: 'numeric',
             year: 'numeric'
         });
-        const timeStr = date.toLocaleTimeString('en-US', {
+        const timeStr = date.toLocaleTimeString(this._dateLocale(), {
             hour: '2-digit',
             minute: '2-digit'
         });
@@ -698,8 +743,8 @@ class EventBrowser {
         const timeRange = this._getTimeRangeFromClips(event);
         const thumbnailHTML = `<div class="event-thumbnail-placeholder">
             <span class="placeholder-icon">🎥</span>
-            <span class="placeholder-text">${clipCount} Clips</span>
-            ${timeRange ? `<span class="placeholder-time">${timeRange}</span>` : ''}
+            <span class="placeholder-text">${FolderParser.escapeHtml(this._p('events.clipCount', clipCount))}</span>
+            ${timeRange ? `<span class="placeholder-time">${FolderParser.escapeHtml(timeRange)}</span>` : ''}
         </div>`;
 
         // GPS coordinates
@@ -713,19 +758,19 @@ class EventBrowser {
         }
 
         // Calculate event duration
-        const durationMinutes = (event.clipGroups.length * 60 / 60).toFixed(1);
+        const durationMinutes = this._estimateDurationMinutes(event);
 
         // Check for bookmarks
         const bookmarkKey = event.compoundKey || event.name;
         const bookmarkCount = this.getBookmarkCount(bookmarkKey);
         const bookmarkHTML = bookmarkCount > 0 ?
-            `<span class="bookmark-indicator" title="${bookmarkCount} bookmark${bookmarkCount > 1 ? 's' : ''}">[${bookmarkCount}]</span>` : '';
+            `<span class="bookmark-indicator" title="${FolderParser.escapeHtml(this._p('bookmarks.bookmark', bookmarkCount))}">[${bookmarkCount}]</span>` : '';
 
         // Check for notes/tags
         const notesKey = event.compoundKey || event.name;
         const hasNotes = window.app?.notesManager?.hasNotes(notesKey);
         const notesHTML = hasNotes ?
-            `<span class="notes-indicator" title="Has notes/tags">📝</span>` : '';
+            `<span class="notes-indicator" title="${FolderParser.escapeHtml(this._t('events.hasNotes'))}">📝</span>` : '';
 
         // Drive badge
         const driveBadgeHTML = event.driveLabel ?
@@ -746,7 +791,7 @@ class EventBrowser {
             ${thumbnailHTML}
             <div class="event-item-header">
                 ${driveBadgeHTML}
-                <span class="event-type ${typeClass}">${typeClass}</span>
+                <span class="event-type ${typeClass}">${FolderParser.escapeHtml(this._typeLabel(typeClass))}</span>
                 ${healthBadgeHTML}
                 ${bookmarkHTML}
                 ${notesHTML}
@@ -757,7 +802,7 @@ class EventBrowser {
             ${gpsHTML}
             ${reason ? `<div class="event-item-reason">${FolderParser.escapeHtml(reason)}</div>` : ''}
             <div class="event-item-weather"></div>
-            <div class="event-item-clips">${event.isEmpty ? '<span class="empty-warning">⚠ No video clips</span>' : `${event.clipGroups.length} clips (~${durationMinutes} min)`}</div>
+            <div class="event-item-clips">${event.isEmpty ? `<span class="empty-warning">⚠ ${FolderParser.escapeHtml(this._t('events.noVideoClips'))}</span>` : FolderParser.escapeHtml(this._p('events.clipsDuration', event.clipGroups.length, { minutes: durationMinutes }))}</div>
         `;
 
         // Handle click
@@ -802,12 +847,12 @@ class EventBrowser {
 
         // Format date/time
         const date = new Date(event.timestamp);
-        const dateStr = date.toLocaleDateString('en-US', {
+        const dateStr = date.toLocaleDateString(this._dateLocale(), {
             month: 'short',
             day: 'numeric',
             year: 'numeric'
         });
-        const timeStr = date.toLocaleTimeString('en-US', {
+        const timeStr = date.toLocaleTimeString(this._dateLocale(), {
             hour: '2-digit',
             minute: '2-digit'
         });
@@ -845,8 +890,8 @@ class EventBrowser {
             const timeRange = this._getTimeRangeFromClips(event);
             thumbnailHTML = `<div class="event-thumbnail-placeholder">
                 <span class="placeholder-icon">🎥</span>
-                <span class="placeholder-text">${clipCount} Clips</span>
-                ${timeRange ? `<span class="placeholder-time">${timeRange}</span>` : ''}
+                <span class="placeholder-text">${FolderParser.escapeHtml(this._p('events.clipCount', clipCount))}</span>
+                ${timeRange ? `<span class="placeholder-time">${FolderParser.escapeHtml(timeRange)}</span>` : ''}
             </div>`;
         }
 
@@ -861,19 +906,19 @@ class EventBrowser {
         }
 
         // Calculate event duration (approximately 60 seconds per clip)
-        const durationMinutes = (event.clipGroups.length * 60 / 60).toFixed(1);
+        const durationMinutes = this._estimateDurationMinutes(event);
 
         // Check for bookmarks (use compoundKey for multi-drive support)
         const bookmarkKey = event.compoundKey || event.name;
         const bookmarkCount = this.getBookmarkCount(bookmarkKey);
         const bookmarkHTML = bookmarkCount > 0 ?
-            `<span class="bookmark-indicator" title="${bookmarkCount} bookmark${bookmarkCount > 1 ? 's' : ''}">[${bookmarkCount}]</span>` : '';
+            `<span class="bookmark-indicator" title="${FolderParser.escapeHtml(this._p('bookmarks.bookmark', bookmarkCount))}">[${bookmarkCount}]</span>` : '';
 
         // Check for notes/tags (use compoundKey for multi-drive support)
         const notesKey = event.compoundKey || event.name;
         const hasNotes = window.app?.notesManager?.hasNotes(notesKey);
         const notesHTML = hasNotes ?
-            `<span class="notes-indicator" title="Has notes/tags">📝</span>` : '';
+            `<span class="notes-indicator" title="${FolderParser.escapeHtml(this._t('events.hasNotes'))}">📝</span>` : '';
 
         // Drive badge - always show drive label when available
         const driveBadgeHTML = event.driveLabel ?
@@ -889,7 +934,7 @@ class EventBrowser {
             ${thumbnailHTML}
             <div class="event-item-header">
                 ${driveBadgeHTML}
-                <span class="event-type ${typeClass}">${typeClass}</span>
+                <span class="event-type ${typeClass}">${FolderParser.escapeHtml(this._typeLabel(typeClass))}</span>
                 ${severityBadgeHTML}
                 ${healthBadgeHTML}
                 ${bookmarkHTML}
@@ -901,7 +946,7 @@ class EventBrowser {
             ${gpsHTML}
             ${reason ? `<div class="event-item-reason">${FolderParser.escapeHtml(reason)}</div>` : ''}
             <div class="event-item-weather"></div>
-            <div class="event-item-clips">${event.isEmpty ? '<span class="empty-warning">⚠ No video clips</span>' : `${event.clipGroups.length} clips (~${durationMinutes} min)`}</div>
+            <div class="event-item-clips">${event.isEmpty ? `<span class="empty-warning">⚠ ${FolderParser.escapeHtml(this._t('events.noVideoClips'))}</span>` : FolderParser.escapeHtml(this._p('events.clipsDuration', event.clipGroups.length, { minutes: durationMinutes }))}</div>
         `;
 
         // Fetch weather asynchronously (don't block card rendering)
@@ -986,6 +1031,88 @@ class EventBrowser {
     }
 
     /**
+     * Counts of Tesla-encrypted events (FolderParser.getEncryptedSummary) for
+     * the notice above the list. Call before loadEvents/render.
+     * @param {Object|null} summary
+     */
+    setEncryptedSummary(summary) {
+        this.encryptedSummary = summary && summary.total > 0 ? summary : null;
+    }
+
+    /**
+     * The "encrypted by Tesla" notice: how many events were left out of the
+     * list and the three ways to view them. Null when there are none.
+     * @returns {HTMLElement|null}
+     * @private
+     */
+    _createEncryptedNotice() {
+        const s = this.encryptedSummary;
+        if (!s || !s.total) return null;
+        const esc = (v) => FolderParser.escapeHtml(v);
+        const n = s.total;
+        // All text comes from the locale files; every piece is escaped, and the
+        // drive label (read from the drive) is escaped like any other value.
+        const t = (key, params) => esc(this._t('encrypted.' + key, params));
+        const p = (key, count, params) => esc(this._p('encrypted.' + key, count, params));
+        const kinds = [s.saved && this._t('encrypted.kindSaved', { count: s.saved }),
+            s.sentry && this._t('encrypted.kindSentry', { count: s.sentry }),
+            s.recent && this._t('encrypted.kindRecent', { count: s.recent })]
+            .filter(Boolean).join(', ');
+        const drives = (s.drives || []).filter(Boolean);
+        const title = drives.length === 1
+            ? p('titleOnDrive', n, { drive: drives[0] })
+            : p('title', n);
+        const extra = [];
+        if (s.carOnly > 0) {
+            extra.push(s.carOnly === n ? p('carOnlyAll', n) : p('carOnlySome', s.carOnly));
+        }
+        if (s.damaged > 0) {
+            extra.push(s.damaged === n ? p('damagedAll', n) : p('damagedSome', s.damaged));
+        }
+        const div = document.createElement('div');
+        div.className = 'encrypted-notice';
+        div.id = 'encryptedNotice';
+        div.setAttribute('role', 'note');
+        div.innerHTML = `
+            <div class="encrypted-notice-title">🔒 ${title}</div>
+            <p>${kinds ? p('notListedKinds', n, { kinds }) : p('notListed', n)}</p>
+            <details class="encrypted-notice-options">
+                <summary>${t('howToView')}</summary>
+                <p>${t('explain')}</p>
+                ${extra.map(x => `<p>${x}</p>`).join('')}
+                <ol>
+                    <li><b>${t('webTitle')}</b> ${t('webText')} <a href="https://dashcam.tesla.com" target="_blank" rel="noopener noreferrer">${t('webLink')}</a></li>
+                    <li><b>${t('carTitle')}</b> ${t('carText')}</li>
+                    <li><b>${t('stopTitle')}</b> ${t('stopText', { path: this._t('encrypted.stopPath') })} ${t('stopPrivacy')}</li>
+                </ol>
+            </details>`;
+        return div;
+    }
+
+    /**
+     * Estimated event length in minutes for the event card, without opening
+     * any file. Tesla clips are about a minute long, except the last one: a
+     * saved or Sentry event ends when it was saved, so the last clip runs from
+     * its own start to the event time. (Before, every clip counted as 60 s,
+     * so the short last clip was counted as a full minute.)
+     * @param {Object} event
+     * @returns {string} minutes with one decimal
+     */
+    _estimateDurationMinutes(event) {
+        const groups = event.clipGroups || [];
+        if (groups.length === 0) return '0.0';
+        const toMs = (s) => {
+            const m = /^(\d{4})-(\d{2})-(\d{2})[_T](\d{2})[-:](\d{2})[-:](\d{2})/.exec(s || '');
+            return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : NaN;
+        };
+        let last = 60;
+        const tail = (toMs(event.timestamp) - toMs(groups[groups.length - 1].timestamp)) / 1000;
+        // RecentClips "events" carry their first clip's time, so tail <= 0 there: keep 60
+        if (Number.isFinite(tail) && tail > 0 && tail < 60) last = tail;
+        return (((groups.length - 1) * 60 + last) / 60).toFixed(1);
+    }
+
+    /**
      * Get time range string from event clips (e.g., "From 7:00-7:59 AM")
      * @param {Object} event
      * @returns {string|null}
@@ -1010,18 +1137,16 @@ class EventBrowser {
                 const lastHour = parseInt(lastMatch[1]);
                 const lastMin = parseInt(lastMatch[2]);
 
-                const formatTime = (h, m) => {
-                    const period = h >= 12 ? 'PM' : 'AM';
-                    const hour12 = h % 12 || 12;
-                    return `${hour12}:${m.toString().padStart(2, '0')} ${period}`;
-                };
+                // "6:00 PM" in English (as before), "18:00" in Dutch, etc.
+                const formatTime = (h, m) => new Date(2000, 0, 1, h, m)
+                    .toLocaleTimeString(this._dateLocale(), { hour: 'numeric', minute: '2-digit' });
 
                 // If same hour range, simplify
                 if (firstHour === lastHour) {
-                    return `From ${formatTime(firstHour, firstMin)}`;
+                    return this._t('events.timeFrom', { time: formatTime(firstHour, firstMin) });
                 }
 
-                return `From ${formatTime(firstHour, firstMin)} - ${formatTime(lastHour, lastMin)}`;
+                return this._t('events.timeFromTo', { start: formatTime(firstHour, firstMin), end: formatTime(lastHour, lastMin) });
             }
         } catch (e) {
             console.warn('[EventBrowser] Failed to parse time range:', e);
@@ -1089,8 +1214,8 @@ class EventBrowser {
 
         this.container.innerHTML = `
             <div class="empty-state">
-                <p>No TeslaCam folder selected</p>
-                <p class="hint">Click "Select TeslaCam Folder" to get started</p>
+                <p>${FolderParser.escapeHtml(this._t('events.noFolder'))}</p>
+                <p class="hint">${FolderParser.escapeHtml(this._t('sidebar.emptyState'))}</p>
             </div>
         `;
 
@@ -1378,7 +1503,7 @@ class EventBrowser {
     showEmptyEventWarning(event) {
         // Format date for display
         const date = new Date(event.timestamp);
-        const dateStr = date.toLocaleDateString('en-US', {
+        const dateStr = date.toLocaleDateString(this._dateLocale(), {
             month: 'short',
             day: 'numeric',
             year: 'numeric',
@@ -1391,7 +1516,7 @@ class EventBrowser {
         toast.className = 'empty-event-toast';
         toast.innerHTML = `
             <span class="toast-icon">⚠</span>
-            <span class="toast-message">No video clips available for event on ${dateStr}</span>
+            <span class="toast-message">${FolderParser.escapeHtml(this._t('events.emptyEventToast', { date: dateStr }))}</span>
         `;
         document.body.appendChild(toast);
 

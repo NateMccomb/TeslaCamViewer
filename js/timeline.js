@@ -208,6 +208,13 @@ class Timeline {
     setupEventListeners() {
         // Click on timeline to seek
         this.timeline.addEventListener('click', (e) => {
+            // A mouse click is mousedown + mouseup, and mouseup's stopDragging
+            // has already seeked to this spot. Seeking again from here sent a
+            // second, overlapping seek per click (#512).
+            if (this._seekedOnMouseUp) {
+                this._seekedOnMouseUp = false;
+                return;
+            }
             if (!this.isDragging) {
                 this.handleTimelineClick(e);
             }
@@ -215,6 +222,7 @@ class Timeline {
 
         // Drag scrubber
         this.timeline.addEventListener('mousedown', (e) => {
+            this._seekedOnMouseUp = false;
             this.startDragging(e);
         });
 
@@ -534,7 +542,7 @@ class Timeline {
                     this.minimapMarkers.appendChild(marker);
                 }
                 // Use cached duration if available, otherwise fallback to 60s
-                accumulatedTime += cachedDurations[i] || 60;
+                accumulatedTime += VideoPlayer.clipLength(cachedDurations, i);
             }
         }
 
@@ -845,6 +853,7 @@ class Timeline {
 
         // Seek to final position
         if (this.onSeek) {
+            this._seekedOnMouseUp = true;
             this.onSeek(this.currentTime);
         }
     }
@@ -1043,7 +1052,7 @@ class Timeline {
             const clipGroup = clipGroups[i];
 
             // Get clip duration from cache, fallback to 60s approximation
-            const duration = cachedDurations[i] || 60;
+            const duration = VideoPlayer.clipLength(cachedDurations, i);
 
             if (i > 0) {
                 // Add marker at clip boundary
@@ -1120,7 +1129,7 @@ class Timeline {
             const clipIndexAfter = gap.afterClipIndex;
             let timePosition = 0;
             for (let i = 0; i <= clipIndexAfter && i < cachedDurations.length; i++) {
-                timePosition += cachedDurations[i] || 60;
+                timePosition += VideoPlayer.clipLength(cachedDurations, i);
             }
             // If no cached durations available, fallback to approximation
             if (cachedDurations.length === 0) {

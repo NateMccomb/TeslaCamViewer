@@ -438,8 +438,8 @@ class FilterPanel {
                 <select id="tagFilter" class="filter-select">
                     <option value="">${t('filter.allTags')}</option>
                     ${allTags.map(tag => `
-                        <option value="${tag}" ${filters.selectedTag === tag ? 'selected' : ''}>
-                            ${tag}
+                        <option value="${FolderParser.escapeHtml(tag)}" ${filters.selectedTag === tag ? 'selected' : ''}>
+                            ${FolderParser.escapeHtml(tag)}
                         </option>
                     `).join('')}
                 </select>

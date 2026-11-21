@@ -38,7 +38,8 @@
     "noEventLoaded": "イベントが読み込まれていません",
     "hidden": "非表示：",
     "fullscreen": "全画面",
-    "exitFullscreen": "全画面を終了"
+    "exitFullscreen": "全画面を終了",
+    "dateAtTime": "{{date}} {{time}}"
   },
 
   "cameras": {
@@ -46,10 +47,21 @@
     "back": "後",
     "left": "左",
     "right": "右",
+    "leftPillar": "左ピラー",
+    "rightPillar": "右ピラー",
     "hideFront": "フロントカメラを非表示",
     "hideBack": "リアカメラを非表示",
     "hideLeft": "左カメラを非表示",
-    "hideRight": "右カメラを非表示"
+    "hideRight": "右カメラを非表示",
+    "hideLeftPillar": "左ピラーカメラを非表示",
+    "hideRightPillar": "右ピラーカメラを非表示",
+    "showFront": "フロントカメラを表示",
+    "showBack": "リアカメラを表示",
+    "showLeft": "左カメラを表示",
+    "showRight": "右カメラを表示",
+    "showLeftPillar": "左ピラーカメラを表示",
+    "showRightPillar": "右ピラーカメラを表示",
+    "showCamera": "{{camera}}を表示"
   },
 
   "controls": {
@@ -66,7 +78,7 @@
     "markIn": "開始点をマーク",
     "markOut": "終了点をマーク",
     "clearMarks": "マークをクリア",
-    "export": "すべてのカメラをエクスポート",
+    "export": "現在のレイアウトをエクスポート",
     "exportOptions": "エクスポートオプション",
     "zoomOut": "タイムラインを縮小",
     "zoomIn": "タイムラインを拡大",
@@ -74,7 +86,10 @@
     "loop": "ループ",
     "speed": "速度：",
     "layout": "レイアウト：",
-    "camera": "カメラ："
+    "camera": "カメラ：",
+    "cyclePillarTitle": "リピーター/ピラーを切り替え (Shift+P)",
+    "repeaters": "リピーター",
+    "pillars": "ピラー"
   },
 
   "bookmarks": {
@@ -84,26 +99,98 @@
     "next": "次のブックマーク (])",
     "manage": "ブックマークを管理",
     "clearAll": "すべてクリア",
-    "noBookmarks": "ブックマークはまだありません"
+    "noBookmarks": "ブックマークはまだありません",
+    "bookmark": {
+      "one": "{{count}} 件のブックマーク",
+      "other": "{{count}} 件のブックマーク"
+    }
   },
 
   "export": {
-    "header": "カメラをエクスポート",
-    "allCameras": "すべてのカメラ（グリッド）",
-    "frontOnly": "フロントのみ",
-    "rearOnly": "リアのみ",
-    "leftOnly": "左のみ",
-    "rightOnly": "右のみ",
+    "header": "エクスポートオプション",
+    "exportVideo": "ビデオをエクスポート",
+    "allCameras": "現在のレイアウト",
+    "leftPillarOnly": "左ピラーのみ",
+    "rightPillarOnly": "右ピラーのみ",
+    "privacyMode": "プライバシーモード（メタデータを除去）",
+    "privacyModeHint": "タイムスタンプ、GPS、位置情報を削除",
+    "insuranceReport": "保険用レポート (PDF)",
+    "generatingReport": "保険用レポートを作成中...",
     "exporting": "エクスポート中 {{percent}}%",
     "preparing": "エクスポートを準備中...",
     "encoding": "ビデオをエンコード中...",
     "complete": "エクスポート完了",
     "cancelled": "エクスポートがキャンセルされました",
-    "failed": "エクスポート失敗"
+    "failed": "エクスポート失敗",
+    "formatTitle": "エクスポート形式",
+    "gifWarning": "GIFのエクスポートにはクリップの約10倍の時間がかかります",
+    "blurPlatesHint": "レンダリング時間が大幅に増えます",
+    "insuranceReportShort": "保険用レポート",
+    "alreadyRunning": "エクスポートは既に実行中です。完了するまでお待ちください。",
+    "cameraAll": "すべてのカメラ",
+    "cameraFront": "フロントカメラ",
+    "cameraBack": "リアカメラ",
+    "cameraLeft": "左カメラ",
+    "cameraRight": "右カメラ",
+    "cameraLeftPillar": "左ピラーカメラ",
+    "cameraRightPillar": "右ピラーカメラ",
+    "rangeMarked": "マークした区間（{{marks}}）",
+    "rangeFromIn": "開始点からイベントの最後まで",
+    "rangeToOut": "最初から終了点まで",
+    "rangeFromCurrent": "現在位置からイベントの最後まで",
+    "confirm": "{{range}}（{{camera}}）をエクスポートしますか？",
+    "confirmAtSpeed": "{{range}}（{{camera}}）を{{speed}}倍速でエクスポートしますか？",
+    "confirmDuration": "エクスポートには動画の長さの約3〜4倍の時間がかかります（10秒のクリップで約30〜40秒）。",
+    "confirmDontSwitch": "完了するまでイベントを切り替えないでください。",
+    "invalidRange": "エクスポート範囲が無効です：開始時刻は終了時刻より前にしてください。\n開始点/終了点のマークを調整してください。",
+    "loadingPlateModel": "ナンバープレート検出用のAIモデルを読み込み中...",
+    "loadingPlateModelHint": "初回は少し時間がかかる場合があります",
+    "starting": "エクスポートを開始中...",
+    "preparingVideo": "ビデオを準備中...",
+    "titleVideo": "ビデオ",
+    "progressTitle": "{{what}}をエクスポート中：{{percent}}%",
+    "elapsedRemaining": "経過 {{elapsed}} / 残り約 {{remaining}}",
+    "videoProgress": "ビデオ：{{current}} / {{total}}",
+    "speedReduced": "速度を{{speed}}倍に下げました（バッファリング中）",
+    "gpuFailed": "エクスポートに失敗しました：エクスポート中にGPUがリセットされたようです。\n\n通常、ハードウェアエンコーダーが応答しなくなったか、Windowsがグラフィックドライバーをリセットしたことが原因です。次のいずれかをお試しください：エクスポート解像度を下げる（設定）、今回のエクスポートでナンバープレートのぼかしをオフにする、開始点/終了点のマークで短い範囲をエクスポートする、グラフィックドライバーを更新する。\n\n繰り返し発生する場合は、設定 → 診断 → Console Log Capture を開いてログをお送りください。エンコーダー/デコーダーの詳しい情報を記録するようにしたので、support@teslacamviewer.com で原因を調べやすくなります。",
+    "encoderStalled": "エクスポートを中止しました：このデバイスのビデオエンコーダーが応答しなくなりました（{{codec}}）。ファイルは保存されていません。MP4 (VP9) または WebM でもう一度お試しいただくか、設定 > エクスポート でエクスポート画質を下げてください。",
+    "unableToComplete": "エクスポートを完了できませんでした：{{error}}",
+    "completeTitle": "エクスポート完了",
+    "completeText": "ビデオを保存しました。",
+    "cancelledTitle": "エクスポートをキャンセルしました",
+    "cancelledText": "エクスポートは完了前に停止しました。ファイルは保存されていません。",
+    "noteWebm": "WebM (VP9) で保存しました。",
+    "noteH264": "MP4 (H.264) で保存しました：iPhone や QuickTime を含め、ほぼすべての環境で再生できます。",
+    "noteNoH264": "このブラウザは H.264 でエンコードできないため、MP4 ({{codec}}) で保存しました。Chrome、Edge、VLC、Android では再生できますが、iPhone、QuickTime、一部の編集ソフトでは開けない場合があります。",
+    "noteMp4": "MP4 ({{codec}}) で保存しました：最高画質で、Chrome、Edge、VLC、Android で再生できます。iPhone、QuickTime、動画編集ソフトで使う場合は、エクスポートメニューで MP4 (H.264) を選んでください。",
+    "freeExportsUsed": "本日の無料エクスポート {{limit}} 回のうち {{used}} 回を使用しました。残り {{left}} 回です。同じイベントの再エクスポートは無料です。",
+    "plateModelLoading": "ナンバープレート検出モデルを読み込み中...",
+    "plateModelReady": "ナンバープレート検出の準備完了",
+    "plateModelFailed": "ナンバープレート検出を読み込めませんでした",
+    "h264Warning": "MP4 (H.264) はほぼすべての機器で再生できますが、一部のPCでは最も時間のかかるエクスポートになります。MP4 (VP9) と WebM の方が速いことが多いです。",
+    "softwareH264": "H.264 をソフトウェアでエンコードしています。フル画質では数分かかることがあります。",
+    "softwareH264Rate": "毎秒 {{fps}} フレーム",
+    "tookTime": "所要時間: {{time}}",
+    "sizeNote": "動画サイズ: {{size}}",
+    "sizeReduced": "動画サイズ: {{size}}（指定は {{asked}} でしたが、このデバイスのビデオエンコーダーが扱えるサイズを超えています）",
+    "noEncoder": "エクスポートを開始前に中止しました：このデバイスのビデオエンコーダーはこのエクスポート（{{size}}）を受け付けませんでした。小さいサイズでも同じでした。ファイルは保存されていません。ページを再読み込みしてもう一度お試しください。それでも失敗する場合は WebM でエクスポートするか、設定 > エクスポート でエクスポート画質を下げてください。",
+    "badOutput": "エクスポートに失敗しました：{{format}} ファイルが正しく作成されなかったため（{{reason}}）、保存していません。もう一度お試しください。再び起きる場合は、設定 > エクスポート でエクスポート画質を下げるか、別の形式を選んでください。",
+    "badOutput_tiny": "ファイルはわずか {{bytes}} バイトで、映像が入っていません",
+    "badOutput_frames": "ファイルに入ったのは {{want}} フレーム中 {{got}} フレームだけです",
+    "badOutput_length": "動画の長さが {{want}} 秒ではなく {{got}} 秒です",
+    "badOutput_unreadable": "ファイルを再生できません",
+    "nothingToExport": "エクスポートする範囲がありません：再生位置がイベントの最後にあり（{{end}} 中 {{position}}）、OUT マークが設定されていません。再生位置を戻すか、IN と OUT マークを設定してからもう一度エクスポートしてください。",
+    "notSaved": "エクスポートはファイルを保存せずに終了したため、何もダウンロードされていません。もう一度お試しください。",
+    "softwareVp9": "VP9 をソフトウェアでエンコードしています。フル画質では数分かかることがあります。",
+    "noteWebmCodec": "WebM ({{codec}}) で保存しました。",
+    "noWebmEncoder": "エクスポートを開始前に中止しました：このデバイスの WebM ビデオエンコーダーはこのエクスポート（{{size}}）を受け付けませんでした。小さいサイズでも同じでした。ファイルは保存されていません。代わりに MP4 (H.264) でエクスポートするか、設定 > エクスポート でエクスポート画質を下げてください。",
+    "elapsedOnly": "経過 {{elapsed}}",
+    "softwareVp8": "VP8 をソフトウェアでエンコードしています。フル画質では数分かかることがあります。"
   },
 
   "layouts": {
     "grid2x2": "2×2 グリッド",
+    "grid3x2": "3×2 グリッド（6カメラ）",
     "layout63": "6:3 センター",
     "layout43": "4:3 メイン",
     "all169": "すべて 16:9",
@@ -141,7 +228,13 @@
       "markingExport": "マーキングとエクスポート",
       "bookmarks": "ブックマーク",
       "speedControl": "速度調整",
-      "general": "一般"
+      "general": "一般",
+      "exportOverlays": "エクスポートのオーバーレイ"
+    },
+    "exportOverlays": {
+      "gps": "タイムスタンプの横にGPS座標（設定 → エクスポート、デフォルトはオフ）",
+      "speedLimit": "左下に制限速度標識（設定 → エクスポート、デフォルトはオフ）",
+      "privacy": "プライバシーモードでは、タイムスタンプやミニマップとともに両方とも削除されます"
     },
 
     "shortcuts": {
@@ -159,6 +252,7 @@
       "selectNextEvent": "次のイベントを選択",
       "cycleLayouts": "レイアウトを切り替え",
       "focusCamera": "カメラをフォーカス (1=前, 2=後, 3=左, 4=右)",
+      "cyclePillarMode": "リピーター/ピラーを切り替え（利用可能な場合）",
       "toggleFullscreen": "全画面切り替え",
       "focusCameraFullscreen": "カメラを全画面でフォーカス",
       "markIn": "開始点をマーク",
@@ -197,18 +291,72 @@
       "mobile": "モバイル",
       "export": "エクスポート",
       "language": "言語",
-      "telemetry": "Telemetry Overlay",
-      "miniMap": "Mini-Map"
+      "telemetry": "テレメトリー表示",
+      "miniMap": "ミニマップ"
     },
 
     "tabs": {
-      "general": "General",
-      "playback": "Playback",
-      "overlays": "Overlays",
-      "export": "Export",
-      "advanced": "Advanced",
-      "ai-search": "AI Search",
-      "diagnostics": "Diagnostics"
+      "general": "一般",
+      "playback": "再生",
+      "overlays": "オーバーレイ",
+      "export": "エクスポート",
+      "advanced": "詳細",
+      "ai-search": "AI検索",
+      "diagnostics": "診断"
+    },
+    "playback": {
+      "defaultSpeed": "デフォルトの速度",
+      "defaultLayout": "デフォルトのレイアウト",
+      "autoPlayNext": "次のイベントを自動再生",
+      "loopByDefault": "デフォルトでループ再生"
+    },
+    "performance": {
+      "preloadNextClip": "次のクリップを事前に読み込む",
+      "preloadHint": "再生がスムーズになりますが、メモリを多く使います",
+      "memoryOptimization": "メモリの最適化",
+      "memoryHint": "使っていないビデオリソースを解放します",
+      "webCodecsPlayer": "WebCodecs プレーヤー",
+      "beta": "ベータ",
+      "webCodecsHint": "ベータ：WebCodecs を使ったキャンバス描画プレーヤーです。再生がカクつく、または動作が重いと感じる場合（特に Intel の内蔵グラフィックス）にお試しください。フィードバックが集まったら、今後のリリースで全員にデフォルトで有効にする予定です。反映するにはページの再読み込みが必要です。"
+    },
+    "ui": {
+      "theme": "テーマ",
+      "themeDark": "ダーク（デフォルト）",
+      "themeLight": "ライト",
+      "themeMidnight": "ミッドナイト",
+      "themeTeslaRed": "テスラレッド",
+      "showKeyboardHints": "キーボードのヒントを表示",
+      "showTimestampOverlay": "タイムスタンプを映像に重ねて表示",
+      "showWhatsNew": "「新機能」マークを表示",
+      "whatsNewHint": "新機能に付く青い点、アップデートのお知らせ"
+    },
+    "timeline": {
+      "enableZoom": "タイムラインのズームを有効にする",
+      "zoomHint": "スクロールでタイムラインを拡大/縮小",
+      "showClipMarkers": "クリップの区切りを表示"
+    },
+    "session": {
+      "rememberLastFolder": "最後に使ったフォルダを記憶",
+      "folderHint": "再読み込み時にフォルダへのアクセス許可が必要です"
+    },
+    "offline": {
+      "downloadPackage": "オフラインパッケージをダウンロード",
+      "downloadHint": "USBドライブ用の単体で動くバージョンを作成（約2〜3 MB）",
+      "download": "ダウンロード",
+      "mapNote": "アプリのすべてのファイルとライブラリを含みます。地図にはインターネット接続が必要です。",
+      "notAvailable": "オフラインパッケージを作成できません。ページを再読み込みして、もう一度お試しください。"
+    },
+    "accessibility": {
+      "highContrast": "ハイコントラストモード",
+      "highContrastHint": "文字と枠線のコントラストを上げます",
+      "textSize": "文字サイズ",
+      "textSmall": "小",
+      "textMedium": "中（デフォルト）",
+      "textLarge": "大"
+    },
+    "mobile": {
+      "lockLandscape": "再生中は横向きに固定",
+      "lockHint": "ビデオの再生中は画面を横向きに固定します（モバイルのみ）"
     },
 
     "language": {
@@ -219,45 +367,158 @@
     "export": {
       "videoFormat": "ビデオ形式",
       "webm": "WebM (VP9) - ファイルサイズ小",
-      "mp4": "MP4 (H.264) - 互換性良好",
-      "formatHint": "ビデオエクスポート時の形式",
-      "privacyMode": "Privacy Mode Export",
-      "privacyModeHint": "Strip timestamp, GPS, location, and mini-map from exports",
-      "blurPlates": "Blur License Plates",
-      "blurPlatesHint": "AI-powered plate detection (~12MB model, cached after first use)",
-      "branding": "Show TeslaCamViewer.com branding",
-      "brandingHint": "Display branding in the bottom banner of exported videos"
+      "mp4": "MP4 (VP9) - 最高画質 (Chrome, Edge, VLC, Android)",
+      "mp4h264": "MP4 (H.264) - 互換性最大、最も遅い場合あり (iPhone, QuickTime, 編集ソフト)",
+      "formatHint": "ビデオをエクスポートするときの形式です。MP4 (VP9) が最もきれいですが、iPhone、QuickTime、一部の動画編集ソフトやSNSアプリでは開けません。その場合は MP4 (H.264) を使ってください。MP4 (H.264) は最も遅くなることがあります。グラフィックカードの H.264 エンコーダーが応答しない場合はソフトウェアエンコーダーに切り替え、次回もそれを使います。",
+      "privacyMode": "プライバシーモードでエクスポート",
+      "privacyModeHint": "エクスポートからタイムスタンプ、GPS、位置情報、ミニマップを削除",
+      "gpsText": "エクスポートにGPS座標を表示",
+      "gpsTextHint": "車のGPS位置を文字として、タイムスタンプの横に書き込みます。共有した動画から居場所がわからないよう、デフォルトではオフです。GPSデータがないクリップでは、イベントのおおよその位置を ~ 付きで表示します。プライバシーモードでは常に削除されます。",
+      "gpsFormat": "GPS座標の形式",
+      "gpsFormatDecimal": "10進数の度 (37.49301, -121.94402)",
+      "gpsFormatDms": "度・分・秒 (37°29'34.8\"N 121°56'38.5\"W)",
+      "speedLimit": "エクスポートに制限速度標識を表示",
+      "speedLimitHint": "OpenStreetMap の制限速度を、再生中の標識と同じように標識としてエクスポート動画に表示します。制限速度はエクスポート開始時にオンラインで調べ（最大約6秒）、次回のために保存します。調べられなかった道路では標識は表示されません。プライバシーモードでは常に削除されます。",
+      "blurPlates": "ナンバープレートをぼかす",
+      "blurPlatesHint": "AIによるナンバープレート検出（約12MBのモデル、初回使用後はキャッシュ）",
+      "branding": "TeslaCamViewer.com のロゴを表示",
+      "brandingHint": "エクスポート動画の下部バナーにロゴを表示",
+      "gifAnimated": "GIF（アニメーション）",
+      "quality": "エクスポート画質",
+      "qualityFull": "フル：レイアウト本来の解像度",
+      "qualityHd": "HD：高さ1080p",
+      "qualityWeb": "Web：高さ720p",
+      "qualityCustom": "カスタム：高さを指定",
+      "qualityHint": "エクスポート画面のサイズを変更します。フルは縮小しません。HD/Webは上限を設けますが拡大はしません。カスタムでは自由に選べます（拡大も可）。",
+      "customHeight": "カスタムの高さ (px)",
+      "customHeightHint": "幅はレイアウトの縦横比を保つように計算されます。",
+      "plateModelMissing": "エラー：PlateBlur が読み込まれていません",
+      "plateModelInitializing": "初期化中...",
+      "plateModelReady": "モデルの準備完了",
+      "plateModelFailed": "モデルを読み込めませんでした",
+      "plateModelOnFirstExport": "モデルは初回のエクスポート時にダウンロードされます"
     },
 
     "telemetry": {
-      "enabled": "Enable Telemetry Overlay",
-      "enabledHint": "Press T to toggle during playback",
-      "style": "Display Style",
-      "styleCockpit": "Cockpit HUD",
-      "styleTesla": "Tesla-Native Pill",
-      "styleMinimal": "Minimal Corner",
-      "units": "Speed Units",
+      "enabled": "テレメトリー表示を有効にする",
+      "enabledHint": "再生中に T キーで切り替え",
+      "style": "表示スタイル",
+      "styleCockpit": "コックピット HUD",
+      "styleTesla": "Tesla 風ピル",
+      "styleMinimal": "ミニマル（隅に表示）",
+      "units": "速度の単位",
       "unitsMph": "MPH",
       "unitsKph": "KPH",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add telemetry overlay to exported videos",
-      "description": "Shows vehicle data from Tesla firmware 2025.44.25+ (speed, steering, pedals, etc.)"
+      "inExport": "エクスポートに含める",
+      "inExportHint": "エクスポート動画にテレメトリーを重ねて表示",
+      "description": "Tesla ファームウェア 2025.44.25 以降の車両データ（速度、ステアリング、ペダルなど）を表示します"
     },
 
     "miniMap": {
-      "enabled": "Enable Mini-Map",
-      "enabledHint": "Press M to toggle, right-click for options",
-      "inExport": "Include in Exports",
-      "inExportHint": "Add mini-map overlay to exported videos",
-      "darkMode": "Dark Mode Map",
-      "darkModeHint": "Use dark map tiles (recommended for dashcam viewing)",
-      "tileProvider": "Map Tile Provider",
-      "tileProviderHint": "Try OpenStreetMap if maps don't load (e.g., in China)",
-      "providerCarto": "Carto (Default)",
+      "enabled": "ミニマップを有効にする",
+      "enabledHint": "M キーで切り替え、右クリックでオプション",
+      "inExport": "エクスポートに含める",
+      "inExportHint": "エクスポート動画にミニマップを重ねて表示",
+      "darkMode": "ダークモードの地図",
+      "darkModeHint": "暗い地図タイルを使用（ダッシュカム映像の視聴におすすめ）",
+      "tileProvider": "地図タイルの提供元",
+      "tileProviderHint": "地図が表示されない場合（中国など）は OpenStreetMap をお試しください",
+      "providerCarto": "Carto（デフォルト）",
       "providerOsm": "OpenStreetMap",
       "providerStadia": "Stadia Maps",
-      "description": "GPS map overlay showing vehicle position synced with video playback"
+      "description": "動画の再生に合わせて車両の位置を表示する GPS 地図オーバーレイ"
     }
+  },
+
+  "sync": {
+    "synced": "同期済み（全カメラが同期）",
+    "drifted": "ずれあり（自動補正中）",
+    "videosSynced": "ビデオは同期しています",
+    "videosDrifted": "ビデオがずれました：再同期中"
+  },
+
+  "events": {
+    "stats": "{{total}} 件のイベント（保存 {{saved}}、セントリー {{sentry}}、最近 {{recent}}）",
+    "saved": "保存済み",
+    "sentry": "セントリー",
+    "recent": "最近",
+    "event": {
+      "one": "{{count}} 件のイベント",
+      "other": "{{count}} 件のイベント"
+    },
+    "statsLine": "保存 {{saved}}、セントリー {{sentry}}、最近 {{recent}}",
+    "emptyCount": "空 {{count}} 件",
+    "encryptedCount": "暗号化 {{count}} 件",
+    "noEventsFound": "イベントが見つかりません",
+    "noEventsHint": "選択したフォルダには TeslaCam のイベントがありません",
+    "noFolder": "TeslaCam フォルダが選択されていません",
+    "clipCount": {
+      "one": "{{count}} クリップ",
+      "other": "{{count}} クリップ"
+    },
+    "clipsDuration": {
+      "one": "{{count}} クリップ（約{{minutes}}分）",
+      "other": "{{count}} クリップ（約{{minutes}}分）"
+    },
+    "noVideoClips": "ビデオクリップがありません",
+    "hasNotes": "メモ/タグあり",
+    "emptyEventToast": "{{date}} のイベントにはビデオクリップがありません",
+    "timeFrom": "{{time}} から",
+    "timeFromTo": "{{start}} - {{end}}",
+    "reasons": {
+      "manualSave": "手動保存",
+      "objectDetected": "セントリー: 物体を検出",
+      "vehicleBumped": "セントリー: 車両への衝撃"
+    }
+  },
+
+  "encrypted": {
+    "title": {
+      "one": "{{count}} 件のイベントが Tesla によって暗号化されています",
+      "other": "{{count}} 件のイベントが Tesla によって暗号化されています"
+    },
+    "titleOnDrive": {
+      "one": "{{drive}} の {{count}} 件のイベントが Tesla によって暗号化されています",
+      "other": "{{drive}} の {{count}} 件のイベントが Tesla によって暗号化されています"
+    },
+    "notListed": {
+      "one": "復号するまで再生できないため、下の一覧には表示されません。",
+      "other": "復号するまで再生できないため、下の一覧には表示されません。"
+    },
+    "notListedKinds": {
+      "one": "復号するまで再生できないため、下の一覧には表示されません（{{kinds}}）。",
+      "other": "復号するまで再生できないため、下の一覧には表示されません（{{kinds}}）。"
+    },
+    "kindSaved": "保存 {{count}} 件",
+    "kindSentry": "セントリー {{count}} 件",
+    "kindRecent": "最近 {{count}} 件",
+    "carOnlyAll": {
+      "one": "このイベントは車内でしか復号できません。dashcam.tesla.com では解除できません。",
+      "other": "すべて車内でしか復号できません。dashcam.tesla.com では解除できません。"
+    },
+    "carOnlySome": {
+      "one": "そのうち {{count}} 件は車内でしか復号できません。dashcam.tesla.com では解除できません。",
+      "other": "そのうち {{count}} 件は車内でしか復号できません。dashcam.tesla.com では解除できません。"
+    },
+    "damagedAll": {
+      "one": "破損しているか不完全なようです（保存中に途切れた場合など）。復号できない可能性があります。",
+      "other": "いずれも破損しているか不完全なようです（保存中に途切れた場合など）。復号できない可能性があります。"
+    },
+    "damagedSome": {
+      "one": "そのうち {{count}} 件は破損しているか不完全なようです（保存中に途切れた場合など）。復号できない可能性があります。",
+      "other": "そのうち {{count}} 件は破損しているか不完全なようです（保存中に途切れた場合など）。復号できない可能性があります。"
+    },
+    "howToView": "表示する方法",
+    "explain": "Tesla ソフトウェア 2026.20 以降では、USBドライブ上のダッシュカムのクリップが暗号化されます。解除できるのはお使いの車両か Tesla アカウントだけです。",
+    "webTitle": "dashcam.tesla.com で復号：",
+    "webText": "Tesla アカウントでサインインし、クリップを復号してダウンロードします（処理はブラウザ内で行われます）。その後、ダウンロードしたフォルダを「ドライブを追加」でここに追加してください。",
+    "webLink": "dashcam.tesla.com を開く",
+    "carTitle": "車内で復号：",
+    "carText": "車両のダッシュカム ビューアで、クリップの鍵アイコンをタップします。USBドライブ上で復号され、元に戻すことはできません。",
+    "stopTitle": "新しいクリップの暗号化を止める：",
+    "stopText": "{{path}}（この設定がない車両もあります）。既に暗号化されたクリップは暗号化されたままです。",
+    "stopPath": "コントロール > 安全 > ダッシュカム録画を暗号化",
+    "stopPrivacy": "暗号化により、USBドライブが他人の手に渡っても映像は守られます。オフにすると、ドライブを持っている人なら誰でも見られます。"
   },
 
   "filter": {
@@ -271,11 +532,21 @@
     "clear": "フィルターをクリア",
     "filters": "フィルター",
     "eventTypes": "イベントタイプ",
+    "saved": "保存済み",
+    "sentry": "セントリー",
+    "recent": "最近",
     "onlyBookmarked": "ブックマーク付きのみ",
     "onlyWithNotes": "メモ/タグ付きのみ",
     "sortBy": "並び替え",
     "newestFirst": "新しい順",
-    "oldestFirst": "古い順"
+    "oldestFirst": "古い順",
+    "searchPlaceholder": "都市、場所、理由...",
+    "dateRange": "期間",
+    "dateTo": "〜",
+    "clearDates": "日付をクリア",
+    "clearAllFilters": "すべてのフィルターをクリア",
+    "filterByTag": "タグで絞り込み",
+    "allTags": "すべてのタグ"
   },
 
   "map": {
@@ -286,25 +557,29 @@
     "toggleStruggleZones": "オートパイロット問題ゾーン切替",
     "loadingStruggleZones": "AP解除データを読み込み中...",
     "struggleZonesLoaded": "{{count}}件のAP解除を検出",
-    "togglePhantomBrakes": "ファントムブレーキホットスポット切替",
-    "loadingPhantomBrakes": "ファントムブレーキデータを読み込み中...",
-    "phantomBrakesLoaded": "{{count}}件のファントムブレーキを検出",
-    "phantomBrakeHotspot": "ファントムブレーキホットスポット",
-    "phantomBrakesAtLocation": "この場所で{{count}}件のファントムブレーキ",
-    "phantomBrakeTip": "この場所で繰り返しファントムブレーキが発生しています - 誤検知の場合はテスラに報告を検討してください。",
-    "toggleDarkMode": "マップダークモード切替"
+    "toggleIncidents": "インシデントマーカー表示切替",
+    "loadingIncidents": "インシデントデータを読み込み中...",
+    "incidentsLoaded": "{{count}} 件のインシデントが見つかりました",
+    "incidentHotspot": "インシデント多発地点",
+    "incidentsAtLocation": "この場所のインシデント：{{count}} 件",
+    "incidentTip": "この場所ではインシデントが繰り返し起きています。映像を確認して、何が起きたか調べてみてください。",
+    "toggleDarkMode": "マップダークモード切替",
+    "scanAllEvents": "すべてのイベントをスキャンして地図データを取得",
+    "scanningEvents": "インシデントとAP解除を探してイベントをスキャン中...",
+    "scanComplete": "スキャン完了：インシデント {{incidents}} 件、AP解除 {{apDisengagements}} 件",
+    "scanCancelled": "スキャンをキャンセルしました"
   },
 
   "statistics": {
     "title": "統計",
     "close": "閉じる",
     "tabs": {
-      "overview": "Overview",
-      "timeline": "Timeline",
-      "locations": "Locations",
-      "sentry": "Sentry Analysis",
-      "quality": "Data Quality",
-      "export": "Export"
+      "overview": "概要",
+      "timeline": "タイムライン",
+      "locations": "場所",
+      "sentry": "セントリー分析",
+      "quality": "データ品質",
+      "export": "エクスポート"
     },
     "recordingOverview": "録画概要",
     "totalEvents": "イベント合計",
@@ -342,15 +617,15 @@
     "noLocationData": "位置データがありません",
     "noSentryLocationData": "セントリー位置データがありません",
     "events": "イベント",
-    "exportDescription": "Download your statistics data for offline analysis or record keeping.",
-    "triggeringCamera": "Triggering Camera Distribution",
-    "sentryByDayOfWeek": "Sentry Events by Day of Week",
-    "dayVsNight": "Day vs Night Events",
-    "dataQuality": "Data Quality",
-    "eventsWithTelemetry": "Events with Telemetry",
-    "eventsWithoutTelemetry": "Events without Telemetry",
-    "noTriggeringCameraData": "No triggering camera data available",
-    "noEventData": "No event data available"
+    "exportDescription": "オフラインでの分析や記録用に統計データをダウンロードできます。",
+    "triggeringCamera": "検知したカメラの内訳",
+    "sentryByDayOfWeek": "曜日別セントリーイベント",
+    "dayVsNight": "昼と夜のイベント",
+    "dataQuality": "データ品質",
+    "eventsWithTelemetry": "テレメトリーありのイベント",
+    "eventsWithoutTelemetry": "テレメトリーなしのイベント",
+    "noTriggeringCameraData": "検知したカメラのデータがありません",
+    "noEventData": "イベントデータがありません"
   },
 
   "errors": {
@@ -396,8 +671,8 @@
       "recent": "ローリングバッファ映像"
     },
     "step3": {
-      "title": "ステップ 3: 4 カメラを表示",
-      "description": "前、後、左、右の 4 つのカメラアングルを同期して視聴できます。",
+      "title": "ステップ 3: カメラを表示",
+      "description": "すべてのカメラアングルを同期して視聴できます：前、後、左、右、ピラーカメラ（搭載車のみ）。",
       "tip": "ヒント",
       "tipText": "カメラをドラッグして位置を入れ替えたり、不要なカメラを非表示にできます。"
     },
@@ -418,7 +693,35 @@
     "events": "イベント",
     "removeDrive": "ドライブを削除",
     "addDrive": "ドライブを追加",
-    "changeColor": "クリックして色を変更"
+    "changeColor": "クリックして色を変更",
+    "archive": "アーカイブ",
+    "notLoaded": "未読み込み",
+    "sync": "同期",
+    "syncNow": "このアーカイブドライブからイベントを読み込む",
+    "editDrive": "ドライブ設定を編集"
+  },
+
+  "driveSetup": {
+    "title": "ドライブ設定",
+    "editTitle": "ドライブ設定を編集",
+    "tipTitle": "ヒント：フォルダの選び方",
+    "tipTeslaCam": "TeslaCam/ - 1台のドライブのすべての映像",
+    "tipSubfolder": "SavedClips/ または SentryClips/ - 特定の種類のイベントのみ",
+    "tipParent": "親フォルダ - 中にある TeslaCam フォルダを検索",
+    "labelField": "ドライブ名",
+    "labelPlaceholder": "例：マイ USB ドライブ",
+    "dateFilterField": "読み込むイベントの期間",
+    "dateFilterAll": "すべてのイベント",
+    "dateFilterWeek": "過去1週間",
+    "dateFilterMonth": "過去1か月",
+    "dateFilter3Months": "過去3か月",
+    "dateFilter6Months": "過去6か月",
+    "dateFilterYear": "過去1年",
+    "archiveLabel": "アーカイブドライブ",
+    "archiveHint": "起動時に読み込まず、必要なときに手動で同期します",
+    "changeFolder": "フォルダを変更",
+    "addDrive": "ドライブを追加",
+    "save": "変更を保存"
   },
 
   "driveSync": {
@@ -477,12 +780,33 @@
     "missingOnly": "不足のみ",
     "newerOnly": "新しいもののみ",
     "syncedOnly": "同期済みのみ",
-    "showingFirst": "{{total}} 件中最初の {{count}} 件を表示"
+    "showingFirst": "{{total}} 件中最初の {{count}} 件を表示",
+    "scanStopped": "the folder could not be listed to the end ({{error}})",
+    "filesUnreadable": "{{count}} file(s) could not be read: {{names}}",
+    "sourcePartial": "{{event}}: {{error}}. Copy copies the files that can be read. Move will not delete anything from this event.",
+    "destPartial": "{{event}} on the destination: {{error}}",
+    "compareWarningsTitle": "Some files could not be read ({{count}})",
+    "verifyFailed": "検証に失敗しました ({{error}})",
+    "verifyFailedKept": "検証に失敗しました ({{error}})。コピー元からは何も削除されていません。",
+    "partialNotMoved": "Not moved: {{error}}. The files that could be read were copied; nothing was deleted from the source.",
+    "partialCopied": "Only partly copied: {{error}}",
+    "keptInSource": "Kept {{count}} file(s) in the source folder because they were not part of the verified copy (added or changed after Compare): {{names}}",
+    "moveConfirmDetail": "Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.",
+    "notesTitle": "メモとタグ",
+    "notesConflictsKept": "{{count}} 件のイベントで、2 つのドライブのメモが異なります。どちらもそのまま残しました。まとめるには、同期設定の「メモの競合解決」で「自動的にマージ」を選んでください。",
+    "verifyingFiles": "ファイルを検証中 ({{current}} / {{total}})",
+    "verifyMismatch": "{{file}} のコピーが元のファイルと一致しません",
+    "cancelledAfter": "{{total}} 件中 {{done}} 件のイベントでキャンセルしました。",
+    "cancelledKeptEvent": "キャンセルしました。このイベントはコピー元から何も削除されていません。",
+    "cancelledEvent": "このイベントの完了前にキャンセルしました。",
+    "syncCancelled": "同期をキャンセルしました",
+    "moveNeedsWrite": "移動するには {{drive}} のファイルを変更する許可が必要です (移動したイベントを削除するため)。何もコピーも削除もされていません。ブラウザーに聞かれたら許可するか、コピーを使ってください。",
+    "deleteFailed": "コピーと検証は完了しましたが、{{count}} 個のファイルを元のドライブから削除できず、そのまま残っています ({{error}})。"
   },
 
   "syncSettings": {
     "title": "同期設定",
-    "verifyAfterCopy": "コピー後にファイルを検証",
+    "verifyAfterCopy": "コピー後にすべてのバイトを検証 (移動では常に検証)",
     "syncNotes": "メモとタグを同期",
     "writeSyncFile": "宛先に同期設定ファイルを書き込む",
     "confirmBeforeDelete": "ソースファイル削除前に確認",
@@ -490,7 +814,8 @@
     "askEachTime": "毎回確認",
     "mergeAutomatically": "自動的にマージ",
     "saveSettings": "設定を保存",
-    "close": "閉じる"
+    "close": "閉じる",
+    "keepBothTellMe": "両方残して知らせる"
   },
 
   "presets": {
@@ -591,5 +916,69 @@
     "birdsEyeLowG": "低G",
     "birdsEyeMedG": "中G",
     "birdsEyeHighG": "高G"
+  },
+
+  "license": {
+    "activated": "ライセンスが有効になりました！",
+    "howItWorks": "TeslaCamViewer Pro ライセンスのしくみ：",
+    "privacyFirst": "プライバシー優先",
+    "privacyFirstDesc": "メールアドレスは、このデバイス上でライセンスを確認するためだけに使われます。サーバーに送信されることはありません。",
+    "savedInTwoPlaces": "2か所に保存",
+    "savedInTwoPlacesDesc": "ライセンスはブラウザのストレージと TeslaCam ドライブの両方に保存されます。そのため、別のドライブでも使えます。",
+    "easyRecovery": "簡単に復元",
+    "easyRecoveryDesc": "別のブラウザやコンピュータを使う場合は、ライセンスが保存されているドライブを開くだけです。本人確認のため、メールアドレスの再入力を求められます。",
+    "multipleDevices": "複数のデバイス",
+    "multipleDevicesDesc": "ライセンスはどのデバイスでも使えます。新しいブラウザでは一度だけメールアドレスの確認があり、その後はそのまま使えます。",
+    "gotIt": "了解",
+    "limitDailyTitle": "1日の上限に達しました",
+    "limitDailyText": "今日は{{limit}}件のイベントを表示しました。表示済みのイベントは引き続き開いて機能を試せます。新しいイベントは待つ必要があります。上限は午前0時にリセットされます。",
+    "limitExportTitle": "エクスポートの上限に達しました",
+    "limitExportText": "無料版では1日に{{limit}}件のイベントをエクスポートできます: {{names}}。これらは何度でも再エクスポートでき、午前0時以降は新しいイベントを選べます。Proなら上限はありません。",
+    "limitNameSeparator": "、",
+    "limitLockedTitle": "機能はロックされています",
+    "limitLockedText": "この機能にはTeslaCamViewer Proライセンスが必要です。",
+    "limitUpgradeLine": "アップグレードで無制限に利用できます。年間わずか$5.99",
+    "limitWaitTomorrow": "明日まで待つ",
+    "limitClose": "閉じる",
+    "limitUpgrade": "アップグレード"
+  },
+
+  "telemetry": {
+    "title": "テレメトリー",
+    "toggleAnomalyMarkers": "異常マーカー表示切替",
+    "hideAnomalyMarkers": "異常マーカーを非表示",
+    "showAnomalyMarkers": "異常マーカーを表示",
+    "exportCsv": "テレメトリーデータを CSV でエクスポート",
+    "noData": "データなし",
+    "incident": "インシデント",
+    "incidentBraking": "急ブレーキ",
+    "incidentSwerve": "急ハンドル",
+    "incidentCombined": "複合インシデント",
+    "hardBrake": "急ブレーキ",
+    "hardAccel": "急加速",
+    "suddenAcceleration": "{{speed}} mph で急加速",
+    "suddenDeceleration": "{{speed}} mph で急減速",
+    "rapidSteering": "急なステアリング操作（{{degrees}}° の変化）",
+    "gForce": "Gフォース：{{value}}g",
+    "lateralG": "横G：{{value}}g",
+    "speed": "速度：{{speed}} mph",
+    "dropped": "低下：{{dropped}} mph",
+    "gForceValue": "Gフォース：{{value}}g",
+    "previousApEvent": "前のAPイベント",
+    "nextApEvent": "次のAPイベント",
+    "cycleApEvents": "矢印をクリックして {{count}} 件のAPイベントを順に表示",
+    "nearMissDetected": "ヒヤリハットを検出しました",
+    "incidentTooltip": "インシデントマーカー：確認する価値のある急ブレーキや急ハンドル",
+    "hardBrakingEvents": "急ブレーキのイベント",
+    "hardAccelEvents": "急加速のイベント",
+    "hardBrakingAccelEvents": "急ブレーキ/急加速のイベント"
+  },
+  "speedLimit": {
+    "unavailableBusy": "Speed limits unavailable right now (map data server busy).",
+    "unavailableUnreachable": "Speed limits unavailable right now (couldn't reach the map data server).",
+    "unavailableOffline": "Speed limits unavailable: you're offline."
+  },
+  "fileProtocol": {
+    "notice": "TeslaCamViewerをフォルダから直接開いています（file://）。この開き方ではブラウザが一部の機能をブロックします：テレメトリー、ナンバープレートツール、MP4とGIFのエクスポート、翻訳。すべての機能を使うには、teslacamviewer.comを開くか、このフォルダでローカルサーバーを起動して（例：python -m http.server 8000）http://localhost:8000 を開いてください。"
   }
 }

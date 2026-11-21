@@ -8,37 +8,86 @@ class WeatherService {
     constructor() {
         this.DB_NAME = 'TeslaCamViewer';
         this.STORE_NAME = 'weatherCache';
-        this.DB_VERSION = 2; // Increment if schema changes
+        // No fixed version: older builds left this database at v1, v2 or v3 (the old
+        // speed-limit cache shared it at v3), see _initDB
         this.db = null;
 
         // In-memory cache for current session
         this.memoryCache = new Map();
 
-        this._initDB();
+        this._dbReady = this._initDB();
     }
 
     /**
      * Initialize IndexedDB
      */
     async _initDB() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+        // Open at the version the database already has (opening at a lower fixed version fails
+        // with VersionError: returning users of the old speed-limit code are at v3). Only when the
+        // weather store is missing, reopen one version up to add it. Nothing is ever deleted.
+        let db = await this._openDB();
+        if (db && !db.objectStoreNames.contains(this.STORE_NAME)) {
+            const nextVersion = db.version + 1;
+            db.close();
+            db = await this._openDB(nextVersion);
+        }
+        if (db && db.objectStoreNames.contains(this.STORE_NAME)) {
+            this.db = db;
+            console.log(`[WeatherService] IndexedDB ready (v${db.version})`);
+        } else {
+            if (db) db.close();
+            console.warn('[WeatherService] IndexedDB not available, using memory cache only');
+        }
+        return this.db;
+    }
+
+    /**
+     * Open the database, at its current version (no version) or at `version` (upgrade adds the store)
+     * @param {number} [version]
+     * @returns {Promise<IDBDatabase|null>}
+     */
+    _openDB(version) {
+        return new Promise((resolve) => {
+            let settled = false;
+            const done = (db) => { if (!settled) { settled = true; resolve(db); } };
+            let request;
+            try {
+                if (typeof indexedDB === 'undefined') return done(null);
+                request = version ? indexedDB.open(this.DB_NAME, version) : indexedDB.open(this.DB_NAME);
+            } catch (e) {
+                console.warn('[WeatherService] Unable to open IndexedDB:', e && e.message);
+                return done(null);
+            }
 
             request.onerror = () => {
-                console.warn('[WeatherService] IndexedDB not available, using memory cache only');
-                resolve(null);
+                console.warn('[WeatherService] Unable to open IndexedDB:', request.error && request.error.name);
+                done(null);
             };
 
-            request.onsuccess = (event) => {
-                this.db = event.target.result;
-                console.log('[WeatherService] IndexedDB ready');
-                resolve(this.db);
+            // Another tab still has the old version open: use memory for now
+            request.onblocked = () => {
+                console.warn('[WeatherService] Unable to upgrade IndexedDB while another tab has it open');
+                done(null);
             };
 
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
+            request.onsuccess = () => {
+                const db = request.result;
+                // Let a newer version (another tab, a later build) upgrade instead of being blocked by us
+                db.onversionchange = () => {
+                    db.close();
+                    if (this.db === db) this.db = null;
+                };
+                if (settled) {
+                    // Opened after we gave up waiting (blocked): use it if it has the store
+                    if (!this.db && db.objectStoreNames.contains(this.STORE_NAME)) this.db = db;
+                    else db.close();
+                    return;
+                }
+                done(db);
+            };
 
-                // Create weather cache store if it doesn't exist
+            request.onupgradeneeded = () => {
+                const db = request.result;
                 if (!db.objectStoreNames.contains(this.STORE_NAME)) {
                     db.createObjectStore(this.STORE_NAME, { keyPath: 'key' });
                     console.log('[WeatherService] Created weatherCache store');
@@ -71,7 +120,9 @@ class WeatherService {
             return null;
         }
 
-        const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+        // Local day (YYYY-MM-DD): the car's clock is local time and Open-Meteo answers in local time
+        // (timezone=auto). toISOString would give the UTC day, the next day for evening events west of UTC.
+        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
         const hour = date.getHours();
 
         // Create cache key

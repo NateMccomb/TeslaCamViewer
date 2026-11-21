@@ -2095,6 +2095,7 @@ class PlateEnhancer {
                 }, 30000);
 
                 const script = document.createElement('script');
+                // docs.opencv.org sends no CORS header, so this one cannot carry SRI (see tools/cdn_allowlist.json)
                 script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
                 script.async = true;
 
@@ -2228,10 +2229,9 @@ class PlateEnhancer {
             // Get video enhancement settings (brightness, contrast, saturation)
             const videoEnhancements = this.getVideoEnhancementSettings();
 
-            // Store extraction data for re-processing (manual frame selection, region adjustment)
+            // Store what re-processing reads (its frames come from originalEnhanced.topFrames).
+            // The full-resolution source frames (~0.9 GB per camera for 5 s) are NOT kept after this run.
             this.lastExtraction = {
-                regions: results.regions,
-                frames: results.frames,
                 settings: {
                     enableMLUpscale,
                     upscaleScale,
@@ -2245,9 +2245,11 @@ class PlateEnhancer {
             updateProgress(`Ranking ${results.regions.length} frames by sharpness...`, 78);
             await new Promise(r => setTimeout(r, 47)); // Let UI update
 
-            const enhanced = await stacker.process(results.regions, results.frames, (status, pct) => {
+            // The stacker works on the cropped regions only (extractAndTrack no longer returns full-size frames)
+            const enhanced = await stacker.process(results.regions, null, (status, pct) => {
                 updateProgress(status, 78 + pct * 0.2); // 78-98%
             }, videoEnhancements);
+            results.regions = null;
 
             if (this.shouldCancel) {
                 throw new Error('Cancelled');
@@ -2354,7 +2356,7 @@ class PlateEnhancer {
         console.log(`[PlateEnhancer] Zone breakdown: ~${Math.round(0.5 * 36 * 2)} near (±0.5s @36fps), ~${Math.round(1.5 * 15 * 2)} mid (±2s @15fps), rest sparse (@6fps)`);
 
         const allRegions = [];
-        const allFrames = [];
+        const allFrames = []; // stays empty: full-size frames are released per camera (#539)
 
         let cameraIndex = 0;
         const totalCameras = this.selections.size;
@@ -2490,7 +2492,8 @@ class PlateEnhancer {
             }
 
             console.log(`[PlateEnhancer] ${cameraName}: Extracted ${allCameraFrames.length} frames, cropped ${croppedCount} regions`);
-            allFrames.push(...allCameraFrames);
+            // Only the cropped regions are used from here on: this camera's full-size frames are not collected,
+            // so they can be freed before the next camera is extracted
             cameraIndex++;
         }
 
@@ -3295,19 +3298,7 @@ class PlateEnhancer {
                 this.showToast('No OCR result to save');
                 return;
             }
-            // Save to notes via NotesManager
-            if (window.app?.notesManager) {
-                const currentEvent = window.app.eventBrowser?.selectedEvent;
-                if (currentEvent) {
-                    const noteText = `License Plate: ${this.lastOCRResult.text} (${this.lastOCRResult.confidence.toFixed(0)}% confidence)`;
-                    await window.app.notesManager.addNote(currentEvent.id, noteText);
-                    this.showToast('Saved to notes!');
-                } else {
-                    this.showToast('No event selected', 'error');
-                }
-            } else {
-                this.showToast('Notes feature not available', 'error');
-            }
+            this.savePlateToNotes();
         });
 
         // Retry Shorter handler - reprocess existing frames with subset
@@ -4115,6 +4106,35 @@ class PlateEnhancer {
     /**
      * Show a brief toast notification
      */
+    /**
+     * Append the last OCR result to the current event's notes (NotesManager keeps { text, tags } per event key)
+     * @returns {boolean} true when the plate is in the notes
+     */
+    savePlateToNotes() {
+        const notesManager = window.app?.notesManager;
+        if (!notesManager) {
+            this.showToast('Notes feature not available', 'error');
+            return false;
+        }
+        const event = window.app?.currentEvent || window.app?.eventBrowser?.selectedEvent;
+        // Same key as the notes modal: compoundKey (multi-drive), else the folder name
+        const key = event ? (event.compoundKey || event.name) : null;
+        if (!key) {
+            this.showToast('No event selected', 'error');
+            return false;
+        }
+        const confidence = Number(this.lastOCRResult.confidence) || 0;
+        const line = `License Plate: ${this.lastOCRResult.text} (${confidence.toFixed(0)}% confidence)`;
+        const notes = notesManager.getNotes(key);
+        const text = (notes.text || '').trim();
+        if (!text.split('\n').includes(line)) {
+            notesManager.saveNotes(key, { text: text ? `${text}\n${line}` : line, tags: notes.tags || [] });
+        }
+        console.log('[PlateEnhancer] Plate saved to notes for', key);
+        this.showToast('Saved to notes!');
+        return true;
+    }
+
     showToast(message) {
         const toast = document.createElement('div');
         toast.className = 'plate-enhancer-toast';
@@ -4315,7 +4335,9 @@ class PlateEnhancer {
             // Load Tesseract.js from CDN
             await new Promise((resolve, reject) => {
                 const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+                script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+                script.integrity = 'sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F';
+                script.crossOrigin = 'anonymous';
                 script.onload = resolve;
                 script.onerror = reject;
                 document.head.appendChild(script);
@@ -4529,6 +4551,8 @@ class PlateEnhancer {
 
         try {
             const result = await Tesseract.recognize(dataUrl, 'eng', {
+                // Same file the default path serves today, with the data package's version pinned
+                langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int',
                 logger: m => {
                     if (onProgress && m.progress) {
                         onProgress('Analyzing text...', m.progress);

@@ -19,6 +19,10 @@ class FolderParser {
 
         // Progress callback for UI updates during parsing
         this.onProgress = null;
+
+        // Tesla-encrypted events per drive (key: driveId, or '' for a single
+        // folder), for the "encrypted by Tesla" notice. Filled by parseFolder.
+        this.encryptedByDrive = new Map();
     }
 
     /**
@@ -205,7 +209,14 @@ class FolderParser {
         const startTime = performance.now();
 
         // Recursively search for TeslaCam event folders
-        await this.searchDirectory(this.rootHandle, 0);
+        await this.searchDirectory(this.rootHandle, 0, this.rootHandle.name === 'EncryptedClips');
+
+        // Tesla-encrypted events (firmware 2026.20+) can't play here: take them
+        // out of the list and keep them for the "encrypted by Tesla" notice.
+        const split = await this._splitEncryptedEvents(this.events);
+        this.events = split.plain;
+        this._recordEncrypted(split.encrypted);
+        this._debugStats.encryptedEvents = split.encrypted.length;
 
         // Sort events by timestamp (newest first)
         this.events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -315,7 +326,20 @@ None`;
      * @param {FileSystemDirectoryHandle} dirHandle
      * @param {number} depth - Current depth (limit recursion)
      */
-    async searchDirectory(dirHandle, depth) {
+    async searchDirectory(dirHandle, depth, inEncrypted = false, typeHint = null) {
+        // Events found anywhere under TeslaCam/EncryptedClips/ are marked, so
+        // the header check can treat that folder as a strong hint.
+        const firstNew = this.events.length;
+        try {
+            await this._searchDirectory(dirHandle, depth, inEncrypted || dirHandle.name === 'EncryptedClips', typeHint);
+        } finally {
+            if (inEncrypted || dirHandle.name === 'EncryptedClips') {
+                for (let i = firstNew; i < this.events.length; i++) this.events[i].inEncryptedFolder = true;
+            }
+        }
+    }
+
+    async _searchDirectory(dirHandle, depth, inEncrypted, typeHint = null) {
         // Limit recursion depth to prevent infinite loops
         if (depth > 10) {
             console.warn(`[FolderParser] Max depth reached at: ${dirHandle.name}`);
@@ -326,12 +350,23 @@ None`;
             this._debugStats.directoriesScanned++;
         }
 
-        // Check if this directory contains video clips (is an event folder)
+        // A type folder picked directly (SentryClips, SavedClips, RecentClips, or a renamed
+        // copy such as "SentryClips (1)") is parsed as that type, so Sentry events keep their
+        // type (#533). A folder whose name says Sentry/Saved/Recent passes that down as a hint.
+        const dirType = FolderParser.typeFromFolderName(dirHandle.name);
+        if (dirType && FolderParser.TYPE_FOLDER_RE.test(dirHandle.name)) {
+            await this.parseEventFolder(dirHandle, dirType);
+            return;
+        }
+        typeHint = dirType || typeHint;
+
+        // Check if this directory contains Tesla clips (is an event folder). Other .mp4 files
+        // (a user's own export lying in a parent folder) don't make it one (#533).
         let hasVideoClips = false;
         let videoClips = [];
         try {
             for await (const entry of dirHandle.values()) {
-                if (entry.kind === 'file' && entry.name.endsWith('.mp4')) {
+                if (entry.kind === 'file' && (FolderParser.CLIP_NAME_RE.test(entry.name) || entry.name === 'event.mp4')) {
                     hasVideoClips = true;
                     videoClips.push(entry);
                 }
@@ -347,24 +382,21 @@ None`;
 
         // If this folder has video clips, try to parse it as an event
         if (hasVideoClips) {
-            // Determine folder type based on parent or current folder name
-            const folderName = dirHandle.name;
-            let folderType = 'SavedClips'; // default
-
-            if (folderName === 'RecentClips' || folderName.includes('Recent')) {
-                // RecentClips folder selected directly - use parseRecentClips
+            if (FolderParser.typeFromFolderName(dirHandle.name) === 'RecentClips') {
+                // A (renamed) RecentClips folder: flat clips, grouped by hour
                 await this.parseRecentClips(dirHandle);
                 return;
-            } else if (folderName === 'SentryClips' || folderName.includes('Sentry')) {
-                folderType = 'SentryClips';
             }
+            // Event folder: its type comes from a parent's name (SentryClips, "Sentry backup"...)
+            const folderType = (typeHint && typeHint !== 'RecentClips') ? typeHint : 'SavedClips';
 
             // Try parsing as event
             const event = await this.parseEvent(dirHandle, folderType);
             if (event) {
                 this.events.push(event);
+                return; // Don't recurse into event folders
             }
-            return; // Don't recurse into event folders
+            // Not an event folder after all: look in its subfolders too
         }
 
         // Otherwise, look for subdirectories
@@ -376,10 +408,14 @@ None`;
                     // Check if this is an event folder type
                     if (['SavedClips', 'SentryClips', 'RecentClips'].includes(folderName)) {
                         console.log(`[FolderParser] Found ${folderName} folder`);
+                        const firstNew = this.events.length;
                         await this.parseEventFolder(entry, folderName);
+                        if (inEncrypted) {
+                            for (let i = firstNew; i < this.events.length; i++) this.events[i].inEncryptedFolder = true;
+                        }
                     } else {
                         // Recursively search subdirectories
-                        await this.searchDirectory(entry, depth + 1);
+                        await this.searchDirectory(entry, depth + 1, inEncrypted, typeHint);
                     }
                 }
             }
@@ -506,15 +542,13 @@ None`;
             const ampm = hourNum >= 12 ? 'PM' : 'AM';
             const hourRange = `${hour12}:00-${hour12}:59 ${ampm}`;
 
-            // Format date for display
-            const date = new Date(group.datePart);
-            const dateStr = date.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric'
-            });
-
-            const eventName = `Recent: ${dateStr} ${hourRange}`;
+            // The name is the key notes and bookmarks are stored under. It's built from the
+            // file names only (the car's local time), so it's the same in every time zone (#531).
+            const eventName = FolderParser.recentClipsEventName(group.datePart, group.hour);
+            // Before 2026.47.5 the name came from new Date('YYYY-MM-DD'), which is UTC midnight:
+            // west of UTC that named the hour after the previous day. Notes and bookmarks saved
+            // then are still found under that name (see migrateLegacyEventKeys).
+            const legacyName = FolderParser.legacyRecentClipsEventName(group.datePart, group.hour);
             // Detect if this event has pillar cameras (6-camera system)
             const hasPillarCameras = group.clips.some(clip =>
                 clip.camera === 'left_pillar' || clip.camera === 'right_pillar'
@@ -531,6 +565,10 @@ None`;
                     clipCount: clipGroups.length,
                     reason: `${clipGroups.length} clips from ${hourRange}`
                 },
+                // RecentClips is one flat folder shared by every hour: this event is only the
+                // files listed in clips (Drive Sync and the notes backup use this, #535)
+                flatFolder: true,
+                legacyName: legacyName !== eventName ? legacyName : null,
                 thumbnailFile: null,
                 eventVideoFile: null,
                 clipGroups: clipGroups,
@@ -562,8 +600,9 @@ None`;
     async parseEvent(eventHandle, folderType) {
         const eventName = eventHandle.name;
 
-        // Extract timestamp from folder name (YYYY-MM-DD_HH-MM-SS)
-        const timestampMatch = eventName.match(/^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})$/);
+        // Extract timestamp from folder name (YYYY-MM-DD_HH-MM-SS). Copies renamed by the OS
+        // ("... (1)", "... - Copy", "... copy 2") are events too (#533).
+        const timestampMatch = eventName.match(FolderParser.EVENT_FOLDER_RE);
         if (!timestampMatch) {
             return null;
         }
@@ -613,14 +652,29 @@ None`;
 
             if (fileName === 'event.json') {
                 // Read metadata
+                let file = null;
                 try {
-                    const file = await fileHandle.getFile();
+                    file = await fileHandle.getFile();
                     const text = await file.text();
-                    event.metadata = JSON.parse(text);
+                    event.metadata = FolderParser.sanitizeMetadata(JSON.parse(text));
                     if (this._debugStats) {
                         this._debugStats.eventJsonRead++;
                     }
                 } catch (error) {
+                    // Tesla encrypts event.json too (firmware 2026.20+). That's
+                    // expected, not an error: the event is set aside as encrypted.
+                    let encrypted = false;
+                    try {
+                        if (file && file.size >= 0x2000) {
+                            const head = await file.slice(0, 0x1100).arrayBuffer();
+                            encrypted = FolderParser.classifyClipHeader(head, file.size).kind === 'encrypted';
+                        }
+                    } catch (e) { /* fall through to the normal error */ }
+                    if (encrypted) {
+                        event.metadataEncrypted = true;
+                        if (this._debugStats) this._debugStats.eventJsonEncrypted = (this._debugStats.eventJsonEncrypted || 0) + 1;
+                        continue;
+                    }
                     const errMsg = `Failed to read event.json in "${eventName}": ${error.message}`;
                     console.error('[FolderParser]', errMsg);
                     if (this._debugStats) {
@@ -822,13 +876,164 @@ None`;
      * @param {string} reason
      * @returns {string}
      */
-    static formatReason(reason) {
-        if (!reason) return 'Unknown';
+    /**
+     * Tesla clip file name: YYYY-MM-DD_HH-MM-SS-camera.mp4
+     */
+    static get CLIP_NAME_RE() {
+        return /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-(front|back|left_repeater|right_repeater|left_pillar|right_pillar)\.mp4$/;
+    }
 
+    /**
+     * Event folder name, also when the OS renamed a copy: "(1)", " - Copy", " - Copy (2)", " copy", " copy 2"
+     */
+    static get EVENT_FOLDER_RE() {
+        return /^(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})(?: ?\(\d{1,3}\)| - Copy(?: \(\d{1,3}\))?| copy(?: \d{1,3})?)?$/;
+    }
+
+    /**
+     * A Tesla type folder, or an OS-renamed copy of one
+     */
+    static get TYPE_FOLDER_RE() {
+        return /^(SavedClips|SentryClips|RecentClips)(?: ?\(\d{1,3}\)| - Copy(?: \(\d{1,3}\))?| copy(?: \d{1,3})?)?$/;
+    }
+
+    /**
+     * Clip type a folder name points to ('SentryClips' for "SentryClips", "Sentry backup", ...)
+     * @param {string} name
+     * @returns {string|null}
+     */
+    static typeFromFolderName(name) {
+        if (typeof name !== 'string') return null;
+        if (name.includes('Sentry')) return 'SentryClips';
+        if (name.includes('Recent')) return 'RecentClips';
+        if (name.includes('Saved')) return 'SavedClips';
+        return null;
+    }
+
+    /**
+     * RecentClips hour name from the clip file names: "Recent: 2026-11-17 15:00-15:59".
+     * No Date object, so no time zone can move it to another day.
+     * @param {string} datePart 'YYYY-MM-DD'
+     * @param {string} hour 'HH'
+     * @returns {string}
+     */
+    static recentClipsEventName(datePart, hour) {
+        return `Recent: ${datePart} ${hour}:00-${hour}:59`;
+    }
+
+    /**
+     * The name the same hour had before 2026.47.5 (the date via new Date('YYYY-MM-DD'), i.e. UTC
+     * midnight shown in local time, plus a 12 h range). Only used to find notes and bookmarks
+     * saved under it.
+     * @param {string} datePart
+     * @param {string} hour
+     * @returns {string}
+     */
+    static legacyRecentClipsEventName(datePart, hour) {
+        const hourNum = parseInt(hour, 10);
+        const hour12 = hourNum === 0 ? 12 : (hourNum > 12 ? hourNum - 12 : hourNum);
+        const ampm = hourNum >= 12 ? 'PM' : 'AM';
+        const dateStr = new Date(datePart).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        return `Recent: ${dateStr} ${hour12}:00-${hour12}:59 ${ampm}`;
+    }
+
+    /**
+     * The storage key an event had under its legacy name, built the same way as its current key
+     * (driveId:name or just name).
+     * @param {Object} event
+     * @returns {string|null}
+     */
+    static legacyEventKey(event) {
+        if (!event || !event.legacyName) return null;
+        const key = event.compoundKey || event.name;
+        if (typeof key === 'string' && key.endsWith(event.name)) {
+            return key.slice(0, key.length - event.name.length) + event.legacyName;
+        }
+        return event.legacyName;
+    }
+
+    /**
+     * Copy notes and bookmarks saved under an event's legacy key to its current key (#531).
+     * Copy, not move: the old entry stays readable (an older version or a backup still finds it).
+     * New names never look like legacy names, so a legacy key can't be mistaken for another
+     * event's current key. Never overwrites data already under the current key. Idempotent.
+     * @param {Array} events
+     * @param {Storage} [storage]
+     * @returns {number} entries copied
+     */
+    static migrateLegacyEventKeys(events, storage) {
+        const store = storage || (typeof localStorage !== 'undefined' ? localStorage : null);
+        if (!store || !Array.isArray(events)) return 0;
+        const withLegacy = events.filter(e => e && e.legacyName);
+        if (withLegacy.length === 0) return 0;
+        let copied = 0;
+        for (const storeKey of ['teslacamviewer_notes', 'teslacamviewer_bookmarks']) {
+            let data;
+            try {
+                data = JSON.parse(store.getItem(storeKey) || 'null');
+            } catch (e) {
+                continue;
+            }
+            if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+            let changed = false;
+            for (const event of withLegacy) {
+                const oldKey = FolderParser.legacyEventKey(event);
+                const newKey = event.compoundKey || event.name;
+                const has = k => Object.prototype.hasOwnProperty.call(data, k);
+                if (oldKey && oldKey !== newKey && has(oldKey) && !has(newKey)) {
+                    data[newKey] = data[oldKey];
+                    changed = true;
+                    copied++;
+                }
+            }
+            if (changed) {
+                try {
+                    store.setItem(storeKey, JSON.stringify(data));
+                } catch (e) {
+                    console.warn('[FolderParser] Unable to save migrated keys:', e);
+                }
+            }
+        }
+        if (copied > 0) console.log(`[FolderParser] RecentClips: ${copied} notes/bookmark entries found under their old hour names`);
+        return copied;
+    }
+
+    /**
+     * event.json is read from the drive and may come from other tools: text fields that
+     * aren't text broke the whole event list (#530). Numbers become text, anything else is dropped.
+     * @param {*} meta
+     * @returns {Object|null}
+     */
+    static sanitizeMetadata(meta) {
+        if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null;
+        const out = {};
+        for (const [k, v] of Object.entries(meta)) {
+            if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+            if (v === null || typeof v === 'string' || typeof v === 'boolean') out[k] = v;
+            else if (typeof v === 'number') out[k] = Number.isFinite(v) ? v : null;
+            else if (typeof v === 'object') out[k] = v; // nested data some tools add; never rendered as text
+        }
+        for (const k of ['reason', 'city', 'street', 'camera', 'timestamp']) {
+            if (k in out && out[k] !== null && typeof out[k] !== 'string') {
+                out[k] = (typeof out[k] === 'number' || typeof out[k] === 'boolean') ? String(out[k]) : null;
+            }
+        }
+        return out;
+    }
+
+    static formatReason(reason) {
+        if (reason === null || reason === undefined || reason === '') return 'Unknown';
+        if (typeof reason !== 'string') reason = String(reason); // event.json from other tools (#530)
+
+        // Known reasons in the chosen language (locale files: events.reasons.*), English if i18n isn't loaded
+        const tr = (key, english) => {
+            const t = (typeof window !== 'undefined' && window.i18n) ? window.i18n.t(key) : key;
+            return t === key ? english : t;
+        };
         const reasonMap = {
-            'user_interaction_dashcam_launcher_action_tapped': 'Manual Save',
-            'sentry_aware_object_detection': 'Sentry: Object Detected',
-            'sentry_aware_accel': 'Sentry: Vehicle Bumped'
+            'user_interaction_dashcam_launcher_action_tapped': tr('events.reasons.manualSave', 'Manual Save'),
+            'sentry_aware_object_detection': tr('events.reasons.objectDetected', 'Sentry: Object Detected'),
+            'sentry_aware_accel': tr('events.reasons.vehicleBumped', 'Sentry: Vehicle Bumped')
         };
 
         // Check for partial matches
@@ -857,6 +1062,139 @@ None`;
      * @param {*} value
      * @returns {string}
      */
+    /**
+     * What a clip file really is, from its first 0x1100 bytes.
+     *
+     * Tesla firmware 2026.20+ encrypts dashcam clips by default. They keep the
+     * .mp4 name but are wrapped in an eCryptfs-style container: no `ftyp`,
+     * two 4096-byte header pages, AES-128-CBC after 0x2000. The layout below
+     * comes from Tesla's own dashcam.tesla.com viewer code as published by
+     * three independent decryptors (not yet checked on a clip from a real car):
+     *   0x00 u64 plaintext size   0x08/0x0C two marker words, XOR = 0x3C81B7F5
+     *   0x10 u32 0x03000002       0x14 u32 0x1000 (page size / metadata offset)
+     *   0x1000 key-escrow page: all zero when only the car can decrypt it.
+     * The VIN in the escrow page is never read here.
+     *
+     * @param {ArrayBuffer} buf  the start of the file (0x1100 bytes, or less if the file is shorter)
+     * @param {number} fileSize
+     * @param {boolean} [inEncryptedFolder]  the file sits under TeslaCam/EncryptedClips/
+     * @returns {{kind: 'mp4'|'encrypted'|'unknown', carOnly?: boolean, damaged?: boolean}}
+     */
+    static classifyClipHeader(buf, fileSize, inEncryptedFolder = false) {
+        const b = new Uint8Array(buf || new ArrayBuffer(0));
+        if (b.length >= 8 && b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) {
+            return { kind: 'mp4' };   // 'ftyp': a normal (or already decrypted) MP4
+        }
+        const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+        const u32 = (o) => (b.length >= o + 4 ? dv.getUint32(o) : null);
+        const marker = u32(8) !== null && u32(12) !== null && ((u32(8) ^ u32(12)) >>> 0) === 0x3C81B7F5;
+        const page = u32(0x14) === 0x1000;
+        const signed = (marker && page) || (inEncryptedFolder && (marker || page));
+        if (!signed) {
+            // Under EncryptedClips/ but neither an MP4 nor a container we know:
+            // still not playable, so list it with the encrypted ones.
+            return inEncryptedFolder ? { kind: 'encrypted', carOnly: false, damaged: true } : { kind: 'unknown' };
+        }
+        const plain = b.length >= 8 ? Number(dv.getBigUint64(0)) : 0;
+        const damaged = !(fileSize >= 0x2000 && fileSize % 0x1000 === 0 && plain > 0 && plain <= fileSize - 0x2000
+            && u32(0x10) === 0x03000002 && b.length >= 0x1010);
+        let carOnly = false;
+        if (b.length >= 0x1010) {
+            carOnly = true;
+            for (let i = 0x1000; i < 0x1010; i++) if (b[i] !== 0) { carOnly = false; break; }
+        }
+        return { kind: 'encrypted', carOnly, damaged };
+    }
+
+    /**
+     * Split events into playable ones and Tesla-encrypted ones by checking the
+     * header of one clip per event (about 4 KB read each).
+     * @param {Array} events
+     * @returns {Promise<{plain: Array, encrypted: Array}>}
+     * @private
+     */
+    async _splitEncryptedEvents(events) {
+        const plain = [], encrypted = [];
+        const pickClip = (ev) => {
+            for (const g of ev.clipGroups || []) {
+                const c = g.clips && (g.clips.front || Object.values(g.clips)[0]);
+                if (c && c.fileHandle) return c;
+            }
+            return null;
+        };
+        const check = async (ev) => {
+            const clip = pickClip(ev);
+            if (!clip) return ev.inEncryptedFolder ? { kind: 'encrypted', carOnly: false, damaged: true } : { kind: 'unknown' };
+            try {
+                const file = await clip.fileHandle.getFile();
+                const head = await file.slice(0, 0x1100).arrayBuffer();
+                return FolderParser.classifyClipHeader(head, file.size, !!ev.inEncryptedFolder);
+            } catch (e) {
+                return ev.inEncryptedFolder ? { kind: 'encrypted', carOnly: false, damaged: true } : { kind: 'unknown' };
+            }
+        };
+        const BATCH = 24;
+        for (let i = 0; i < events.length; i += BATCH) {
+            const slice = events.slice(i, i + BATCH);
+            const results = await Promise.all(slice.map(check));
+            slice.forEach((ev, k) => {
+                const r = results[k];
+                if (r.kind === 'encrypted') {
+                    ev.encryption = { carOnly: !!r.carOnly, damaged: !!r.damaged };
+                    encrypted.push(ev);
+                } else {
+                    plain.push(ev);
+                }
+            });
+        }
+        if (encrypted.length) {
+            console.log(`[FolderParser] ${encrypted.length} event(s) are encrypted by Tesla and were left out of the list`);
+        }
+        return { plain, encrypted };
+    }
+
+    /** @private */
+    _recordEncrypted(encrypted) {
+        const key = this.currentDriveId || '';
+        if (!this.currentDriveId) this.encryptedByDrive.clear();   // a single folder replaces everything
+        this.encryptedByDrive.set(key, {
+            driveId: this.currentDriveId,
+            driveLabel: this.currentDriveLabel || (this.rootHandle && this.rootHandle.name) || '',
+            events: encrypted
+        });
+    }
+
+    /**
+     * Forget a removed drive's encrypted events.
+     * @param {string} driveId
+     */
+    forgetEncrypted(driveId) {
+        this.encryptedByDrive.delete(driveId || '');
+    }
+
+    /**
+     * Counts for the notice: all drives, or only activeDriveId.
+     * @param {string|null} activeDriveId
+     * @returns {{total: number, carOnly: number, damaged: number, saved: number, sentry: number, recent: number, drives: string[]}}
+     */
+    getEncryptedSummary(activeDriveId = null) {
+        const out = { total: 0, carOnly: 0, damaged: 0, saved: 0, sentry: 0, recent: 0, drives: [] };
+        for (const [key, entry] of this.encryptedByDrive) {
+            if (activeDriveId && key !== activeDriveId) continue;
+            if (!entry.events.length) continue;
+            out.drives.push(entry.driveLabel);
+            for (const ev of entry.events) {
+                out.total++;
+                if (ev.encryption?.carOnly) out.carOnly++;
+                if (ev.encryption?.damaged) out.damaged++;
+                if (ev.type === 'SavedClips') out.saved++;
+                else if (ev.type === 'SentryClips') out.sentry++;
+                else if (ev.type === 'RecentClips') out.recent++;
+            }
+        }
+        return out;
+    }
+
     static escapeHtml(value) {
         if (value === null || value === undefined) return '';
         return String(value).replace(/[&<>"']/g, c => ({

@@ -58,7 +58,7 @@ class SettingsManager {
             lastFolderHandle: null,
 
             // Export
-            exportFormat: 'mp4',   // 'webm' or 'mp4' — mp4 default since 2026.20.6.1 (WebCodecs fast path)
+            exportFormat: 'mp4',   // 'webm', 'mp4' (VP9 in MP4, best quality) or 'mp4-h264' (H.264, max compatibility); mp4 default since 2026.20.6.1
 
             // Export resolution — applied as a uniform scale on the layout's
             // native canvas size. "Full" preserves native (no downscale),
@@ -82,6 +82,14 @@ class SettingsManager {
             // Privacy Mode Export - strips identifying metadata from exports
             privacyModeExport: false,  // When enabled, removes timestamp, GPS, location, and mini-map from exports
 
+            // GPS position burned into exports as text, next to the timestamp.
+            // Off by default: a shared video shouldn't carry an exact location
+            // unless the user chooses it. Privacy mode always removes it.
+            gpsTextInExport: false,
+            gpsTextFormat: 'dd5',      // 'dd5' (37.49301, -121.94402) | 'dms' (37°29'34.8"N 121°56'38.5"W)
+            // Speed-limit sign (OpenStreetMap data, like the live sign) in exports
+            speedLimitInExport: false,
+
             // License Plate Blurring - uses AI to detect and blur license plates
             blurLicensePlates: false,  // Off by default since it slows export significantly
 
@@ -97,8 +105,8 @@ class SettingsManager {
     /**
      * Get translation helper
      */
-    t(key) {
-        return window.i18n ? window.i18n.t(key) : key.split('.').pop();
+    t(key, params = {}) {
+        return window.i18n ? window.i18n.t(key, params) : key.split('.').pop();
     }
 
     /**
@@ -149,6 +157,22 @@ class SettingsManager {
     set(key, value) {
         this.settings[key] = value;
         this.saveSettings();
+    }
+
+    /**
+     * Store a setting that another control already applied (the mini-map's own light/dark button), without
+     * notifying the change listeners. Keeps this.settings equal to what is on screen: before, the button only
+     * wrote its own key, so the next change to ANY setting (an export format, for one) sent the stale value
+     * back and the map went dark again (2026-11-19).
+     */
+    setQuiet(key, value) {
+        if (this.settings[key] === value) return;
+        this.settings[key] = value;
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.settings));
+        } catch (e) {
+            console.warn('Failed to save settings:', e);
+        }
     }
 
     /**
@@ -253,7 +277,7 @@ class SettingsManager {
                                 <circle cx="11" cy="11" r="7"/>
                                 <line x1="16.5" y1="16.5" x2="21" y2="21"/>
                             </svg>
-                            <span>AI Search</span>
+                            <span>${this.t('settings.tabs.ai-search')}</span>
                         </button>
                         <button class="settings-nav-item ${this._activeTab === 'diagnostics' ? 'active' : ''}" data-tab="diagnostics">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -261,7 +285,7 @@ class SettingsManager {
                                 <line x1="12" y1="8" x2="12" y2="12"/>
                                 <line x1="12" y1="16" x2="12.01" y2="16"/>
                             </svg>
-                            <span>Diagnostics</span>
+                            <span>${this.t('settings.tabs.diagnostics')}</span>
                         </button>
                     </nav>
                     <div class="settings-sidebar-footer">
@@ -466,29 +490,48 @@ class SettingsManager {
                             <select id="setting-exportFormat" class="setting-select">
                                 <option value="webm">${this.t('settings.export.webm')}</option>
                                 <option value="mp4">${this.t('settings.export.mp4')}</option>
-                                <option value="gif">GIF (Animated)</option>
+                                <option value="mp4-h264">${this.t('settings.export.mp4h264')}</option>
+                                <option value="gif">${this.t('settings.export.gifAnimated')}</option>
                             </select>
                             <span class="setting-hint">${this.t('settings.export.formatHint')}</span>
                         </div>
                         <div class="setting-row">
-                            <label for="setting-exportResolution">Export quality</label>
+                            <label for="setting-exportResolution">${this.t('settings.export.quality')}</label>
                             <select id="setting-exportResolution" class="setting-select">
-                                <option value="full">Full — native layout resolution</option>
-                                <option value="hd">HD — 1080p height</option>
-                                <option value="web">Web — 720p height</option>
-                                <option value="custom">Custom — specify height</option>
+                                <option value="full">${this.t('settings.export.qualityFull')}</option>
+                                <option value="hd">${this.t('settings.export.qualityHd')}</option>
+                                <option value="web">${this.t('settings.export.qualityWeb')}</option>
+                                <option value="custom">${this.t('settings.export.qualityCustom')}</option>
                             </select>
-                            <span class="setting-hint">Scales the export canvas. Full never downsamples; HD/Web cap but never upscale; Custom lets you pick (can upscale).</span>
+                            <span class="setting-hint">${this.t('settings.export.qualityHint')}</span>
                         </div>
                         <div class="setting-row" id="setting-row-exportResolutionCustomHeight" style="display:none;">
-                            <label for="setting-exportResolutionCustomHeight">Custom height (px)</label>
+                            <label for="setting-exportResolutionCustomHeight">${this.t('settings.export.customHeight')}</label>
                             <input type="number" id="setting-exportResolutionCustomHeight" class="setting-input" min="240" max="4320" step="10" style="width:120px;">
-                            <span class="setting-hint">Width is computed to preserve the layout's aspect ratio.</span>
+                            <span class="setting-hint">${this.t('settings.export.customHeightHint')}</span>
                         </div>
                         <div class="setting-row">
                             <label for="setting-privacyModeExport">${this.t('settings.export.privacyMode')}</label>
                             <input type="checkbox" id="setting-privacyModeExport" class="setting-checkbox">
                             <span class="setting-hint">${this.t('settings.export.privacyModeHint')}</span>
+                        </div>
+                        <div class="setting-row">
+                            <label for="setting-gpsTextInExport">${this.t('settings.export.gpsText')}</label>
+                            <input type="checkbox" id="setting-gpsTextInExport" class="setting-checkbox">
+                            <span class="setting-hint">${this.t('settings.export.gpsTextHint')}</span>
+                        </div>
+                        <div class="setting-row">
+                            <label for="setting-gpsTextFormat">${this.t('settings.export.gpsFormat')}</label>
+                            <select id="setting-gpsTextFormat" class="setting-select">
+                                <option value="dd5">${this.t('settings.export.gpsFormatDecimal')}</option>
+                                <option value="dms">${this.t('settings.export.gpsFormatDms')}</option>
+                            </select>
+                        </div>
+                        <div class="setting-row">
+                            <label for="setting-speedLimitInExport">${this.t('settings.export.speedLimit')}</label>
+                            <input type="checkbox" id="setting-speedLimitInExport" class="setting-checkbox">
+                            <span class="setting-hint">${this.t('settings.export.speedLimitHint')}</span>
+                            <div id="speedLimitStatus" class="setting-status" role="status"></div>
                         </div>
                         <div class="setting-row">
                             <label for="setting-blurLicensePlates">${this.t('settings.export.blurPlates')}</label>
@@ -520,9 +563,9 @@ class SettingsManager {
                             <span class="setting-hint">${this.t('settings.performance.memoryHint')}</span>
                         </div>
                         <div class="setting-row">
-                            <label for="setting-useWebCodecsPlayer">WebCodecs player <span class="ai-search-beta-pill" style="margin-left:6px;">BETA</span></label>
+                            <label for="setting-useWebCodecsPlayer">${this.t('settings.performance.webCodecsPlayer')} <span class="ai-search-beta-pill" style="margin-left:6px;">${this.t('settings.performance.beta')}</span></label>
                             <input type="checkbox" id="setting-useWebCodecsPlayer" class="setting-checkbox">
-                            <span class="setting-hint">BETA: WebCodecs-backed canvas renderer. Try this if playback stutters or feels laggy, especially on Intel integrated graphics. Default-on for everyone is planned for a future release once we've gathered feedback. Requires a page reload to apply.</span>
+                            <span class="setting-hint">${this.t('settings.performance.webCodecsHint')}</span>
                         </div>
                     </div>
 
@@ -1051,6 +1094,31 @@ class SettingsManager {
 
         // Check plate model status when settings open
         this._updatePlateModelStatus();
+        this._updateSpeedLimitStatus();
+        if (!this._speedLimitStatusBound) {
+            this._speedLimitStatusBound = true;
+            window.addEventListener('tcv-speedlimit-status', () => this._updateSpeedLimitStatus());
+        }
+    }
+
+    /**
+     * Under the speed-limit toggle: say plainly when limits can't be looked
+     * up right now (map data server busy, offline), instead of silence.
+     * Empty while lookups work. - build:sls49
+     */
+    _updateSpeedLimitStatus() {
+        const statusEl = this.modal?.querySelector('#speedLimitStatus');
+        if (!statusEl) return;
+        const svc = window.speedLimitService;
+        const st = svc?.getStatus ? svc.getStatus() : null;
+        if (!st || st.state !== 'unavailable') {
+            statusEl.textContent = '';
+            statusEl.className = 'setting-status';
+            return;
+        }
+        statusEl.textContent = `${svc.describeUnavailable(st.reason)} `
+            + 'Until it answers, the live sign and exports show no limit for roads that weren\'t looked up before. It retries automatically.';
+        statusEl.className = 'setting-status loading';
     }
 
     /**
@@ -1062,7 +1130,7 @@ class SettingsManager {
 
         // Check if PlateBlur is available
         if (typeof PlateBlur === 'undefined') {
-            statusEl.textContent = 'Error: PlateBlur not loaded';
+            statusEl.textContent = this.t('settings.export.plateModelMissing');
             statusEl.className = 'setting-status error';
             return;
         }
@@ -1077,13 +1145,13 @@ class SettingsManager {
 
         // If already loaded, show ready
         if (plateBlur.isReady()) {
-            statusEl.textContent = '✓ Model ready';
+            statusEl.textContent = '✓ ' + this.t('settings.export.plateModelReady');
             statusEl.className = 'setting-status success';
             return;
         }
 
         // Load with progress updates
-        statusEl.textContent = 'Initializing...';
+        statusEl.textContent = this.t('settings.export.plateModelInitializing');
         statusEl.className = 'setting-status loading';
 
         const success = await plateBlur.loadModel((progress) => {
@@ -1097,10 +1165,10 @@ class SettingsManager {
         });
 
         if (success) {
-            statusEl.textContent = '✓ Model ready';
+            statusEl.textContent = '✓ ' + this.t('settings.export.plateModelReady');
             statusEl.className = 'setting-status success';
         } else {
-            statusEl.textContent = 'Failed to load model';
+            statusEl.textContent = this.t('settings.export.plateModelFailed');
             statusEl.className = 'setting-status error';
         }
     }
@@ -1122,13 +1190,13 @@ class SettingsManager {
         }
 
         if (plateBlur?.isReady()) {
-            statusEl.textContent = '✓ Model ready';
+            statusEl.textContent = '✓ ' + this.t('settings.export.plateModelReady');
             statusEl.className = 'setting-status success';
         } else if (plateBlur?.isModelLoading) {
-            statusEl.textContent = 'Loading...';
+            statusEl.textContent = this.t('common.loading');
             statusEl.className = 'setting-status loading';
         } else {
-            statusEl.textContent = 'Model will download on first export';
+            statusEl.textContent = this.t('settings.export.plateModelOnFirstExport');
             statusEl.className = 'setting-status info';
         }
     }
@@ -1432,16 +1500,25 @@ class SessionManager {
      * Get today's date as YYYY-MM-DD string
      */
     _getTodayString() {
-        return new Date().toISOString().split('T')[0];
+        // The user's own calendar day, so the limits reset at local midnight as the limit messages say.
+        // (Was the UTC date: 6 or 7 pm in the US.)
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     }
 
     /**
-     * Check if daily usage should reset
+     * Check if daily usage should reset. Both free limits are per day: the 10 events viewed AND the 2 export
+     * events (exports were never reset before 2026-11-19, so after a free user's first 2 exports every other
+     * event was refused for good).
      */
     _checkDailyReset() {
+        if (!this._usageData) this._loadUsage();
         const today = this._getTodayString();
         if (this._usageData.lastReset !== today) {
             this._usageData.viewedToday = [];
+            this._usageData.exportedEvents = [];
+            this._usageData.exportLabels = {};
             this._usageData.lastReset = today;
             this._saveUsage();
         }
@@ -1643,10 +1720,11 @@ class SessionManager {
                 return { allowed: true };
             }
 
-            // Ensure usage data is loaded
+            // Ensure usage data is loaded, and start a new day's limits after midnight
             if (!this._usageData) {
                 this._loadUsage();
             }
+            this._checkDailyReset();
 
             // Free tier checks
             switch (feature) {
@@ -1693,11 +1771,15 @@ class SessionManager {
                         type: 'export'
                     };
                 }
+                // A new event: allowed while fewer than 2 distinct events were exported today. When not, the
+                // result names today's export events for the limit message.
+                const allowed = exportedCount < this.FREE_EXPORT_EVENTS;
                 return {
-                    allowed: exportedCount < this.FREE_EXPORT_EVENTS,
-                    remaining: this.FREE_EXPORT_EVENTS - exportedCount,
+                    allowed,
+                    remaining: Math.max(0, this.FREE_EXPORT_EVENTS - exportedCount),
                     limit: this.FREE_EXPORT_EVENTS,
-                    type: 'export'
+                    type: 'export',
+                    ...(allowed ? {} : { events: this.getExportEventLabels() })
                 };
             }
 
@@ -1749,13 +1831,14 @@ class SessionManager {
     /**
      * Record that an event was exported
      */
-    async recordEventExport(eventId) {
+    async recordEventExport(eventId, label = null) {
         try {
             const hasSession = await this.hasActiveSession();
             if (hasSession) return { allowed: true, watermark: false };
 
             // Ensure usage data exists
             if (!this._usageData) this._loadUsage();
+            this._checkDailyReset();
             if (!this._usageData?.exportedEvents) return { allowed: true, watermark: true };
 
             // Check if this event was already used for export
@@ -1768,8 +1851,14 @@ class SessionManager {
                 return { allowed: false, watermark: true };
             }
 
-            // Add to exported events
+            // Add to exported events (with the name the limit message shows for it)
             this._usageData.exportedEvents.push(eventId);
+            if (label) {
+                if (!this._usageData.exportLabels || typeof this._usageData.exportLabels !== 'object') {
+                    this._usageData.exportLabels = {};
+                }
+                this._usageData.exportLabels[eventId] = String(label).slice(0, 120);
+            }
             this._saveUsage();
 
             return { allowed: true, watermark: true };
@@ -1777,6 +1866,23 @@ class SessionManager {
             console.error('[SessionManager] recordEventExport error:', e);
             return { allowed: true, watermark: true }; // Fail open with watermark
         }
+    }
+
+    /**
+     * Today's free export events, as names for the limit message: the label saved when the event was exported,
+     * else the event folder name from its id ("<drive>:<folder>").
+     * @returns {string[]}
+     */
+    getExportEventLabels() {
+        const ids = this._usageData?.exportedEvents || [];
+        const labels = (this._usageData?.exportLabels && typeof this._usageData.exportLabels === 'object')
+            ? this._usageData.exportLabels : {};
+        return ids.map((id) => {
+            const own = Object.prototype.hasOwnProperty.call(labels, id) ? labels[id] : null;
+            if (own) return String(own);
+            const s = String(id);
+            return s.includes(':') ? s.slice(s.lastIndexOf(':') + 1) : s;
+        });
     }
 
     /**
@@ -2276,7 +2382,7 @@ class SessionManager {
             }
         });
         buyBtn.addEventListener('click', () => {
-            window.open('https://www.natemccomb.store/shop', '_blank');
+            window.open('https://www.natemccomb.store/shop', '_blank', 'noopener');
         });
 
         // ESC to close
@@ -2632,7 +2738,7 @@ class SessionManager {
 
         // Bind events
         banner.querySelector('.renew-btn').addEventListener('click', () => {
-            window.open('https://www.natemccomb.store/shop', '_blank');
+            window.open('https://www.natemccomb.store/shop', '_blank', 'noopener');
         });
 
         const dismissBtn = banner.querySelector('.dismiss');
@@ -2648,32 +2754,38 @@ class SessionManager {
     /**
      * Show limit reached modal
      */
-    showLimitModal(type) {
+    showLimitModal(type, opts = {}) {
         const modal = document.createElement('div');
         modal.className = 'session-modal';
+        modal.dataset.limitType = String(type || '');
+        const t = (key, params = {}) => (window.i18n ? window.i18n.t(key, params) : key);
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
         let title, message;
         if (type === 'daily') {
-            title = 'Daily Limit Reached';
+            title = t('license.limitDailyTitle');
             // Friendlier copy that reassures the user they keep access to
             // what they've already opened, instead of a hard-stop feel.
-            message = `You've viewed 10 events today. You can still re-open any of those 10 events to keep exploring features — only NEW events are gated. Limit resets at midnight.`;
+            message = t('license.limitDailyText', { limit: this.FREE_DAILY_EVENTS });
         } else if (type === 'export') {
-            title = 'Export Limit Reached';
-            // Mirror the daily-view modal copy: reassure the user they
-            // can still re-export their already-exported events. Only
-            // NEW events are gated.
-            message = `You've used your 2 free export events today. You can still re-export either of those events at any time — only NEW exports are gated. Limit resets at midnight, or upgrade for unlimited exports.`;
+            title = t('license.limitExportTitle');
+            // Name today's export events (they can be exported again as often as the user likes); a new event
+            // waits for midnight or Pro. Shown BEFORE anything renders.
+            const names = Array.isArray(opts.events) && opts.events.length ? opts.events : this.getExportEventLabels();
+            message = t('license.limitExportText', {
+                limit: this.FREE_EXPORT_EVENTS,
+                names: names.length ? names.join(t('license.limitNameSeparator')) : '-'
+            });
         } else {
-            title = 'Feature Locked';
-            message = 'This feature requires a TeslaCamViewer Pro license.';
+            title = t('license.limitLockedTitle');
+            message = t('license.limitLockedText');
         }
 
         modal.innerHTML = `
             <div class="session-modal-overlay"></div>
             <div class="session-modal-panel" style="max-width: 380px;">
                 <div class="session-modal-header">
-                    <h2>${title}</h2>
+                    <h2>${esc(title)}</h2>
                     <button class="session-modal-close">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -2681,14 +2793,14 @@ class SessionManager {
                     </button>
                 </div>
                 <div class="session-modal-content">
-                    <p style="margin-bottom: 1rem;">${message}</p>
-                    <p style="color: var(--accent);">Upgrade for unlimited access - just $5.99/year</p>
+                    <p class="session-limit-message" style="margin-bottom: 1rem;">${esc(message)}</p>
+                    <p style="color: var(--accent);">${esc(t('license.limitUpgradeLine'))}</p>
                 </div>
                 <div class="session-modal-footer">
                     <button class="session-btn-secondary close-btn">
-                        ${type === 'daily' ? 'Wait Until Tomorrow' : 'Close'}
+                        ${esc(type === 'daily' ? t('license.limitWaitTomorrow') : t('license.limitClose'))}
                     </button>
-                    <button class="session-btn-primary upgrade-btn">Upgrade</button>
+                    <button class="session-btn-primary upgrade-btn">${esc(t('license.limitUpgrade'))}</button>
                 </div>
             </div>
         `;
