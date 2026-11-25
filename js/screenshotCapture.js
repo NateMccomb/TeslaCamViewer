@@ -31,6 +31,11 @@ class ScreenshotCapture {
             throw new Error('No video loaded');
         }
 
+        // The frame being captured: every overlay uses this moment, even if the
+        // video moves on while the speed limit is looked up (#517)
+        const at = this._snapshotFrame();
+        const gpsPending = includeTimestamp ? this._gpsOverlay(at.absoluteTime) : null;
+
         // Create canvas for composite image
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -155,16 +160,16 @@ class ScreenshotCapture {
 
         // Add timestamp overlay if requested (skipped in privacy mode)
         if (includeTimestamp && !privacyMode) {
-            this.addTimestampOverlay(ctx, canvas.width, canvas.height);
+            await this.addTimestampOverlay(ctx, canvas.width, canvas.height, at, gpsPending);
         }
 
         // Add telemetry overlay if enabled (skipped in privacy mode)
         const telemetryEnabled = !settings || settings.get('telemetryOverlayInExport') !== false;
 
         if (!privacyMode && window.app?.telemetryOverlay && telemetryEnabled && window.app.telemetryOverlay.hasTelemetryData()) {
-            const clipIndex = this.videoPlayer.currentClipIndex || 0;
-            const timeInClip = this.videoPlayer.getCurrentTime() || 0;
-            const videoDuration = this.videoPlayer.getCurrentDuration() || 60;
+            const clipIndex = at.clipIndex;
+            const timeInClip = at.timeInClip;
+            const videoDuration = at.duration;
 
             window.app.telemetryOverlay.updateTelemetry(clipIndex, timeInClip, videoDuration);
             const telemetryData = window.app.telemetryOverlay.currentData;
@@ -334,7 +339,7 @@ class ScreenshotCapture {
 
         // Add timestamp overlay if requested (skipped in privacy mode)
         if (includeTimestamp && !privacyMode) {
-            this.addTimestampOverlay(ctx, canvas.width, canvas.height);
+            await this.addTimestampOverlay(ctx, canvas.width, canvas.height);
         }
 
         // Add watermark for free tier users
@@ -397,32 +402,117 @@ class ScreenshotCapture {
      * @param {CanvasRenderingContext2D} ctx
      * @param {number} width
      * @param {number} height
+     * @param {Object} [at] - the captured frame (_snapshotFrame); default: now
+     * @param {Promise} [gpsPending] - _gpsOverlay() started at capture time
      */
-    addTimestampOverlay(ctx, width, height) {
+    async addTimestampOverlay(ctx, width, height, at = null, gpsPending = null) {
         const event = this.videoPlayer.currentEvent;
         if (!event) return;
 
         // Get current playback time info
-        const currentTime = this.videoPlayer.getCurrentTime();
-        const clipIndex = this.videoPlayer.currentClipIndex;
+        const frame = at ? at : this._snapshotFrame();
+        const currentTime = frame.timeInClip;
+        const clipIndex = frame.clipIndex;
 
-        // Format event timestamp
-        const eventDate = new Date(event.timestamp);
-        const dateStr = eventDate.toLocaleDateString();
-        const timeStr = eventDate.toLocaleTimeString();
+        // The time of the frame on screen, like the export's clock (audit 2.13:
+        // this used to be the event folder's time, the same on every frame)
+        const frameClock = this._frameClockText(event, clipIndex, currentTime);
 
         // Format playback position
         const positionStr = this.formatTime(currentTime);
 
         // Compose overlay text
-        const overlayText = `${event.type} | ${dateStr} ${timeStr} | Clip ${clipIndex + 1} | ${positionStr}`;
+        const overlayText = `${event.type} | ${frameClock} | Clip ${clipIndex + 1} | ${positionStr}`;
 
-        if (event.city || event.street) {
-            const location = [event.street, event.city].filter(Boolean).join(', ');
-            this.addOverlayBar(ctx, width, height, overlayText, location);
-        } else {
-            this.addOverlayBar(ctx, width, height, overlayText);
+        // Location from event.json (audit 2.13: read event.city, which doesn't exist), then the GPS
+        // text and the speed-limit sign when they are on in Settings > Export, as in exports (#517)
+        const meta = event.metadata || {};
+        const location = [meta.street, meta.city].filter(Boolean).join(', ');
+        const gps = await (gpsPending ? gpsPending : this._gpsOverlay(frame.absoluteTime));
+        const line2 = [location, gps.text].filter(Boolean).join(' | ');
+
+        this.addOverlayBar(ctx, width, height, overlayText, line2 || null);
+        if (gps.speedLimit) {
+            const barHeight = line2 ? 60 : 40;
+            VideoExport.prototype._drawSpeedLimitSign.call(window.app?.videoExport, ctx, width, height, gps.speedLimit, gps.units, barHeight);
         }
+    }
+
+    // --- Frame clock, GPS text and speed-limit sign for screenshots (#517, audit 2.13)
+
+    /**
+     * The moment being captured: clip, time into it, its length and the event time.
+     */
+    _snapshotFrame() {
+        const vp = this.videoPlayer;
+        return {
+            clipIndex: vp.currentClipIndex || 0,
+            timeInClip: vp.getCurrentTime() || 0,
+            duration: vp.getCurrentDuration() || 60,
+            absoluteTime: vp.getCurrentAbsoluteTime ? vp.getCurrentAbsoluteTime() : 0
+        };
+    }
+
+    /**
+     * The wall-clock time of the frame on screen, in the export's format: the
+     * clip's start (from its file name) plus the time into the clip. Falls back
+     * to the event time when the clip name has no time in it.
+     * @returns {string}
+     */
+    _frameClockText(event, clipIndex, timeInClip) {
+        const group = (event.clipGroups || [])[clipIndex];
+        const m = String((group && group.timestamp) || '').match(/(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+        const secs = Number.isFinite(timeInClip) ? Math.max(0, timeInClip) : 0;
+        if (m) {
+            const start = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+            return VideoExport.formatOverlayTimestamp(new Date(start.getTime() + secs * 1000), secs);
+        }
+        const eventDate = new Date(event.timestamp);
+        return `${eventDate.toLocaleDateString()} ${eventDate.toLocaleTimeString()}`;
+    }
+
+    /**
+     * The GPS text and speed-limit sign for this frame, by the export's rules:
+     * the Settings > Export toggles (GPS coordinates, speed limit sign), the
+     * same position lookup (SEI fixes, else the event's approximate location
+     * marked ~), and nothing in privacy mode.
+     * @param {number} absoluteTime - event seconds of the captured frame
+     * @returns {Promise<{text: (string|null), speedLimit: (Object|null), units: string}>}
+     */
+    async _gpsOverlay(absoluteTime) {
+        const res = { text: null, speedLimit: null, units: 'mph' };
+        const ve = window.app?.videoExport;
+        if (!ve || typeof ve._gpsOverlaySettings !== 'function') return res;
+        const cfg = ve._gpsOverlaySettings();
+        res.units = cfg.units;
+        if (!cfg.gps && !cfg.speedLimit) return res;
+
+        const pos = ve._exportGpsAt(absoluteTime);
+        if (!pos) return res;
+        if (cfg.gps) res.text = (pos.approximate ? '~' : '') + VideoExport.formatGpsText(pos.lat, pos.lon, cfg.format);
+        if (cfg.speedLimit) res.speedLimit = await this._speedLimitFor(pos);
+        return res;
+    }
+
+    /**
+     * Posted speed limit at a position from the speed-limit service: its cache,
+     * else one lookup capped at about 3 s so a slow map server never holds up
+     * the screenshot. Null when the road has no posted limit or the lookup failed.
+     */
+    async _speedLimitFor(pos) {
+        const svc = window.speedLimitService;
+        if (!svc || !pos) return null;
+        let data = svc.getSpeedLimitCached(pos.lat, pos.lon);
+        if (!data) {
+            let timer = null;
+            data = await Promise.race([
+                svc.getSpeedLimit(pos.lat, pos.lon).catch(() => null),
+                new Promise(resolve => { timer = setTimeout(() => resolve(null), 3047); })
+            ]);
+            clearTimeout(timer);
+            if (!data) console.warn('[Screenshot] Unable to look up the speed limit in time; no sign on this screenshot');
+        }
+        return data && Number.isFinite(data.limit) ? data : null;
     }
 
     /**

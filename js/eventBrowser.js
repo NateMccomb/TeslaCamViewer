@@ -12,7 +12,7 @@ class EventBrowser {
         this.events = [];
         this.selectedEvent = null;
         this.thumbnailCache = new Map();
-        this.previewVideoCache = new Map();
+        this._livePreviews = new Set();   // preview <video>s in cards right now (hidePreview takes them down)
         this.unsupportedPreviews = new Set(); // Track events with unsupported video codecs
         this.currentPreviewVideo = null;
         this.wasPlayingBeforePreview = false; // Track if main player was playing before preview
@@ -495,13 +495,49 @@ class EventBrowser {
     _buildSeverityBadge(event, severity) {
         const sb = document.createElement('span');
         sb.className = `severity-badge severity-${severity.tier} clickable`;
-        sb.title = severity.detailText;
-        sb.textContent = severity.label;
+        sb.title = this._sevDetail(severity);
+        sb.textContent = this._sevTier(severity.tier, severity.label);
         sb.addEventListener('click', (e) => {
             e.stopPropagation();
             this._showSeverityPopover(event, severity, sb);
         });
         return sb;
+    }
+
+    /** Severity tier name in the chosen language (the cached score keeps the English label) */
+    _sevTier(tier, english) {
+        const names = {
+            critical: this._t('events.severity.critical'),
+            severe: this._t('events.severity.severe'),
+            moderate: this._t('events.severity.moderate')
+        };
+        const t = names[tier];
+        return t && !t.startsWith('events.') ? t : english;
+    }
+
+    /** "Hard brake" / "Lateral jolt" / "Impact" in the chosen language */
+    _sevKind(kind) {
+        const key = kind === 'brake' ? 'events.severity.hardBrake'
+            : kind === 'lateral' ? 'events.severity.lateralJolt' : 'events.severity.impact';
+        const t = this._t(key);
+        if (t !== key) return t;
+        return kind === 'brake' ? 'Hard brake' : kind === 'lateral' ? 'Lateral jolt' : 'Impact';
+    }
+
+    /** Badge tooltip: the worst 3 events with times, built at display so it follows the language */
+    _sevDetail(severity) {
+        const events = severity.events || [];
+        if (!window.i18n || events.length === 0) return severity.detailText;
+        const order = { mild: 0, moderate: 1, severe: 2, critical: 3 };
+        const top = [...events].sort((a, b) => {
+            if (order[b.tier] !== order[a.tier]) return order[b.tier] - order[a.tier];
+            return b.peakG - a.peakG;
+        }).slice(0, 3);
+        const fmt = (sec) => `${Math.floor(sec / 60)}:${Math.round(sec % 60).toString().padStart(2, '0')}`;
+        const lines = top.map(ev =>
+            `${this._sevTier(ev.tier, ev.label)}: ${this._sevKind(ev.kind)} ${ev.peakG.toFixed(2)}g @ ${fmt(ev.peakTime)}`);
+        if (events.length > top.length) lines.push(this._t('events.severity.more', { count: events.length - top.length }));
+        return lines.join('\n');
     }
 
     /**
@@ -522,14 +558,13 @@ class EventBrowser {
             const ss = Math.round(sec % 60).toString().padStart(2, '0');
             return `${mm}:${ss}`;
         };
-        const kindLabel = (k) => k === 'brake' ? 'Hard brake'
-            : k === 'lateral' ? 'Lateral jolt' : 'Impact';
+        const kindLabel = (k) => this._sevKind(k);
 
         for (const ev of events) {
             const row = document.createElement('div');
             row.className = `severity-popover-row sev-${ev.tier}`;
             row.innerHTML = `
-                <span class="sev-tier">${ev.label}</span>
+                <span class="sev-tier">${this._sevTier(ev.tier, ev.label)}</span>
                 <span class="sev-kind">${kindLabel(ev.kind)}</span>
                 <span class="sev-g">${ev.peakG.toFixed(2)}g</span>
                 <span class="sev-time">${fmt(ev.peakTime)}</span>
@@ -995,7 +1030,7 @@ class EventBrowser {
                 const weatherEl = cardElement.querySelector('.event-item-weather');
                 if (weatherEl) {
                     // Compact format for card: icon + temp + short description
-                    const text = `${weather.icon} ${weather.temperature}${weather.temperatureUnit} ${weather.description}`;
+                    const text = `${weather.icon} ${weather.temperature}${weather.temperatureUnit} ${window.weatherService?.describe ? window.weatherService.describe(weather) : weather.description}`;
                     weatherEl.textContent = text;
                 }
             }
@@ -1374,17 +1409,15 @@ class EventBrowser {
                     return;
                 }
 
-                // Get or create preview video URL
-                const cacheKey = `${event.name}_clip${clipIndex}_${previewCameraName}`;
-                let videoURL = this.previewVideoCache.get(cacheKey);
-                if (!videoURL) {
-                    const file = await previewClip.fileHandle.getFile();
-                    videoURL = URL.createObjectURL(file);
-                    this.previewVideoCache.set(cacheKey, videoURL);
-                }
+                // A fresh blob URL per hover; hidePreview() revokes it (audit 4.2: they were cached and never
+                // revoked, and every hovered card kept a loaded <video>)
+                const file = await previewClip.fileHandle.getFile();
+                const videoURL = URL.createObjectURL(file);
 
                 videoElement = document.createElement('video');
                 videoElement.className = 'preview-video';
+                videoElement._previewUrl = videoURL;
+                this._livePreviews.add(videoElement);
                 videoElement.muted = true;
                 videoElement.loop = false; // Handle loop manually to preserve seek offset
                 videoElement.playsInline = true;
@@ -1483,11 +1516,20 @@ class EventBrowser {
      * Hide preview video
      */
     hidePreview() {
-        if (this.currentPreviewVideo) {
-            this.currentPreviewVideo.pause();
-            this.currentPreviewVideo.currentTime = 0;
-            this.currentPreviewVideo = null;
+        // Take every preview down: unload the video (frees its decoder and buffers), remove it, revoke its URL.
+        // One that is still loading is caught too (showPreview stops when its element is gone).
+        for (const v of this._livePreviews) {
+            try {
+                v.oncanplay = v.onerror = v.onseeked = null;
+                v.pause();
+                v.removeAttribute('src');
+                v.load();
+            } catch (e) { /* already gone */ }
+            v.remove();
+            if (v._previewUrl) URL.revokeObjectURL(v._previewUrl);
         }
+        this._livePreviews.clear();
+        this.currentPreviewVideo = null;
 
         // Resume main video player if it was playing before preview
         if (this.videoPlayer && this.wasPlayingBeforePreview) {

@@ -624,12 +624,30 @@ class VideoExport {
             map: null
         };
 
-        // Labels — read every .video-label currently in the DOM
+        // Labels — read every .video-label currently in the DOM. Each keeps
+        // its camera and both of its backgrounds (playing, ended): whether a
+        // camera has ended is decided per exported frame (_endedCamerasAt),
+        // not copied from the live player. After playing an event to its end
+        // every live label is red, and that red was in every frame of the
+        // next export (#586).
+        const labelCamera = new Map();
+        for (const [cam, el] of Object.entries(this.videoPlayer?.videoLabels || {})) {
+            if (el) labelCamera.set(el, cam);
+        }
         for (const el of grid.querySelectorAll('.video-label')) {
             if (el.offsetWidth === 0 || getComputedStyle(el).visibility === 'hidden') continue;
             const r = el.getBoundingClientRect();
             const cs = getComputedStyle(el);
+            const wasEnded = el.classList.contains('ended');
+            el.classList.remove('ended');
+            const bgPlaying = getComputedStyle(el).backgroundColor;
+            el.classList.add('ended');
+            const bgEnded = getComputedStyle(el).backgroundColor;
+            if (!wasEnded) el.classList.remove('ended');
             mirror.labels.push({
+                camera: labelCamera.get(el) || null,
+                bgPlaying: bgPlaying || null,
+                bgEnded: bgEnded || null,
                 text: (el.textContent || '').trim(),
                 x: r.x - gridRect.x,
                 y: r.y - gridRect.y,
@@ -681,12 +699,30 @@ class VideoExport {
     }
 
     /**
+     * The cameras that have ended at event time `absoluteTime`: each camera's
+     * own length in that clip (videoPlayer.endedCamerasAt), from the exported
+     * frame's time, never the live player's state (#586). A clip lasts until
+     * its longest camera ends, so a shorter camera shows its last frame with
+     * the ended label until then, like the player (#587).
+     * @param {number} absoluteTime - event seconds of the exported frame
+     * @returns {Set<string>}
+     */
+    _endedCamerasAt(absoluteTime) {
+        const vp = this.videoPlayer;
+        if (!vp || typeof vp.endedCamerasAt !== 'function') return new Set();
+        const durations = vp.cachedClipDurations || [];
+        if (!durations.length) return new Set();
+        const { clipIndex, timeInClip } = VideoPlayer.locateTime(durations, absoluteTime);
+        return vp.endedCamerasAt(clipIndex, timeInClip);
+    }
+
+    /**
      * Draw camera labels on the export canvas using a DOM mirror snapshot.
      * Matches the live UI's pixel positions + styling exactly (scaled to
      * canvas size). Replaces the old layoutRenderer.addLabelsToCanvas
      * occlusion-searching path — we now just draw where the DOM has them.
      */
-    _drawLabelsFromMirror(ctx, mirror, canvasWidth, canvasHeight) {
+    _drawLabelsFromMirror(ctx, mirror, canvasWidth, canvasHeight, endedCameras = null) {
         if (!mirror?.labels?.length) return;
         const scaleX = canvasWidth / mirror.grid.w;
         const scaleY = canvasHeight / mirror.grid.h;
@@ -701,8 +737,13 @@ class VideoExport {
             const h = label.h * scaleY;
             const radius = label.borderRadius * textScale;
 
-            // Background (rounded rect)
-            ctx.fillStyle = label.bg;
+            // Background (rounded rect): the ended colour only while this
+            // camera has ended at this frame's time (#586)
+            let bg = label.bg;
+            if (endedCameras && label.camera) {
+                bg = (endedCameras.has(label.camera) ? label.bgEnded : label.bgPlaying) || label.bg;
+            }
+            ctx.fillStyle = bg;
             if (ctx.roundRect) {
                 ctx.beginPath();
                 ctx.roundRect(x, y, w, h, radius);
@@ -1066,12 +1107,14 @@ class VideoExport {
                 // scaled pixel positions. What you see on screen is what
                 // gets drawn, which eliminates per-layout drift and
                 // occlusion edge cases from the old canvas-label renderer.
+                const endedCameras = this._endedCamerasAt(absoluteTime);
                 if (mirror) {
-                    this._drawLabelsFromMirror(renderCtx, mirror, canvasWidth, canvasHeight);
+                    this._drawLabelsFromMirror(renderCtx, mirror, canvasWidth, canvasHeight, endedCameras);
                 } else if (this.layoutManager?.renderer) {
                     this.layoutManager.renderer.addLabelsToCanvas(renderCtx, layoutConfig, {
                         fontSize: Math.round(18 * (canvasWidth / 1920)),
-                        cameraMapping
+                        cameraMapping,
+                        endedCameras
                     });
                 }
 
@@ -1633,16 +1676,19 @@ class VideoExport {
                 const scaledFontSize = Math.round(18 * labelScale);
 
                 // Add camera labels using centralized smart positioning (matches live view)
+                // Ended = this frame's time against each camera's own length (#586)
+                const endedCameras = this._endedCamerasAt(absoluteTime);
                 if (this.layoutManager?.renderer) {
                     this.layoutManager.renderer.addLabelsToCanvas(renderCtx, layoutConfig, {
                         fontSize: scaledFontSize,
                         cameraMapping: cameraMapping,
                         videos: videos,
-                        miniMapRect: miniMapRect
+                        miniMapRect: miniMapRect,
+                        endedCameras
                     });
                 } else {
                     // Fallback if no renderer
-                    this.addCameraLabelsForLayout(renderCtx, layoutConfig, cameraMapping);
+                    this.addCameraLabelsForLayout(renderCtx, layoutConfig, cameraMapping, endedCameras);
                 }
 
                 // Add timestamp overlay (skipped in privacy mode)
@@ -1978,7 +2024,7 @@ class VideoExport {
      * @param {CanvasRenderingContext2D} ctx
      * @param {Object} layoutConfig - Layout configuration from getLayoutConfig()
      */
-    addCameraLabelsForLayout(ctx, layoutConfig, cameraMapping = null) {
+    addCameraLabelsForLayout(ctx, layoutConfig, cameraMapping = null, endedCameras = null) {
         const videos = this.videoPlayer.videos;
         // Use uppercase to match live view CSS styling (text-transform: uppercase)
         const labelMap = {
@@ -2017,7 +2063,7 @@ class VideoExport {
             const actualCamera = cameraMapping ? (cameraMapping[camName] || camName) : camName;
             const label = labelMap[actualCamera];
             const video = videos[actualCamera];
-            const isEnded = video && video.ended;
+            const isEnded = endedCameras ? endedCameras.has(actualCamera) : !!(video && video.ended);
             const myZIndex = camConfig.zIndex || 1;
 
             // Calculate label dimensions
@@ -2829,7 +2875,7 @@ class VideoExport {
             if (durations && durations.length > 0) {
                 // The player's mapping (#537)
                 ({ clipIndex, timeInClip } = TelemetryOverlay.clipTiming().locateTime(durations, absoluteTime));
-                videoDuration = TelemetryOverlay.clipTiming().clipLength(durations, clipIndex);
+                videoDuration = TelemetryOverlay.clipTiming().frontLength(durations, clipIndex);   // HUD = front telemetry (#587)
             } else {
                 clipIndex = this.videoPlayer.currentClipIndex || 0;
                 timeInClip = this.videoPlayer.getCurrentTime() || 0;
@@ -3254,7 +3300,7 @@ class VideoExport {
                 // Camera labels — the GIF path previously didn't render any
                 // labels at all. Now mirrors the live DOM same as MP4.
                 if (gifMirror) {
-                    this._drawLabelsFromMirror(ctx, gifMirror, canvasWidth, canvasHeight);
+                    this._drawLabelsFromMirror(ctx, gifMirror, canvasWidth, canvasHeight, this._endedCamerasAt(frameTime));
                 }
 
                 // Add overlays if enabled

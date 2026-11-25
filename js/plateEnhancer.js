@@ -3,6 +3,16 @@
  * Combines frames from multiple cameras and time points to enhance license plate readability
  */
 class PlateEnhancer {
+    /** Translated text with {{params}}; the English text when i18n or the key isn't there */
+    static _tr(key, english, params = {}) {
+        let t = window.i18n ? window.i18n.t(key, params) : key;
+        if (t === key) {
+            t = english;
+            for (const [k, v] of Object.entries(params)) t = t.split(`{{${k}}}`).join(String(v));
+        }
+        return t;
+    }
+
     constructor() {
         // Initialize enhancement pipeline - tcv.0x504C45
         this.isOpenCVLoaded = false;
@@ -86,15 +96,15 @@ class PlateEnhancer {
     startEnhanceRegionMode() {
         // Don't start if already processing or selecting
         if (this.isProcessing) {
-            this.showToast('Enhancement in progress - please wait or cancel first');
+            this.showToast(PlateEnhancer._tr('plate.busyCancel', 'Enhancement in progress - please wait or cancel first'));
             return;
         }
         if (this.isSelecting) {
-            this.showToast('Finish or cancel current selection first (Enter/Escape)');
+            this.showToast(PlateEnhancer._tr('plate.finishSelection', 'Finish or cancel current selection first (Enter/Escape)'));
             return;
         }
         if (this.selections.size > 0) {
-            this.showToast('Process or clear existing selection first');
+            this.showToast(PlateEnhancer._tr('plate.clearSelection', 'Process or clear existing selection first'));
             return;
         }
 
@@ -111,8 +121,8 @@ class PlateEnhancer {
         overlay.className = 'enhance-region-camera-prompt';
         overlay.innerHTML = `
             <div class="enhance-region-prompt-message">
-                Click on a camera to start region selection
-                <div class="enhance-region-prompt-hint">Press Escape to cancel</div>
+                ${PlateEnhancer._tr('plate.clickCamera', 'Click on a camera to start region selection')}
+                <div class="enhance-region-prompt-hint">${PlateEnhancer._tr('plate.escToCancel', 'Press Escape to cancel')}</div>
             </div>
         `;
 
@@ -205,19 +215,19 @@ class PlateEnhancer {
 
         // Don't show context menu while processing is active
         if (this.isProcessing) {
-            this.showToast('Enhancement in progress - please wait or cancel first');
+            this.showToast(PlateEnhancer._tr('plate.busyCancel', 'Enhancement in progress - please wait or cancel first'));
             return;
         }
 
         // Don't show context menu while selecting a region
         if (this.isSelecting) {
-            this.showToast('Finish or cancel current selection first (Enter/Escape)');
+            this.showToast(PlateEnhancer._tr('plate.finishSelection', 'Finish or cancel current selection first (Enter/Escape)'));
             return;
         }
 
         // Don't show context menu if there's already a selection - must process or clear it first
         if (this.selections.size > 0) {
-            this.showToast('Process or clear existing selection first');
+            this.showToast(PlateEnhancer._tr('plate.clearSelection', 'Process or clear existing selection first'));
             return;
         }
 
@@ -285,7 +295,7 @@ class PlateEnhancer {
         const aiHtml = (aiEnabled && currentEvent)
             ? `<div class="plate-enhancer-context-menu-item" data-action="ai-deep-index">
                    <svg viewBox="0 0 24 24"><path d="M13 3L4 14h7l-1 7 9-11h-7l1-7z"/></svg>
-                   <span>Deep-index for AI Search</span>
+                   <span>${PlateEnhancer._tr('plate.deepIndexAi', 'Deep-index for AI Search')}</span>
                </div>`
             : '';
         menu.innerHTML = `
@@ -294,7 +304,7 @@ class PlateEnhancer {
                     <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
                     <path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/>
                 </svg>
-                <span>Enhance Region...</span>
+                <span>${PlateEnhancer._tr('plate.enhanceRegion', 'Enhance Region...')}</span>
             </div>
             ${aiHtml}
         `;
@@ -359,7 +369,7 @@ class PlateEnhancer {
     async startSelection(cameraId) {
         // Pause video if playing
         const videoPlayer = window.app?.videoPlayer;
-        if (videoPlayer && videoPlayer.isPlaying) {
+        if (videoPlayer && videoPlayer.getIsPlaying()) {   // also while the next clip loads (#596)
             await videoPlayer.pause();
         }
 
@@ -424,25 +434,25 @@ class PlateEnhancer {
                 instruction.className = 'plate-enhancer-instruction';
                 instruction.innerHTML = `
                     <div class="instruction-icon">🎯</div>
-                    <div class="instruction-title">Select License Plate Region</div>
+                    <div class="instruction-title">${PlateEnhancer._tr('plate.selectTitle', 'Select License Plate Region')}</div>
                     <div class="instruction-steps">
-                        <div class="instruction-step"><span class="step-num">1</span> Click on the license plate to place selection box</div>
-                        <div class="instruction-step"><span class="step-num">2</span> Drag corners/edges to resize the selection</div>
-                        <div class="instruction-step"><span class="step-num">3</span> Mark same plate on other camera angles (optional)</div>
+                        <div class="instruction-step"><span class="step-num">1</span> ${PlateEnhancer._tr('plate.step1', 'Click on the license plate to place selection box')}</div>
+                        <div class="instruction-step"><span class="step-num">2</span> ${PlateEnhancer._tr('plate.step2', 'Drag corners/edges to resize the selection')}</div>
+                        <div class="instruction-step"><span class="step-num">3</span> ${PlateEnhancer._tr('plate.step3', 'Mark same plate on other camera angles (optional)')}</div>
                     </div>
                     <div class="instruction-auto-detect">
                         <button class="auto-detect-btn" id="autoDetectPlatesBtn">
                             <svg viewBox="0 0 24 24" width="16" height="16">
                                 <path fill="currentColor" d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/>
                             </svg>
-                            Auto-Detect Plates
+                            ${PlateEnhancer._tr('plate.autoDetect', 'Auto-Detect Plates')}
                         </button>
-                        <span class="auto-detect-hint">AI finds plates automatically</span>
+                        <span class="auto-detect-hint">${PlateEnhancer._tr('plate.autoDetectHint', 'AI finds plates automatically')}</span>
                     </div>
                     <div class="instruction-keys">
-                        <span><kbd>Enter</kbd> to continue</span>
+                        <span>${PlateEnhancer._tr('plate.enterToContinue', '<kbd>Enter</kbd> to continue')}</span>
                         <span class="key-separator">•</span>
-                        <span><kbd>Esc</kbd> to cancel</span>
+                        <span>${PlateEnhancer._tr('plate.escKeyToCancel', '<kbd>Esc</kbd> to cancel')}</span>
                     </div>
                 `;
 
@@ -587,7 +597,7 @@ class PlateEnhancer {
 
             // Guard: Don't start if already processing
             if (this.isProcessing) {
-                this.showToast('Enhancement in progress - please wait', 'info');
+                this.showToast(PlateEnhancer._tr('plate.busy', 'Enhancement in progress - please wait'), 'info');
                 return;
             }
 
@@ -629,7 +639,7 @@ class PlateEnhancer {
                 });
 
                 if (!loaded) {
-                    this.showToast('Failed to load plate detection model', 'error');
+                    this.showToast(PlateEnhancer._tr('plate.modelFailed', 'Failed to load plate detection model'), 'error');
                     return;
                 }
             }
@@ -683,7 +693,7 @@ class PlateEnhancer {
 
             if (allDetections.length === 0) {
                 // No plates detected - offer manual selection
-                this.showToast('No plates auto-detected. Click and drag to select a region manually.', 'info');
+                this.showToast(PlateEnhancer._tr('plate.noPlates', 'No plates auto-detected. Click and drag to select a region manually.'), 'info');
 
                 // If we're already in selection mode (overlays exist), just let user continue manually
                 // Don't create duplicate overlays or enter selection mode again
@@ -743,11 +753,11 @@ class PlateEnhancer {
             };
 
             this.showPlateCyclingUI();
-            this.showToast(`Found ${allDetections.length} plate${allDetections.length > 1 ? 's' : ''} - use ← → to cycle`, 'success');
+            this.showToast(window.i18n ? window.i18n.plural('plate.foundPlates', allDetections.length) : `Found ${allDetections.length} plate${allDetections.length > 1 ? 's' : ''} - use ← → to cycle`, 'success');
 
         } catch (error) {
             console.error('[PlateEnhancer] Auto-detect error:', error);
-            this.showToast('Detection failed: ' + error.message, 'error');
+            this.showToast(PlateEnhancer._tr('plate.detectFailed', 'Detection failed: {{error}}', { error: error.message }), 'error');
         } finally {
             // Reset button if still visible
             if (btn) {
@@ -772,7 +782,7 @@ class PlateEnhancer {
 
         // Pause video to freeze the frame for accurate preview
         const videoPlayer = window.app?.videoPlayer;
-        if (videoPlayer && videoPlayer.isPlaying) {
+        if (videoPlayer && videoPlayer.getIsPlaying()) {
             videoPlayer.pause();
         }
 
@@ -805,16 +815,16 @@ class PlateEnhancer {
             <div class="plate-cycling-panel">
                 <div class="plate-cycling-header">
                     ${detections.length > 1 ? `
-                    <button class="plate-cycling-nav-btn prev-btn" ${currentIndex === 0 ? 'disabled' : ''} title="Previous plate (←)">
+                    <button class="plate-cycling-nav-btn prev-btn" ${currentIndex === 0 ? 'disabled' : ''} title="${PlateEnhancer._tr('plate.prevPlate', 'Previous plate (←)')}">
                         <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
                     </button>` : ''}
                     <div class="plate-cycling-info">
-                        <span class="plate-cycling-counter">${detection.isManual ? 'Manual Selection' : `Plate ${currentIndex + 1} of ${detections.length}`}</span>
+                        <span class="plate-cycling-counter">${detection.isManual ? PlateEnhancer._tr('plate.manualSelection', 'Manual Selection') : PlateEnhancer._tr('plate.plateNofM', 'Plate {{n}} of {{total}}', { n: currentIndex + 1, total: detections.length })}</span>
                         <span class="plate-cycling-camera">${this.getCameraDisplayName(detection.cameraId)}</span>
-                        <span class="plate-cycling-confidence">${detection.isManual ? '' : `Confidence: ${Math.round(detection.confidence * 100)}%`}</span>
+                        <span class="plate-cycling-confidence">${detection.isManual ? '' : PlateEnhancer._tr('plate.confidence', 'Confidence: {{value}}%', { value: Math.round(detection.confidence * 100) })}</span>
                     </div>
                     ${detections.length > 1 ? `
-                    <button class="plate-cycling-nav-btn next-btn" ${currentIndex === detections.length - 1 ? 'disabled' : ''} title="Next plate (→)">
+                    <button class="plate-cycling-nav-btn next-btn" ${currentIndex === detections.length - 1 ? 'disabled' : ''} title="${PlateEnhancer._tr('plate.nextPlate', 'Next plate (→)')}">
                         <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
                     </button>` : ''}
                 </div>
@@ -824,31 +834,31 @@ class PlateEnhancer {
                 </div>
 
                 <div class="plate-cycling-timeframe">
-                    <div class="plate-cycling-timeframe-label">Analysis Timeframe:</div>
+                    <div class="plate-cycling-timeframe-label">${PlateEnhancer._tr('plate.timeframe', 'Analysis Timeframe:')}</div>
                     <div class="plate-cycling-timeframe-btns">
                         <button class="plate-cycling-timeframe-btn ${this.preferredTimeframe === 2 ? 'selected' : ''}" data-seconds="2" ${maxBefore < 1 && maxAfter < 1 ? 'disabled' : ''}>
                             ±2s
-                            <span class="timeframe-hint">Quick</span>
+                            <span class="timeframe-hint">${PlateEnhancer._tr('plate.quick', 'Quick')}</span>
                         </button>
                         <button class="plate-cycling-timeframe-btn ${this.preferredTimeframe === 5 ? 'selected' : ''}" data-seconds="5" ${maxBefore < 2.5 && maxAfter < 2.5 ? 'disabled' : ''}>
                             ±5s
-                            <span class="timeframe-hint">Recommended</span>
+                            <span class="timeframe-hint">${PlateEnhancer._tr('plate.recommended', 'Recommended')}</span>
                         </button>
                         <button class="plate-cycling-timeframe-btn ${this.preferredTimeframe === 10 ? 'selected' : ''}" data-seconds="10" ${maxBefore < 5 && maxAfter < 5 ? 'disabled' : ''}>
                             ±10s
-                            <span class="timeframe-hint">Thorough</span>
+                            <span class="timeframe-hint">${PlateEnhancer._tr('plate.thorough', 'Thorough')}</span>
                         </button>
                     </div>
-                    <div class="plate-cycling-available">Available: ${maxBefore.toFixed(1)}s before, ${maxAfter.toFixed(1)}s after</div>
+                    <div class="plate-cycling-available">${PlateEnhancer._tr('plate.available', 'Available: {{before}}s before, {{after}}s after', { before: maxBefore.toFixed(1), after: maxAfter.toFixed(1) })}</div>
                 </div>
 
                 <div class="plate-cycling-option">
                     <label class="plate-cycling-checkbox">
                         <input type="checkbox" id="apply-video-enhancements" ${this.applyVideoEnhancementsToSource ? 'checked' : ''}>
                         <span class="checkmark"></span>
-                        Apply Video Enhancements to source frames
+                        ${PlateEnhancer._tr('plate.applyVideoEnh', 'Apply Video Enhancements to source frames')}
                     </label>
-                    <span class="plate-cycling-option-hint">Use your brightness/contrast/saturation settings</span>
+                    <span class="plate-cycling-option-hint">${PlateEnhancer._tr('plate.applyVideoEnhHint', 'Use your brightness/contrast/saturation settings')}</span>
                 </div>
 
                 <div class="plate-cycling-size-warning" style="display: none;">
@@ -856,15 +866,15 @@ class PlateEnhancer {
                 </div>
 
                 <div class="plate-cycling-actions">
-                    <button class="plate-cycling-btn cancel-btn">Cancel</button>
+                    <button class="plate-cycling-btn cancel-btn">${PlateEnhancer._tr('plate.cancel', 'Cancel')}</button>
                     <button class="plate-cycling-btn enhance-btn primary">
                         <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z"/></svg>
-                        Enhance This Plate
+                        ${PlateEnhancer._tr('plate.enhanceThis', 'Enhance This Plate')}
                     </button>
                 </div>
 
                 <div class="plate-cycling-shortcuts">
-                    ${detections.length > 1 ? '<kbd>←</kbd> <kbd>→</kbd> Navigate &nbsp;•&nbsp; ' : ''}<kbd>Enter</kbd> Select &nbsp;•&nbsp; <kbd>Esc</kbd> Cancel
+                    ${detections.length > 1 ? '<kbd>←</kbd> <kbd>→</kbd> ' + PlateEnhancer._tr('plate.navigate', 'Navigate') + ' &nbsp;•&nbsp; ' : ''}<kbd>Enter</kbd> ${PlateEnhancer._tr('plate.select', 'Select')} &nbsp;•&nbsp; <kbd>Esc</kbd> ${PlateEnhancer._tr('plate.cancel', 'Cancel')}
                 </div>
             </div>
         `;
@@ -997,15 +1007,15 @@ class PlateEnhancer {
             warningContainer.style.display = 'block';
             warningContainer.innerHTML = `
                 <div class="plate-enhancer-warning plate-enhancer-warning-severe">
-                    📐 <strong>Very large selection</strong> (${Math.round(bbox.width)}×${Math.round(bbox.height)}px = ${Math.round(area/1000)}k pixels).<br>
-                    Processing will be significantly slower. Consider resizing to select just the license plate area for faster results.
+                    📐 <strong>${PlateEnhancer._tr('plate.veryLarge', 'Very large selection')}</strong> (${Math.round(bbox.width)}×${Math.round(bbox.height)}px = ${Math.round(area/1000)}k px).<br>
+                    ${PlateEnhancer._tr('plate.veryLargeHint', 'Processing will be significantly slower. Consider resizing to select just the license plate area for faster results.')}
                 </div>
             `;
         } else if (isLarge) {
             warningContainer.style.display = 'block';
             warningContainer.innerHTML = `
                 <div class="plate-enhancer-warning">
-                    📐 Large selection (${Math.round(bbox.width)}×${Math.round(bbox.height)}px). Processing may take longer than usual.
+                    📐 ${PlateEnhancer._tr('plate.large', 'Large selection ({{size}}). Processing may take longer than usual.', { size: `${Math.round(bbox.width)}×${Math.round(bbox.height)}px` })}
                 </div>
             `;
         } else {
@@ -1532,6 +1542,15 @@ class PlateEnhancer {
             'left_pillar': 'Left Pillar',
             'right_pillar': 'Right Pillar'
         };
+        // Same names as the camera labels on the player (locale files: cameras.*)
+        const keys = {
+            'front': 'cameras.front', 'back': 'cameras.back', 'left_repeater': 'cameras.left',
+            'right_repeater': 'cameras.right', 'left_pillar': 'cameras.leftPillar', 'right_pillar': 'cameras.rightPillar'
+        };
+        if (keys[cameraId] && window.i18n) {
+            const t = window.i18n.t(keys[cameraId]);
+            if (t !== keys[cameraId]) return t;
+        }
         return names[cameraId] || cameraId;
     }
 
@@ -1850,7 +1869,7 @@ class PlateEnhancer {
         });
 
         if (detections.length === 0) {
-            this.showToast('No valid selections found');
+            this.showToast(PlateEnhancer._tr('plate.noValidSelections', 'No valid selections found'));
             this.cancelSelection();
             return;
         }
@@ -1908,46 +1927,46 @@ class PlateEnhancer {
         const dialog = document.createElement('div');
         dialog.className = 'plate-enhancer-dialog';
         dialog.innerHTML = `
-            <h3>🔍 Enhancement Options</h3>
+            <h3>🔍 ${PlateEnhancer._tr('plate.optionsTitle', 'Enhancement Options')}</h3>
             ${sizeWarningHtml}
             ${hasMarks ? `
                 ${selectionOutsideMarks ? `
                     <div class="plate-enhancer-warning">
-                        📍 <strong>Selection outside time range</strong> - You drew the selection at ${this.referenceTime.toFixed(1)}s, which is outside your IN/OUT marks. The plate position may differ. For best results, scrub to within your marked range before selecting.
+                        📍 <strong>${PlateEnhancer._tr('plate.outsideRange', 'Selection outside time range')}</strong>: ${PlateEnhancer._tr('plate.outsideRangeText', 'You drew the selection at {{time}}s, which is outside your IN/OUT marks. The plate position may differ. For best results, scrub to within your marked range before selecting.', { time: this.referenceTime.toFixed(1) })}
                     </div>
                 ` : ''}
                 <div class="plate-enhancer-section">
-                    <div class="plate-enhancer-section-header">📍 Time Range</div>
-                    <p class="plate-enhancer-help-text">Using your IN/OUT marks (${marksDurationStr}s → ~${estimatedFrames} frames)</p>
+                    <div class="plate-enhancer-section-header">📍 ${PlateEnhancer._tr('plate.timeRange', 'Time Range')}</div>
+                    <p class="plate-enhancer-help-text">${PlateEnhancer._tr('plate.usingMarks', 'Using your IN/OUT marks ({{duration}}s → ~{{frames}} frames)', { duration: marksDurationStr, frames: estimatedFrames })}</p>
                     <div class="plate-enhancer-marks-info">
                         <span class="plate-enhancer-mark-badge">IN: ${marks.inPoint.toFixed(1)}s</span>
                         <span class="plate-enhancer-mark-badge">OUT: ${marks.outPoint.toFixed(1)}s</span>
                     </div>
                     ${isVeryLongDuration ? `
                         <div class="plate-enhancer-warning plate-enhancer-warning-severe">
-                            ⚠️ <strong>Very long duration!</strong> Processing ${estimatedFrames} frames may take several minutes and could slow down your browser. Consider using a shorter range (5-10 seconds is usually enough).
+                            ⚠️ <strong>${PlateEnhancer._tr('plate.veryLong', 'Very long duration!')}</strong> ${PlateEnhancer._tr('plate.veryLongText', 'Processing {{frames}} frames may take several minutes and could slow down your browser. Consider using a shorter range (5-10 seconds is usually enough).', { frames: estimatedFrames })}
                         </div>
                     ` : isLongDuration ? `
                         <div class="plate-enhancer-warning">
-                            ⏱️ Longer duration means more frames to process. This may take a while. 5-10 seconds is usually sufficient for good results.
+                            ⏱️ ${PlateEnhancer._tr('plate.longText', 'Longer duration means more frames to process. This may take a while. 5-10 seconds is usually sufficient for good results.')}
                         </div>
                     ` : ''}
                 </div>
             ` : `
                 <div class="plate-enhancer-section">
-                    <div class="plate-enhancer-section-header">⏱️ Analysis Duration</div>
-                    <p class="plate-enhancer-help-text">More time = more frames to combine, but slower processing</p>
+                    <div class="plate-enhancer-section-header">⏱️ ${PlateEnhancer._tr('plate.duration', 'Analysis Duration')}</div>
+                    <p class="plate-enhancer-help-text">${PlateEnhancer._tr('plate.durationHint', 'More time = more frames to combine, but slower processing')}</p>
                     <div class="plate-enhancer-time-presets">
-                        <button class="plate-enhancer-preset-btn" data-seconds="2">2 sec<span class="preset-hint">Quick</span></button>
-                        <button class="plate-enhancer-preset-btn selected" data-seconds="5">5 sec<span class="preset-hint">Recommended</span></button>
-                        <button class="plate-enhancer-preset-btn" data-seconds="10">10 sec<span class="preset-hint">Thorough</span></button>
+                        <button class="plate-enhancer-preset-btn" data-seconds="2">${PlateEnhancer._tr('plate.nSec', '{{n}} sec', { n: 2 })}<span class="preset-hint">${PlateEnhancer._tr('plate.quick', 'Quick')}</span></button>
+                        <button class="plate-enhancer-preset-btn selected" data-seconds="5">${PlateEnhancer._tr('plate.nSec', '{{n}} sec', { n: 5 })}<span class="preset-hint">${PlateEnhancer._tr('plate.recommended', 'Recommended')}</span></button>
+                        <button class="plate-enhancer-preset-btn" data-seconds="10">${PlateEnhancer._tr('plate.nSec', '{{n}} sec', { n: 10 })}<span class="preset-hint">${PlateEnhancer._tr('plate.thorough', 'Thorough')}</span></button>
                     </div>
-                    <p class="plate-enhancer-tip">💡 Tip: Use IN/OUT marks (I and O keys) for precise control</p>
+                    <p class="plate-enhancer-tip">💡 ${PlateEnhancer._tr('plate.tipMarks', 'Tip: Use IN/OUT marks (I and O keys) for precise control')}</p>
                 </div>
             `}
             <div class="plate-enhancer-dialog-actions">
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="cancel">Cancel</button>
-                <button class="plate-enhancer-btn plate-enhancer-btn-primary" data-action="start">🚀 Start Enhancement</button>
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="cancel">${PlateEnhancer._tr('plate.cancel', 'Cancel')}</button>
+                <button class="plate-enhancer-btn plate-enhancer-btn-primary" data-action="start">🚀 ${PlateEnhancer._tr('plate.start', 'Start Enhancement')}</button>
             </div>
         `;
 
@@ -2082,8 +2101,8 @@ class PlateEnhancer {
         loading.className = 'plate-enhancer-loading-opencv';
         loading.innerHTML = `
             <div class="spinner"></div>
-            <p>Loading image processing library...</p>
-            <p style="font-size: 12px; color: var(--text-secondary, #888); margin-top: 8px;">First time may take 10-20 seconds</p>
+            <p>${PlateEnhancer._tr('plate.loadingLib', 'Loading image processing library...')}</p>
+            <p style="font-size: 12px; color: var(--text-secondary, #888); margin-top: 8px;">${PlateEnhancer._tr('plate.firstTime', 'First time may take 10-20 seconds')}</p>
         `;
         document.body.appendChild(loading);
 
@@ -2179,14 +2198,14 @@ class PlateEnhancer {
         const progress = document.createElement('div');
         progress.className = 'plate-enhancer-progress';
         progress.innerHTML = `
-            <h3>Enhancing License Plate</h3>
-            <div class="plate-enhancer-progress-status">Preparing...</div>
+            <h3>${PlateEnhancer._tr('plate.enhancing', 'Enhancing License Plate')}</h3>
+            <div class="plate-enhancer-progress-status">${PlateEnhancer._tr('plate.preparing', 'Preparing...')}</div>
             <div class="plate-enhancer-progress-bar">
                 <div class="plate-enhancer-progress-fill" style="width: 0%"></div>
             </div>
             <div class="plate-enhancer-progress-percent">0%</div>
             <div class="plate-enhancer-progress-cancel">
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary">Cancel</button>
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary">${PlateEnhancer._tr('plate.cancel', 'Cancel')}</button>
             </div>
         `;
 
@@ -2242,7 +2261,7 @@ class PlateEnhancer {
             };
 
             // Process frames through stacker
-            updateProgress(`Ranking ${results.regions.length} frames by sharpness...`, 78);
+            updateProgress(PlateEnhancer._tr('plate.ranking', 'Ranking {{n}} frames by sharpness...', { n: results.regions.length }), 78);
             await new Promise(r => setTimeout(r, 47)); // Let UI update
 
             // The stacker works on the cropped regions only (extractAndTrack no longer returns full-size frames)
@@ -2261,7 +2280,7 @@ class PlateEnhancer {
             // This preserves all frames so user can try different selections
             this.originalEnhanced = enhanced;
 
-            updateProgress('Complete!', 100);
+            updateProgress(PlateEnhancer._tr('plate.complete', 'Complete!'), 100);
 
             // Clean up progress modal
             backdrop.remove();
@@ -2373,7 +2392,7 @@ class PlateEnhancer {
             const videoSelection = this.containerToVideoCoords(selection);
 
             // Extract reference frame first
-            updateProgress(`${cameraName}: Extracting reference frame...`, cameraBaseProgress);
+            updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.extractingRef', 'Extracting reference frame...')}`, cameraBaseProgress);
             const refFrame = await this.extractFrame(video, referenceTime, cameraId);
             if (!refFrame) {
                 console.warn(`[PlateEnhancer] Could not extract reference frame for ${cameraId}`);
@@ -2401,7 +2420,7 @@ class PlateEnhancer {
                 // Update progress during extraction
                 if (extractedCount % 10 === 0) {
                     const extractProgress = (extractedCount / totalFramesToExtract) * 0.5;
-                    updateProgress(`${cameraName}: Extracting frames (${extractedCount}/${totalFramesToExtract})...`,
+                    updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.extractingFrames', 'Extracting frames ({{done}}/{{total}})...', { done: extractedCount, total: totalFramesToExtract })}`,
                         cameraBaseProgress + extractProgress * cameraProgressRange);
                 }
             }
@@ -2422,7 +2441,7 @@ class PlateEnhancer {
                 // Update progress during extraction
                 if (extractedCount % 10 === 0) {
                     const extractProgress = (extractedCount / totalFramesToExtract) * 0.5;
-                    updateProgress(`${cameraName}: Extracting frames (${extractedCount}/${totalFramesToExtract})...`,
+                    updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.extractingFrames', 'Extracting frames ({{done}}/{{total}})...', { done: extractedCount, total: totalFramesToExtract })}`,
                         cameraBaseProgress + extractProgress * cameraProgressRange);
                 }
             }
@@ -2431,20 +2450,20 @@ class PlateEnhancer {
             const trackingStart = cameraBaseProgress + 0.55 * cameraProgressRange;
             const trackingRange = 0.35 * cameraProgressRange;
 
-            updateProgress(`${cameraName}: Tracking forward (${forwardFrames.length} frames)...`, trackingStart);
+            updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.trackingFwd', 'Tracking forward ({{n}} frames)...', { n: forwardFrames.length })}`, trackingStart);
             const forwardTracked = await tracker.track(forwardFrames, videoSelection, (pct) => {
-                updateProgress(`${cameraName}: Tracking forward (${Math.round(pct * forwardFrames.length)}/${forwardFrames.length})...`,
+                updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.trackingFwdN', 'Tracking forward ({{done}}/{{total}})...', { done: Math.round(pct * forwardFrames.length), total: forwardFrames.length })}`,
                     trackingStart + pct * trackingRange * 0.5);
             });
 
-            updateProgress(`${cameraName}: Tracking backward (${backwardFrames.length} frames)...`,
+            updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.trackingBack', 'Tracking backward ({{n}} frames)...', { n: backwardFrames.length })}`,
                 trackingStart + trackingRange * 0.5);
             const backwardTracked = await tracker.track(backwardFrames, videoSelection, (pct) => {
-                updateProgress(`${cameraName}: Tracking backward (${Math.round(pct * backwardFrames.length)}/${backwardFrames.length})...`,
+                updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.trackingBackN', 'Tracking backward ({{done}}/{{total}})...', { done: Math.round(pct * backwardFrames.length), total: backwardFrames.length })}`,
                     trackingStart + trackingRange * 0.5 + pct * trackingRange * 0.5);
             });
 
-            updateProgress(`${cameraName}: Cropping regions...`,
+            updateProgress(`${cameraName}: ${PlateEnhancer._tr('plate.croppingRegions', 'Cropping regions...')}`,
                 cameraBaseProgress + 0.9 * cameraProgressRange);
 
             // Combine results chronologically:
@@ -2816,7 +2835,7 @@ class PlateEnhancer {
         const header = document.createElement('div');
         header.className = 'plate-enhancer-results-header';
         header.innerHTML = `
-            <h3>Enhancement Results</h3>
+            <h3>${PlateEnhancer._tr('plate.resultsTitle', 'Enhancement Results')}</h3>
             <button class="plate-enhancer-close-btn">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -2834,7 +2853,7 @@ class PlateEnhancer {
 
         const mainLabel = document.createElement('div');
         mainLabel.className = 'plate-enhancer-main-preview-label';
-        mainLabel.textContent = 'Combined Result (click thumbnails below to compare)';
+        mainLabel.textContent = PlateEnhancer._tr('plate.combinedResult', 'Combined Result (click thumbnails below to compare)');
         mainPreview.appendChild(mainLabel);
         modal.appendChild(mainPreview);
 
@@ -2847,17 +2866,17 @@ class PlateEnhancer {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
                     </svg>
-                    AI Detected Text
+                    ${PlateEnhancer._tr('plate.aiText', 'AI Detected Text')}
                 </span>
-                <span class="plate-enhancer-ocr-status">Initializing...</span>
+                <span class="plate-enhancer-ocr-status">${PlateEnhancer._tr('plate.initializing', 'Initializing...')}</span>
             </div>
             <div class="plate-enhancer-ocr-progress" style="display: none;">
                 <div class="plate-enhancer-ocr-progress-bar"></div>
-                <span class="plate-enhancer-ocr-progress-text">Loading OCR model...</span>
+                <span class="plate-enhancer-ocr-progress-text">${PlateEnhancer._tr('plate.loadingOcr', 'Loading OCR model...')}</span>
             </div>
             <div class="plate-enhancer-ocr-result">
                 <span class="plate-enhancer-ocr-text">-</span>
-                <button class="plate-enhancer-ocr-copy" title="Copy text" style="display: none;">
+                <button class="plate-enhancer-ocr-copy" title="${PlateEnhancer._tr('plate.copyText', 'Copy text')}" style="display: none;">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                     </svg>
@@ -2867,9 +2886,9 @@ class PlateEnhancer {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
                 </svg>
-                <span>Low confidence - verify manually</span>
+                <span>${PlateEnhancer._tr('plate.lowConfidence', 'Low confidence - verify manually')}</span>
             </div>
-            <div class="plate-enhancer-ocr-disclaimer">Results may not be accurate - verify manually</div>
+            <div class="plate-enhancer-ocr-disclaimer">${PlateEnhancer._tr('plate.disclaimer', 'Results may not be accurate - verify manually')}</div>
         `;
         modal.appendChild(ocrSection);
 
@@ -2906,10 +2925,10 @@ class PlateEnhancer {
             if (progressContainer) progressContainer.style.display = 'none';
 
             if (result.error) {
-                statusEl.textContent = 'OCR unavailable';
+                statusEl.textContent = PlateEnhancer._tr('plate.ocrUnavailable', 'OCR unavailable');
                 textEl.textContent = '-';
             } else if (result.text) {
-                statusEl.textContent = `Confidence: ${result.confidence.toFixed(0)}%`;
+                statusEl.textContent = PlateEnhancer._tr('plate.confidence', 'Confidence: {{value}}%', { value: result.confidence.toFixed(0) });
                 textEl.textContent = result.text;
                 copyBtn.style.display = 'inline-flex';
 
@@ -2925,7 +2944,7 @@ class PlateEnhancer {
                 copyBtn.addEventListener('click', async () => {
                     try {
                         await navigator.clipboard.writeText(result.text);
-                        this.showToast('Text copied!');
+                        this.showToast(PlateEnhancer._tr('plate.textCopied', 'Text copied!'));
                     } catch (e) {
                         console.error('Copy failed:', e);
                     }
@@ -2955,7 +2974,7 @@ class PlateEnhancer {
                     }
                 }
             } else {
-                statusEl.textContent = 'No text detected';
+                statusEl.textContent = PlateEnhancer._tr('plate.noText', 'No text detected');
                 textEl.textContent = '-';
             }
         });
@@ -2965,7 +2984,7 @@ class PlateEnhancer {
             const methodsSection = document.createElement('div');
             methodsSection.className = 'plate-enhancer-methods-section';
             methodsSection.innerHTML = `
-                <div class="plate-enhancer-methods-label">Enhancement Methods (click to preview, 4x badge = upscaled available):</div>
+                <div class="plate-enhancer-methods-label">${PlateEnhancer._tr('plate.methodsLabel', 'Enhancement Methods (click to preview, 4x badge = upscaled available):')}</div>
                 <div class="plate-enhancer-methods-grid"></div>
             `;
             modal.appendChild(methodsSection);
@@ -3004,7 +3023,7 @@ class PlateEnhancer {
                 methodThumb.innerHTML = `
                     <img src="${displayUrl}" alt="${methodNames[methodKey]}">
                     <div class="plate-enhancer-method-name">${methodNames[methodKey]}</div>
-                    ${hasUpscaled ? '<div class="plate-enhancer-upscale-badge" title="Click badge to toggle 4x upscaled">4x</div>' : ''}
+                    ${hasUpscaled ? `<div class="plate-enhancer-upscale-badge" title="${PlateEnhancer._tr('plate.toggle4x', 'Click badge to toggle 4x upscaled')}">4x</div>` : ''}
                     <div class="plate-enhancer-method-ocr">
                         <span class="ocr-text">...</span>
                         <span class="ocr-confidence"></span>
@@ -3034,7 +3053,7 @@ class PlateEnhancer {
                             // Update main preview if this is selected
                             if (methodThumb.classList.contains('selected')) {
                                 mainImg.src = displayUrl;
-                                mainLabel.textContent = `${method.name} (Sharpness: ${method.sharpness.toFixed(1)})`;
+                                mainLabel.textContent = `${method.name} (${PlateEnhancer._tr('plate.sharpness', 'Sharpness: {{value}}', { value: method.sharpness.toFixed(1) })})`;
                             }
                         } else {
                             // Switch to upscaled (watermarked for display)
@@ -3045,7 +3064,7 @@ class PlateEnhancer {
                             // Update main preview if this is selected
                             if (methodThumb.classList.contains('selected')) {
                                 mainImg.src = upscaledDisplay;
-                                mainLabel.textContent = `${method.name} 4x (Sharpness: ${method.upscaledSharpness?.toFixed(1) || 'N/A'})`;
+                                mainLabel.textContent = `${method.name} 4x (${PlateEnhancer._tr('plate.sharpness', 'Sharpness: {{value}}', { value: method.upscaledSharpness?.toFixed(1) || 'N/A' })})`;
                             }
                         }
                     });
@@ -3065,7 +3084,7 @@ class PlateEnhancer {
 
                     // Update main preview
                     mainImg.src = srcToShow;
-                    mainLabel.textContent = `${method.name}${labelSuffix} (Sharpness: ${sharpnessToShow?.toFixed(1) || 'N/A'})`;
+                    mainLabel.textContent = `${method.name}${labelSuffix} (${PlateEnhancer._tr('plate.sharpness', 'Sharpness: {{value}}', { value: sharpnessToShow?.toFixed(1) || 'N/A' })})`;
 
                     // Update selection state
                     methodsGrid.querySelectorAll('.plate-enhancer-method-thumb').forEach(t => t.classList.remove('selected'));
@@ -3089,20 +3108,20 @@ class PlateEnhancer {
             frameSelectionControls.innerHTML = `
                 <div class="plate-enhancer-frame-selection-header">
                     <span class="plate-enhancer-frame-selection-icon">🎞️</span>
-                    <span class="plate-enhancer-frame-selection-label">Manual Frame Selection</span>
+                    <span class="plate-enhancer-frame-selection-label">${PlateEnhancer._tr('plate.manualFrames', 'Manual Frame Selection')}</span>
                 </div>
                 <p class="plate-enhancer-frame-selection-desc">
-                    Not happy with the result? Uncheck blurry or misaligned frames below, then re-process with only the good ones.
+                    ${PlateEnhancer._tr('plate.manualFramesDesc', 'Not happy with the result? Uncheck blurry or misaligned frames below, then re-process with only the good ones.')}
                 </p>
                 <div class="plate-enhancer-frame-selection-controls">
-                    <button class="plate-enhancer-btn-small" data-action="select-all" title="Include all frames - best for Lucky Regions">✓ All</button>
-                    <button class="plate-enhancer-btn-small" data-action="select-none" title="Deselect all frames">✗ None</button>
-                    <button class="plate-enhancer-btn-small" data-action="select-top5" title="Select only the 5 sharpest">Top 5</button>
-                    <button class="plate-enhancer-btn-small" data-action="select-top10" title="Select the 10 sharpest - good balance">Top 10</button>
-                    <button class="plate-enhancer-btn-small" data-action="select-top15" title="Select the 15 sharpest - great for Lucky">Top 15</button>
-                    <span class="plate-enhancer-frame-count">0 / ${allFrames.length} selected</span>
-                    <button class="plate-enhancer-btn plate-enhancer-btn-primary plate-enhancer-btn-reprocess" data-action="reprocess" disabled title="Need at least 2 frames">
-                        🔄 Re-process Selected
+                    <button class="plate-enhancer-btn-small" data-action="select-all" title="${PlateEnhancer._tr('plate.allTitle', 'Include all frames - best for Lucky Regions')}">✓ ${PlateEnhancer._tr('plate.all', 'All')}</button>
+                    <button class="plate-enhancer-btn-small" data-action="select-none" title="${PlateEnhancer._tr('plate.noneTitle', 'Deselect all frames')}">✗ ${PlateEnhancer._tr('plate.none', 'None')}</button>
+                    <button class="plate-enhancer-btn-small" data-action="select-top5" title="${PlateEnhancer._tr('plate.top5Title', 'Select only the 5 sharpest')}">${PlateEnhancer._tr('plate.topN', 'Top {{n}}', { n: 5 })}</button>
+                    <button class="plate-enhancer-btn-small" data-action="select-top10" title="${PlateEnhancer._tr('plate.top10Title', 'Select the 10 sharpest - good balance')}">${PlateEnhancer._tr('plate.topN', 'Top {{n}}', { n: 10 })}</button>
+                    <button class="plate-enhancer-btn-small" data-action="select-top15" title="${PlateEnhancer._tr('plate.top15Title', 'Select the 15 sharpest - great for Lucky')}">${PlateEnhancer._tr('plate.topN', 'Top {{n}}', { n: 15 })}</button>
+                    <span class="plate-enhancer-frame-count">${PlateEnhancer._tr('plate.nSelected', '{{n}} / {{total}} selected', { n: 0, total: allFrames.length })}</span>
+                    <button class="plate-enhancer-btn plate-enhancer-btn-primary plate-enhancer-btn-reprocess" data-action="reprocess" disabled title="${PlateEnhancer._tr('plate.need2', 'Need at least 2 frames')}">
+                        🔄 ${PlateEnhancer._tr('plate.reprocessSelected', 'Re-process Selected')}
                     </button>
                 </div>
             `;
@@ -3154,11 +3173,11 @@ class PlateEnhancer {
             if (!frameSelectionControls) return;
             const checked = thumbsContainer.querySelectorAll('.plate-enhancer-frame-checkbox:checked').length;
             const total = allFrames.length; // Use allFrames (preserved across reprocessing)
-            frameSelectionControls.querySelector('.plate-enhancer-frame-count').textContent = `${checked} / ${total} selected`;
+            frameSelectionControls.querySelector('.plate-enhancer-frame-count').textContent = PlateEnhancer._tr('plate.nSelected', '{{n}} / {{total}} selected', { n: checked, total: total });
             const reprocessBtn = frameSelectionControls.querySelector('[data-action="reprocess"]');
             reprocessBtn.disabled = checked < 2; // Need at least 2 frames
             if (checked < 2) {
-                reprocessBtn.title = 'Select at least 2 frames';
+                reprocessBtn.title = PlateEnhancer._tr('plate.select2', 'Select at least 2 frames');
             } else {
                 reprocessBtn.title = '';
             }
@@ -3205,7 +3224,7 @@ class PlateEnhancer {
                 });
 
                 if (selectedIndices.length < 2) {
-                    this.showToast('Select at least 2 frames');
+                    this.showToast(PlateEnhancer._tr('plate.select2', 'Select at least 2 frames'));
                     return;
                 }
 
@@ -3245,46 +3264,46 @@ class PlateEnhancer {
         actions.className = 'plate-enhancer-results-actions';
         actions.innerHTML = `
             <div class="plate-enhancer-actions-row">
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="crop-region" title="Draw a region on the preview to crop">
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="crop-region" title="${PlateEnhancer._tr('plate.cropTitle', 'Draw a region on the preview to crop')}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                         <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
                     </svg>
-                    Crop Region
+                    ${PlateEnhancer._tr('plate.cropRegion', 'Crop Region')}
                 </button>
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="save-notes" title="Save OCR result to event notes (Pro)">
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="save-notes" title="${PlateEnhancer._tr('plate.saveNotesTitle', 'Save OCR result to event notes (Pro)')}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                         <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
                     </svg>
-                    Save to Notes
+                    ${PlateEnhancer._tr('plate.saveNotes', 'Save to Notes')}
                     <span class="plate-enhancer-pro-badge">PRO</span>
                 </button>
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="copy" title="Copy image to clipboard (Pro)">
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="copy" title="${PlateEnhancer._tr('plate.copyImageTitle', 'Copy image to clipboard (Pro)')}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                         <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
                     </svg>
-                    Copy Image
+                    ${PlateEnhancer._tr('plate.copyImage', 'Copy Image')}
                     <span class="plate-enhancer-pro-badge">PRO</span>
                 </button>
             </div>
             <div class="plate-enhancer-actions-row">
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="retry-shorter" title="Retry with ±2s timeframe">
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="retry-shorter" title="${PlateEnhancer._tr('plate.retryTitle', 'Retry with ±2s timeframe')}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                         <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                     </svg>
-                    Retry Shorter
+                    ${PlateEnhancer._tr('plate.retryShorter', 'Retry Shorter')}
                 </button>
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="detect-another" title="Run detection to find more plates">
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="detect-another" title="${PlateEnhancer._tr('plate.detectAnotherTitle', 'Run detection to find more plates')}">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle; margin-right: 4px;">
                         <path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/>
                     </svg>
-                    Detect Another
+                    ${PlateEnhancer._tr('plate.detectAnother', 'Detect Another')}
                 </button>
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="download-all" title="Download all images as ZIP (Pro)">
-                    Download All (ZIP)
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary" data-action="download-all" title="${PlateEnhancer._tr('plate.downloadAllTitle', 'Download all images as ZIP (Pro)')}">
+                    ${PlateEnhancer._tr('plate.downloadAll', 'Download All (ZIP)')}
                     <span class="plate-enhancer-pro-badge">PRO</span>
                 </button>
-                <button class="plate-enhancer-btn plate-enhancer-btn-primary" data-action="download-selected" title="Download selected image (Pro)">
-                    Download Selected
+                <button class="plate-enhancer-btn plate-enhancer-btn-primary" data-action="download-selected" title="${PlateEnhancer._tr('plate.downloadSelTitle', 'Download selected image (Pro)')}">
+                    ${PlateEnhancer._tr('plate.downloadSelected', 'Download Selected')}
                     <span class="plate-enhancer-pro-badge">PRO</span>
                 </button>
             </div>
@@ -3295,7 +3314,7 @@ class PlateEnhancer {
         actions.querySelector('[data-action="save-notes"]')?.addEventListener('click', async () => {
             if (!await this.checkProAccess('save to notes')) return;
             if (!this.lastOCRResult?.text) {
-                this.showToast('No OCR result to save');
+                this.showToast(PlateEnhancer._tr('plate.noOcrToSave', 'No OCR result to save'));
                 return;
             }
             this.savePlateToNotes();
@@ -3304,18 +3323,7 @@ class PlateEnhancer {
         // Retry Shorter handler - reprocess existing frames with subset
         actions.querySelector('[data-action="retry-shorter"]')?.addEventListener('click', async () => {
             closeModal();
-
-            // If we have topFrames from last enhancement, reprocess with shorter subset
-            if (this.lastEnhanced?.topFrames && this.lastEnhanced.topFrames.length >= 2) {
-                // Use first 5 frames (or all if less than 5) which are the sharpest
-                const frameCount = Math.min(5, this.lastEnhanced.topFrames.length);
-                const selectedIndices = Array.from({ length: frameCount }, (_, i) => i);
-                await this.reprocessWithSelectedFrames(selectedIndices);
-            } else {
-                // No frames available - enter selection mode
-                this.showToast('Please select a region to enhance', 'info');
-                this.startSelectionMode();
-            }
+            await this.retryShorter();
         });
 
         // Detect Another handler
@@ -3351,7 +3359,7 @@ class PlateEnhancer {
                 </svg>
                 Crop Region
             `;
-            mainLabel.textContent = 'Combined Result (click thumbnails below to compare)';
+            mainLabel.textContent = PlateEnhancer._tr('plate.combinedResult', 'Combined Result (click thumbnails below to compare)');
             if (cropEscapeHandler) {
                 document.removeEventListener('keydown', cropEscapeHandler);
                 cropEscapeHandler = null;
@@ -3385,9 +3393,9 @@ class PlateEnhancer {
             instruction.innerHTML = `
                 <div class="crop-instruction-icon">✂️</div>
                 <div class="crop-instruction-text">
-                    <strong>Click and drag</strong> to select the area you want to crop
+                    ${PlateEnhancer._tr('plate.cropInstruction', '<strong>Click and drag</strong> to select the area you want to crop')}
                 </div>
-                <div class="crop-instruction-hint">Press <kbd>Esc</kbd> or click the red button to cancel</div>
+                <div class="crop-instruction-hint">${PlateEnhancer._tr('plate.cropHint', 'Press <kbd>Esc</kbd> or click the red button to cancel')}</div>
             `;
             cropOverlay.appendChild(instruction);
 
@@ -3468,7 +3476,7 @@ class PlateEnhancer {
                         // Cancel button
                         const cancelBtn = document.createElement('button');
                         cancelBtn.className = 'plate-enhancer-crop-cancel';
-                        cancelBtn.textContent = 'Cancel';
+                        cancelBtn.textContent = PlateEnhancer._tr('plate.cancel', 'Cancel');
                         cancelBtn.addEventListener('mousedown', (e) => e.stopPropagation());
                         cancelBtn.addEventListener('click', (e) => {
                             e.stopPropagation();
@@ -3479,7 +3487,7 @@ class PlateEnhancer {
                         // Apply button
                         const applyBtn = document.createElement('button');
                         applyBtn.className = 'plate-enhancer-crop-apply';
-                        applyBtn.textContent = 'Apply & Re-process';
+                        applyBtn.textContent = PlateEnhancer._tr('plate.applyReprocess', 'Apply & Re-process');
                         applyBtn.addEventListener('mousedown', (e) => e.stopPropagation());
                         applyBtn.addEventListener('click', (e) => {
                             e.stopPropagation();
@@ -3521,7 +3529,7 @@ class PlateEnhancer {
             if (selected) {
                 await this.copyToClipboard(selected.dataset.src);
             } else {
-                this.showToast('No image selected', 'info');
+                this.showToast(PlateEnhancer._tr('plate.noImage', 'No image selected'), 'info');
             }
         });
 
@@ -3535,7 +3543,7 @@ class PlateEnhancer {
             if (selected) {
                 this.downloadImage(selected.dataset.src, 'enhanced-plate.png');
             } else {
-                this.showToast('No image selected', 'info');
+                this.showToast(PlateEnhancer._tr('plate.noImage', 'No image selected'), 'info');
             }
         });
 
@@ -3611,6 +3619,23 @@ class PlateEnhancer {
      * Re-process with only selected frames
      * @param {number[]} selectedIndices - Indices of frames to include
      */
+    /**
+     * "Retry Shorter": re-process the sharpest few frames of the last run (up to 5), or, when there aren't at
+     * least 2 kept frames, start a new region selection. It called startSelectionMode(), which doesn't exist, so
+     * the button threw in that case (#548).
+     */
+    async retryShorter() {
+        const source = this.originalEnhanced || this.lastEnhanced;
+        const frames = source?.topFrames || [];
+        if (frames.length >= 2 && this.lastExtraction) {
+            const frameCount = Math.min(5, frames.length);
+            await this.reprocessWithSelectedFrames(Array.from({ length: frameCount }, (_, i) => i));
+            return;
+        }
+        this.showToast(PlateEnhancer._tr('plate.selectRegion', 'Please select a region to enhance'), 'info');
+        this.startEnhanceRegionMode();
+    }
+
     async reprocessWithSelectedFrames(selectedIndices) {
         // Use originalEnhanced if available (preserves all frames across reprocessing)
         const sourceEnhanced = this.originalEnhanced || this.lastEnhanced;
@@ -3630,14 +3655,14 @@ class PlateEnhancer {
         const progress = document.createElement('div');
         progress.className = 'plate-enhancer-progress';
         progress.innerHTML = `
-            <h3>Re-processing with ${selectedIndices.length} frames</h3>
-            <div class="plate-enhancer-progress-status">Preparing...</div>
+            <h3>${PlateEnhancer._tr('plate.reprocessingN', 'Re-processing with {{n}} frames', { n: selectedIndices.length })}</h3>
+            <div class="plate-enhancer-progress-status">${PlateEnhancer._tr('plate.preparing', 'Preparing...')}</div>
             <div class="plate-enhancer-progress-bar">
                 <div class="plate-enhancer-progress-fill" style="width: 0%"></div>
             </div>
             <div class="plate-enhancer-progress-percent">0%</div>
             <div class="plate-enhancer-progress-cancel">
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary">Cancel</button>
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary">${PlateEnhancer._tr('plate.cancel', 'Cancel')}</button>
             </div>
         `;
 
@@ -3686,7 +3711,7 @@ class PlateEnhancer {
             stacker.useRealStacking = true;
             stacker.stackingMethod = 'sigma-mean';
 
-            updateProgress('Processing selected frames...', 20);
+            updateProgress(PlateEnhancer._tr('plate.processingSelected', 'Processing selected frames...'), 20);
             await new Promise(r => setTimeout(r, 47));
 
             if (this.shouldCancel) throw new Error('Cancelled');
@@ -3702,7 +3727,7 @@ class PlateEnhancer {
             // Store for potential further re-processing
             this.lastEnhanced = enhanced;
 
-            updateProgress('Complete!', 100);
+            updateProgress(PlateEnhancer._tr('plate.complete', 'Complete!'), 100);
 
             backdrop.remove();
             progress.remove();
@@ -3744,14 +3769,14 @@ class PlateEnhancer {
         const progress = document.createElement('div');
         progress.className = 'plate-enhancer-progress';
         progress.innerHTML = `
-            <h3>Re-processing with Cropped Region</h3>
-            <div class="plate-enhancer-progress-status">Preparing...</div>
+            <h3>${PlateEnhancer._tr('plate.reprocessingCrop', 'Re-processing with Cropped Region')}</h3>
+            <div class="plate-enhancer-progress-status">${PlateEnhancer._tr('plate.preparing', 'Preparing...')}</div>
             <div class="plate-enhancer-progress-bar">
                 <div class="plate-enhancer-progress-fill" style="width: 0%"></div>
             </div>
             <div class="plate-enhancer-progress-percent">0%</div>
             <div class="plate-enhancer-progress-cancel">
-                <button class="plate-enhancer-btn plate-enhancer-btn-secondary">Cancel</button>
+                <button class="plate-enhancer-btn plate-enhancer-btn-secondary">${PlateEnhancer._tr('plate.cancel', 'Cancel')}</button>
             </div>
         `;
 
@@ -3792,7 +3817,7 @@ class PlateEnhancer {
             }
 
             // Apply crop to all source frames
-            updateProgress('Cropping source frames...', 10);
+            updateProgress(PlateEnhancer._tr('plate.croppingSource', 'Cropping source frames...'), 10);
             const croppedFrames = [];
 
             for (let i = 0; i < enhanced.topFrames.length; i++) {
@@ -3808,7 +3833,7 @@ class PlateEnhancer {
                     time: frame.time
                 });
 
-                updateProgress(`Cropping frames (${i + 1}/${enhanced.topFrames.length})...`, 10 + (i / enhanced.topFrames.length) * 20);
+                updateProgress(PlateEnhancer._tr('plate.croppingFrames', 'Cropping frames ({{done}}/{{total}})...', { done: i + 1, total: enhanced.topFrames.length }), 10 + (i / enhanced.topFrames.length) * 20);
             }
 
             if (this.shouldCancel) throw new Error('Cancelled');
@@ -3827,7 +3852,7 @@ class PlateEnhancer {
             stacker.useRealStacking = true;
             stacker.stackingMethod = 'sigma-mean';
 
-            updateProgress('Stacking cropped frames...', 35);
+            updateProgress(PlateEnhancer._tr('plate.stacking', 'Stacking cropped frames...'), 35);
 
             const newEnhanced = await stacker.processPreCropped(croppedFrames, (status, pct) => {
                 updateProgress(status, 35 + pct * 0.55);
@@ -3838,7 +3863,7 @@ class PlateEnhancer {
             // Store for potential further re-processing
             this.lastEnhanced = newEnhanced;
 
-            updateProgress('Complete!', 100);
+            updateProgress(PlateEnhancer._tr('plate.complete', 'Complete!'), 100);
 
             backdrop.remove();
             progress.remove();
@@ -3939,7 +3964,7 @@ class PlateEnhancer {
 
             // Validate crop dimensions
             if (cropWidth <= 0 || cropHeight <= 0) {
-                this.showToast('Invalid crop region - selection outside image');
+                this.showToast(PlateEnhancer._tr('plate.invalidCrop', 'Invalid crop region - selection outside image'));
                 return;
             }
 
@@ -3955,7 +3980,7 @@ class PlateEnhancer {
 
             // Update main preview
             mainImg.src = croppedDataUrl;
-            mainLabel.textContent = 'Cropped Result';
+            mainLabel.textContent = PlateEnhancer._tr('plate.croppedResult', 'Cropped Result');
 
             // Add cropped version as a new thumbnail at the beginning
             const croppedThumb = document.createElement('div');
@@ -3970,7 +3995,7 @@ class PlateEnhancer {
             const info = document.createElement('div');
             info.className = 'plate-enhancer-thumbnail-info';
             info.innerHTML = `
-                <div class="plate-enhancer-thumbnail-rank">Cropped</div>
+                <div class="plate-enhancer-thumbnail-rank">${PlateEnhancer._tr('plate.cropped', 'Cropped')}</div>
                 <div class="plate-enhancer-thumbnail-camera">${cropWidth}x${cropHeight}</div>
             `;
             croppedThumb.appendChild(info);
@@ -3986,11 +4011,11 @@ class PlateEnhancer {
                 thumbsContainer.prepend(croppedThumb);
             }
 
-            this.showToast('Region cropped successfully!');
+            this.showToast(PlateEnhancer._tr('plate.cropDone', 'Region cropped successfully!'));
 
         } catch (error) {
             console.error('[PlateEnhancer] Crop failed:', error);
-            this.showToast('Crop failed');
+            this.showToast(PlateEnhancer._tr('plate.cropFailed', 'Crop failed'));
         }
     }
 
@@ -4096,7 +4121,7 @@ class PlateEnhancer {
             ]);
 
             // Show brief success feedback
-            this.showToast('Copied to clipboard!');
+            this.showToast(PlateEnhancer._tr('plate.copied', 'Copied to clipboard!'));
         } catch (error) {
             console.error('[PlateEnhancer] Copy failed:', error);
             this.showError('Failed to copy to clipboard. Try downloading instead.');
@@ -4113,14 +4138,14 @@ class PlateEnhancer {
     savePlateToNotes() {
         const notesManager = window.app?.notesManager;
         if (!notesManager) {
-            this.showToast('Notes feature not available', 'error');
+            this.showToast(PlateEnhancer._tr('plate.notesUnavailable', 'Notes feature not available'), 'error');
             return false;
         }
         const event = window.app?.currentEvent || window.app?.eventBrowser?.selectedEvent;
         // Same key as the notes modal: compoundKey (multi-drive), else the folder name
         const key = event ? (event.compoundKey || event.name) : null;
         if (!key) {
-            this.showToast('No event selected', 'error');
+            this.showToast(PlateEnhancer._tr('plate.noEvent', 'No event selected'), 'error');
             return false;
         }
         const confidence = Number(this.lastOCRResult.confidence) || 0;
@@ -4131,7 +4156,7 @@ class PlateEnhancer {
             notesManager.saveNotes(key, { text: text ? `${text}\n${line}` : line, tags: notes.tags || [] });
         }
         console.log('[PlateEnhancer] Plate saved to notes for', key);
-        this.showToast('Saved to notes!');
+        this.showToast(PlateEnhancer._tr('plate.savedNotes', 'Saved to notes!'));
         return true;
     }
 
@@ -4287,7 +4312,7 @@ class PlateEnhancer {
         const dialog = document.createElement('div');
         dialog.className = 'plate-enhancer-dialog';
         dialog.innerHTML = `
-            <h3>Error</h3>
+            <h3>${PlateEnhancer._tr('plate.error', 'Error')}</h3>
             <div class="plate-enhancer-error">${message}</div>
             <div class="plate-enhancer-dialog-actions">
                 <button class="plate-enhancer-btn plate-enhancer-btn-primary">OK</button>
@@ -4364,7 +4389,7 @@ class PlateEnhancer {
         if (!window.app?.sessionManager?.checkAccess) {
             // No session manager - this is free mode, block Pro features
             console.log(`[PlateEnhancer] Pro feature "${feature}" blocked - no session manager`);
-            this.showToast('This feature requires TeslaCamViewer Pro');
+            this.showToast(PlateEnhancer._tr('plate.needsPro', 'This feature requires TeslaCamViewer Pro'));
             return false;
         }
 

@@ -142,7 +142,7 @@
             if (state.indexed.size > 0) {
                 state.enabled = true;
                 log(`Restored ${state.indexed.size} indexed events from IndexedDB`);
-                emit('status', { state: 'ready', message: `Restored ${state.indexed.size} indexed events` });
+                emit('status', { state: 'ready', message: tr('aiSearch.restored', `Restored ${state.indexed.size} indexed events`, { count: state.indexed.size }) });
                 emit('ready');
                 return true;
             }
@@ -178,6 +178,12 @@
     };
 
     // ---- Event dispatch helpers ------------------------------------------
+    // Translated text (i18n.js), English when i18n or the key isn't there
+    function tr(key, english, params = {}) {
+        const t = window.i18n ? window.i18n.t(key, params) : key;
+        return t === key ? english : t;
+    }
+
     function emit(name, detail = {}) {
         window.dispatchEvent(new CustomEvent('ai-search:' + name, { detail }));
     }
@@ -291,7 +297,7 @@
             }
         }
 
-        emit('status', { state: 'loading-model', message: `Loading ${modelInfo.name}…` });
+        emit('status', { state: 'loading-model', message: tr('aiSearch.loadingNamed', `Loading ${modelInfo.name}…`, { name: modelInfo.name }) });
         state.imageProcessor = await AutoProcessor.from_pretrained(modelInfo.id);
         state.tokenizer = await AutoTokenizer.from_pretrained(modelInfo.id);
 
@@ -565,7 +571,12 @@
     }
 
     // ---- Indexing ---------------------------------------------------------
-    async function indexEvent(event, strategy) {
+    // signal: aborted when the event ran out of time (audit 4.4). Before, the timed-out event kept decoding and
+    // embedding in the background while the next one started, so a slow event slowed every later one.
+    async function indexEvent(event, strategy, signal) {
+        const stopIfAborted = () => {
+            if (signal?.aborted) { const e = new Error('indexing this event stopped (time limit)'); e.aborted = true; throw e; }
+        };
         const samples = planSamples(event, strategy);
         if (samples.length === 0) return { frames: [], tags: [] };
         const byFile = new Map();
@@ -577,18 +588,25 @@
         const frames = [];
         const motionState = { lastHash: null };
         for (const { clip, samples: fileSamples } of byFile.values()) {
+            stopIfAborted();
             const file = await clip.fileHandle.getFile();
             const decoder = new window.FastClipDecoder();
             try {
                 await decoder.init(file);
                 for (const samp of fileSamples) {
+                    stopIfAborted();
                     try {
                         if (samp.denseStrategy) {
                             const keyframeCtsList = decoder.samples.filter(s => s.is_sync).map(s => s.cts);
                             for (const cts of keyframeCtsList) {
+                                stopIfAborted();
                                 const offsetSec = cts / decoder.timescale;
+                                let bitmap = null;
                                 try {
-                                    const { bitmap, actualTime } = await decoder.extractAt(offsetSec);
+                                    const got = await decoder.extractAt(offsetSec);
+                                    bitmap = got.bitmap;
+                                    const actualTime = got.actualTime;
+                                    stopIfAborted();
                                     let skip = false;
                                     if (samp.denseStrategy === 'motion') {
                                         const h = computeHash(bitmap);
@@ -606,25 +624,34 @@
                                             embedding
                                         });
                                     }
-                                    bitmap.close?.();
                                 } catch (err) {
+                                    if (err?.aborted) throw err;
                                     log(`frame extract failed: ${err.message}`, 'warn');
+                                } finally {
+                                    bitmap?.close?.();      // also when embedding threw
                                 }
                             }
                         } else {
-                            const { bitmap, actualTime } = await decoder.extractAt(samp.offsetInClip);
-                            const embedding = await embedImage(bitmap);
-                            frames.push({
-                                camera: samp.camera,
-                                tag: samp.tag,
-                                clipName: clip.fileName,
-                                offsetInClip: actualTime,
-                                thumbDataUrl: makeThumb(bitmap),
-                                embedding
-                            });
-                            bitmap.close?.();
+                            let bitmap = null;
+                            try {
+                                const got = await decoder.extractAt(samp.offsetInClip);
+                                bitmap = got.bitmap;
+                                stopIfAborted();
+                                const embedding = await embedImage(bitmap);
+                                frames.push({
+                                    camera: samp.camera,
+                                    tag: samp.tag,
+                                    clipName: clip.fileName,
+                                    offsetInClip: got.actualTime,
+                                    thumbDataUrl: makeThumb(bitmap),
+                                    embedding
+                                });
+                            } finally {
+                                bitmap?.close?.();          // also when embedding threw
+                            }
                         }
                     } catch (err) {
+                        if (err?.aborted) throw err;
                         log(`sample failed: ${err.message}`, 'warn');
                     }
                 }
@@ -639,11 +666,18 @@
     // WebCodecs. If we blow past, something's wrong with that event —
     // abandon and move on rather than stalling the whole index.
     const PER_EVENT_TIMEOUT_MS = 120000;
-    function withTimeout(promise, ms, label) {
+    // controller: aborted when the time runs out, so the work itself stops too (audit 4.4)
+    function withTimeout(promise, ms, label, controller) {
+        let timer = null;
         return Promise.race([
             promise,
-            new Promise((_, rej) => setTimeout(() => rej(new Error(`${label || 'operation'} timed out after ${(ms/1000).toFixed(0)}s`)), ms))
-        ]);
+            new Promise((_, rej) => {
+                timer = setTimeout(() => {
+                    controller?.abort();
+                    rej(new Error(`${label || 'operation'} timed out after ${(ms/1000).toFixed(0)}s`));
+                }, ms);
+            })
+        ]).finally(() => clearTimeout(timer));
     }
 
     // Pause/cancel control flags
@@ -661,21 +695,23 @@
         const allEvents = (opts.events || window.app?.eventBrowser?.events || []);
         const events = allEvents.filter(e => e.clips?.length > 0 && e.type !== 'RecentClips');
         const skipped = allEvents.length - events.length;
-        if (events.length === 0) throw new Error('no indexable events (RecentClips are skipped)');
+        if (events.length === 0) throw new Error(tr('aiSearch.noIndexable', 'no indexable events (RecentClips are skipped)'));
         const strategy = opts.strategy || state.strategy;
         state.indexing = true;
         state.paused = false;
         state.cancelled = false;
         state.indexProgress = { done: 0, total: events.length, currentName: '', startedAt: Date.now() };
         const skippedNote = skipped > 0 ? ` (skipping ${skipped} RecentClips)` : '';
-        emit('status', { state: 'indexing', message: `Indexing ${events.length} events${skippedNote} (${strategy})…` });
+        emit('status', { state: 'indexing', message: skipped > 0
+            ? tr('aiSearch.indexingSkipping', `Indexing ${events.length} events${skippedNote} (${strategy})…`, { count: events.length, skipped, strategy })
+            : tr('aiSearch.indexingEvents', `Indexing ${events.length} events (${strategy})…`, { count: events.length, strategy }) });
         log(`Starting index: ${events.length} events, strategy=${strategy}${skippedNote}`);
         try {
             await ensureClipLoaded();
             for (let i = 0; i < events.length; i++) {
                 // Pause loop
                 while (state.paused && !state.cancelled) {
-                    emit('progress', { done: i, total: events.length, status: '⏸ Paused', paused: true });
+                    emit('progress', { done: i, total: events.length, status: '⏸ ' + tr('aiSearch.paused', 'Paused'), paused: true });
                     await new Promise(r => setTimeout(r, 400));
                 }
                 if (state.cancelled) { log('Index cancelled by user', 'warn'); break; }
@@ -683,36 +719,40 @@
                 const ev = events[i];
                 if (state.indexed.has(ev.name) && !opts.reindex) {
                     state.indexProgress.done++;
-                    emit('progress', _progressDetail(i, events.length, `Skipped: ${ev.name}`, ev.name));
+                    emit('progress', _progressDetail(i, events.length, tr('aiSearch.skippedEvent', `Skipped: ${ev.name}`, { name: ev.name }), ev.name));
                     continue;
                 }
                 state.indexProgress.currentName = ev.name;
-                emit('progress', _progressDetail(i, events.length, `Indexing ${ev.name}…`, ev.name));
+                emit('progress', _progressDetail(i, events.length, tr('aiSearch.indexingEvent', `Indexing ${ev.name}…`, { name: ev.name }), ev.name));
                 log(`[${i+1}/${events.length}] ${ev.name} (${ev.clips?.length || 0} clips)`);
+                const ac = new AbortController();
+                const work = indexEvent(ev, strategy, ac.signal);
                 try {
-                    const record = await withTimeout(indexEvent(ev, strategy), PER_EVENT_TIMEOUT_MS, `indexEvent(${ev.name})`);
+                    const record = await withTimeout(work, opts.eventTimeoutMs || PER_EVENT_TIMEOUT_MS, `indexEvent(${ev.name})`, ac);
                     state.indexed.set(ev.name, record);
                     log(`[${i+1}/${events.length}] ${ev.name} → ${record.frames.length} frames`);
                 } catch (err) {
                     log(`[${i+1}/${events.length}] ${ev.name} FAILED: ${err.message}`, 'err');
+                    // Timed out: let it stop (it checks between frames) before the next event starts, at most 5 s
+                    if (ac.signal.aborted) await Promise.race([work.catch(() => {}), new Promise(r => setTimeout(r, 5000))]);
                 }
                 state.indexProgress.done = i + 1;
                 // Yield to main so the UI can paint progress + respond to input
                 await yieldToMain();
             }
             if (!state.cancelled) {
-                emit('progress', _progressDetail(events.length, events.length, 'Computing tags…', ''));
+                emit('progress', _progressDetail(events.length, events.length, tr('aiSearch.computingTags', 'Computing tags…'), ''));
                 await computeEventTags();
                 state.enabled = true;
                 // Persist to IndexedDB so reloads don't force re-index
-                emit('progress', _progressDetail(events.length, events.length, 'Saving index…', ''));
+                emit('progress', _progressDetail(events.length, events.length, tr('aiSearch.savingIndex', 'Saving index…'), ''));
                 await persistIndex();
-                emit('status', { state: 'ready', message: `Indexed ${state.indexed.size} events (saved)` });
+                emit('status', { state: 'ready', message: tr('aiSearch.indexedSaved', `Indexed ${state.indexed.size} events (saved)`, { count: state.indexed.size }) });
                 emit('ready');
             } else {
                 // Still persist partial progress
                 await persistIndex();
-                emit('status', { state: 'cancelled', message: `Indexing cancelled at ${state.indexed.size} events (partial saved)` });
+                emit('status', { state: 'cancelled', message: tr('aiSearch.cancelledAt', `Indexing cancelled at ${state.indexed.size} events (partial saved)`, { count: state.indexed.size }) });
             }
         } finally {
             state.indexing = false;
@@ -736,13 +776,13 @@
         const ev = (window.app?.eventBrowser?.events || []).find(e => e.name === eventId);
         if (!ev) throw new Error(`event not found: ${eventId}`);
         await ensureClipLoaded();
-        emit('status', { state: 'indexing', message: `Deep-indexing ${eventId}…` });
+        emit('status', { state: 'indexing', message: tr('aiSearch.deepIndexing', `Deep-indexing ${eventId}…`, { name: eventId }) });
         state.indexed.delete(eventId);
         const record = await indexEvent(ev, 'motion');
         state.indexed.set(eventId, record);
         await computeEventTags();
         await persistIndex();
-        emit('status', { state: 'ready', message: `Deep-indexed ${eventId} (saved)` });
+        emit('status', { state: 'ready', message: tr('aiSearch.deepIndexed', `Deep-indexed ${eventId} (saved)`, { name: eventId }) });
         emit('ready');
     }
 
@@ -849,7 +889,7 @@
                 tx.objectStore('events').delete(IDBKeyRange.bound(prefix, prefix + '\uffff'));
             }
         } catch (e) { /* ignore */ }
-        emit('status', { state: 'cleared', message: 'Index cleared' });
+        emit('status', { state: 'cleared', message: tr('aiSearch.cleared', 'Index cleared') });
     }
 
     function getStatus() {

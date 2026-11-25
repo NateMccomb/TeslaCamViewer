@@ -2904,6 +2904,11 @@ button svg *,
     pointer-events: auto;
 }
 
+/* Settings > Timeline > Show clip markers off */
+body.tcv-hide-clip-markers .clip-marker {
+    display: none;
+}
+
 .sentry-trigger-marker {
     position: absolute;
     top: -10px;
@@ -4590,6 +4595,12 @@ select option:hover,
     font-family: var(--font-ui);
 }
 
+/* fitPopupToMap(): the popup is no wider than the map, so the content may be narrower than 200 px (#548) */
+.tcv-fitted-popup .map-popup {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .map-popup-header {
     display: flex;
     justify-content: space-between;
@@ -6051,6 +6062,22 @@ select option:hover,
 .setting-status.info {
     color: var(--text-muted);
     background: rgba(128, 128, 128, 0.1);
+}
+
+/* A small action inside a status line (Settings > Advanced > Video player) */
+.settings-inline-btn {
+    background: transparent;
+    border: 1px solid currentColor;
+    color: inherit;
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+    font-size: inherit;
+    cursor: pointer;
+    margin-left: 0.25rem;
+}
+
+.settings-inline-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .setting-select {
@@ -10760,6 +10787,25 @@ body.theme-light .offline-packager-footer {
 .sync-complete-summary-text {
     font-size: 0.85rem;
     color: var(--text-secondary);
+}
+
+/* Not every event made it (or cancelled): amber; none did: red (#584) */
+.sync-complete-compact.sync-complete-partial {
+    background: rgba(255, 184, 0, 0.1);
+    border-top-color: rgba(255, 184, 0, 0.4);
+}
+
+.sync-complete-compact.sync-complete-partial .sync-complete-title {
+    color: var(--warning, #ffb800);
+}
+
+.sync-complete-compact.sync-complete-failed {
+    background: rgba(255, 59, 59, 0.1);
+    border-top-color: rgba(255, 59, 59, 0.4);
+}
+
+.sync-complete-compact.sync-complete-failed .sync-complete-title {
+    color: var(--danger, #ff3b3b);
 }
 
 .sync-errors-compact {

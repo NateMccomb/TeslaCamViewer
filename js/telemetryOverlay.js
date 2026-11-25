@@ -892,6 +892,8 @@ class TelemetryOverlay {
             const data = await window.seiExtractor.extractFromFile(file);
             // The event changed while this clip was parsing: drop it (#527).
             if (gen !== this._dataGen) return null;
+            // The file couldn't be read: not kept as a clip without telemetry, so it can be read again (#635)
+            if (data && data.readError) return data;
             this.clipSeiData.set(cacheKey, data);
             this._dataVersion++;
             return data;
@@ -948,7 +950,7 @@ class TelemetryOverlay {
             if (!data || !data.frames || data.frames.length === 0) continue;
 
             // The player's clip length and start (#537)
-            const actualDuration = TelemetryOverlay.clipTiming().clipLength(durations, clipIndex);
+            const actualDuration = TelemetryOverlay.clipTiming().frontLength(durations, clipIndex);   // the front's length (#587)
             const baseTime = TelemetryOverlay.clipTiming().clipStart(durations, clipIndex);
 
             // Sample frames (every ~1 second of video = every ~36 frames at 36fps)
@@ -960,9 +962,8 @@ class TelemetryOverlay {
                 if (frame.latitude_deg && frame.longitude_deg &&
                     Math.abs(frame.latitude_deg) > 0.001 && Math.abs(frame.longitude_deg) > 0.001) {
 
-                    // Calculate time within event
-                    const frameRatio = i / data.frames.length;
-                    const timeInClip = frameRatio * actualDuration;
+                    // Time within event, at the frame's own video frame (#516)
+                    const timeInClip = TelemetryOverlay.seiClipTime(data, i, actualDuration);
                     const eventTime = baseTime + timeInClip;
 
                     points.push({
@@ -985,6 +986,18 @@ class TelemetryOverlay {
      */
     hasTelemetryData() {
         return this.clipSeiData.size > 0;
+    }
+
+    /**
+     * Does any loaded clip carry telemetry frames? hasTelemetryData() also counts clips parsed with none (from
+     * before the car woke up, or older firmware), so it can't tell whether the open event has telemetry (#635).
+     * @returns {boolean}
+     */
+    hasTelemetryFrames() {
+        for (const data of this.clipSeiData.values()) {
+            if (data && Array.isArray(data.frames) && data.frames.length > 0) return true;
+        }
+        return false;
     }
 
     /**
@@ -1113,22 +1126,40 @@ class TelemetryOverlay {
 
         const parts = [];
 
+        // In the user's language (#548); English when i18n or a key is missing
+        const i18n = window.i18n;
+        const tr = (key, english, params = {}) => {
+            let t = i18n ? i18n.t(key, params) : key;
+            if (!t || t === key) {
+                t = english;
+                for (const [k, v] of Object.entries(params)) t = t.split(`{{${k}}}`).join(String(v));
+            }
+            return t;
+        };
+        const RATING = { 'smooth': 'smooth', 'good': 'good', 'moderate': 'moderate', 'rough': 'rough', 'very rough': 'veryRough' };
+
         const roughness = this.getRoadRoughness();
         if (roughness) {
             const stars = '★'.repeat(roughness.stars) + '☆'.repeat(5 - roughness.stars);
-            parts.push(`Road: ${stars} (${roughness.rating})`);
+            const rk = RATING[roughness.rating];
+            const rating = rk ? tr(`insights.rating.${rk}`, roughness.rating) : roughness.rating;
+            parts.push(tr('insights.road', 'Road: {{stars}} ({{rating}})', { stars, rating }));
         }
 
         const ap = this.getAutopilotStats();
         if (ap && ap.percentActive > 0) {
             const rounded = Math.round(ap.percentActive);
             const dom = ap.dominantState !== 'NONE' ? ap.dominantState : 'AP';
-            parts.push(`${rounded}% on ${dom}`);
+            parts.push(tr('insights.apShare', '{{percent}}% on {{mode}}', { percent: rounded, mode: dom }));
         }
 
         const health = this.getRecordingHealth();
         if (!health.isHealthy) {
-            parts.push(`⚠ ${health.shortClipCount} short clip${health.shortClipCount === 1 ? '' : 's'}`);
+            const n = health.shortClipCount;
+            const english = `${n} short clip${n === 1 ? '' : 's'}`;
+            let text = i18n && typeof i18n.plural === 'function' ? i18n.plural('insights.shortClips', n) : english;
+            if (!text || text.startsWith('insights.shortClips')) text = english;
+            parts.push(`⚠ ${text}`);
         }
 
         return parts.length > 0 ? parts.join(' · ') : null;
@@ -1160,9 +1191,14 @@ class TelemetryOverlay {
             // This avoids issues with incorrect fps from MP4 metadata
             let frameIndex;
             if (videoDuration && videoDuration > 0) {
-                // Calculate frame index from time position as fraction of total duration
-                const progress = Math.min(timeInClip / videoDuration, 1);
-                frameIndex = Math.floor(progress * (clipData.frames.length - 1));
+                // The SEI frame of the video frame on screen (#516): a clip whose
+                // telemetry starts part-way shows none before it, instead of its
+                // frames spread over the whole clip.
+                frameIndex = TelemetryOverlay.seiFrameIndexAt(clipData, timeInClip, videoDuration);
+                if (frameIndex < 0) {
+                    this.currentData = null;
+                    return;
+                }
             } else {
                 // Fallback to fps-based calculation if no duration available
                 const fps = clipData.fps || 36;
@@ -1248,7 +1284,13 @@ class TelemetryOverlay {
             }
             return last ? last : { clipIndex: 0, timeInClip: 0 };
         };
-        return { clipLength, clipStart, locateTime };
+        const frontLength = (durs, idx) => {
+            const len = clipLength(durs, idx);
+            const per = durs && Array.isArray(durs.cameras) ? durs.cameras[idx] : null;
+            const f = per ? per.front : undefined;
+            return Number.isFinite(f) && f > 0 && len > 0 ? Math.min(f, len) : len;
+        };
+        return { clipLength, clipStart, locateTime, frontLength };
     }
 
     static seiFrameTime(data, idx, duration) {
@@ -1257,6 +1299,57 @@ class TelemetryOverlay {
         const fi = frames[idx] ? frames[idx].frameIndex : undefined;
         if (vfc > 0 && Number.isFinite(fi)) return (fi / vfc) * duration;
         return frames.length > 1 ? (idx / (frames.length - 1)) * duration : 0;
+    }
+
+    /**
+     * seiFrameTime() for the telemetry collectors (graphs and near-misses,
+     * CSV, insurance report, GPS trail, severity): the frame's own video
+     * frame time (#516). Without frame indexes (or for a bare frames array)
+     * it keeps their even spread, idx / count.
+     */
+    static seiClipTime(data, idx, duration) {
+        const frames = Array.isArray(data) ? data : ((data && data.frames) || []);
+        const vfc = Array.isArray(data) ? 0 : data.videoFrameCount;
+        const fi = frames[idx] ? frames[idx].frameIndex : undefined;
+        if (vfc > 0 && Number.isFinite(fi)) return (fi / vfc) * duration;
+        return frames.length > 0 ? (idx / frames.length) * duration : 0;
+    }
+
+    // The HUD keeps showing the last SEI frame this long (seconds) when the
+    // video frame on screen has none: covers a frame or two without SEI at a
+    // clip start, not a car that only started (or stopped) reporting later.
+    static SEI_MAX_GAP = 1.0;
+
+    /**
+     * Index of the SEI frame on screen at `timeInClip`, the inverse of
+     * seiFrameTime(): the last SEI frame at or before the video frame shown,
+     * by the video frame index the extractor recorded. A clip whose telemetry
+     * starts part-way (car waking up) has no telemetry before that frame:
+     * returns -1 there instead of stretching the SEI frames over the clip
+     * (#516). Clips parsed without frame indexes keep the even spread.
+     * @param {{frames: Array, videoFrameCount: number}} data - one clip's SEI
+     * @param {number} timeInClip - seconds
+     * @param {number} duration - the clip's video length (seconds)
+     * @returns {number} index into data.frames, or -1 for no telemetry
+     */
+    static seiFrameIndexAt(data, timeInClip, duration) {
+        const frames = data && data.frames ? data.frames : [];
+        const n = frames.length;
+        if (n === 0) return -1;
+        const vfc = data.videoFrameCount;
+        const progress = duration > 0 ? Math.min(Math.max(timeInClip / duration, 0), 1) : 0;
+        if (!(vfc > 0) || !Number.isFinite(frames[0].frameIndex) || !(duration > 0)) {
+            return Math.max(0, Math.min(Math.floor(progress * (n - 1)), n - 1));
+        }
+        const shown = Math.min(vfc - 1, Math.floor(progress * vfc + 1e-6));
+        let lo = 0, hi = n - 1, res = -1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (frames[mid].frameIndex <= shown) { res = mid; lo = mid + 1; } else { hi = mid - 1; }
+        }
+        const maxGapFrames = TelemetryOverlay.SEI_MAX_GAP * vfc / duration;
+        if (res < 0) return (frames[0].frameIndex - shown <= maxGapFrames) ? 0 : -1;
+        return (shown - frames[res].frameIndex <= maxGapFrames) ? res : -1;
     }
 
     _seiDataForClip(clipIndex) {
@@ -1289,13 +1382,14 @@ class TelemetryOverlay {
         let last = null;
         for (let idx = 0; idx < durs.length; idx++) {
             const dur = TelemetryOverlay.clipTiming().clipLength(durs, idx);   // 0 s for a clip the player skips (#537)
+            const seiDur = TelemetryOverlay.clipTiming().frontLength(durs, idx);   // the front's own length (#587)
             const data = this._seiDataForClip(idx);
             refs.push(data);
             const frames = (data && data.frames) ? data.frames : [];
             for (let j = 0; j < frames.length; j++) {
                 const f = frames[j];
                 if (!TelemetryOverlay.isValidGpsFix(f)) continue;
-                const t = offset + TelemetryOverlay.seiFrameTime(data, j, dur);
+                const t = offset + TelemetryOverlay.seiFrameTime(data, j, seiDur);
                 if (last && last.lat === f.latitude_deg && last.lon === f.longitude_deg) {
                     last.seen = t;
                     continue;

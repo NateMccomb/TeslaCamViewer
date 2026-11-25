@@ -174,6 +174,12 @@ class TelemetryGraphs {
         return text;
     }
 
+    /** Translated text with the plural form for count (params as in _t) */
+    _plural(key, count, params = {}) {
+        if (window.i18n?.plural) return window.i18n.plural(key, count, params);
+        return `${params.num ?? count} ${key.split('.').pop()}`;
+    }
+
     _init() {
         this._loadThresholds();
         this._createContainer();
@@ -588,10 +594,10 @@ class TelemetryGraphs {
         `;
 
         // Create four graph rows
-        this._createGraphRow('Speed', 'speed');
-        this._createGraphRow('G-Force', 'gforce');
-        this._createGraphRow('Steering', 'steering');
-        this._createGraphRow('Elevation', 'elevation');
+        this._createGraphRow(this._t('telemetry.graphSpeed'), 'speed');
+        this._createGraphRow(this._t('telemetry.graphGForce'), 'gforce');
+        this._createGraphRow(this._t('telemetry.graphSteering'), 'steering');
+        this._createGraphRow(this._t('telemetry.graphElevation'), 'elevation');
 
         this.container.appendChild(this.graphsContent);
 
@@ -939,6 +945,17 @@ class TelemetryGraphs {
     }
 
     /**
+     * Seconds into the clip of SEI frame `idx`, at its own video frame
+     * (TelemetryOverlay.seiClipTime, #516). The even spread is only for
+     * contexts that load this file without the overlay, like unit tests.
+     */
+    static _seiTime(data, idx, duration) {
+        if (typeof TelemetryOverlay !== 'undefined') return TelemetryOverlay.seiClipTime(data, idx, duration);
+        const n = data.frames.length;
+        return n > 0 ? (idx / n) * duration : 0;
+    }
+
+    /**
      * Check if graphs were enabled in previous session
      */
     wasEnabled() {
@@ -975,7 +992,7 @@ class TelemetryGraphs {
             if (!clipData?.frames || clipData.frames.length === 0) return;
 
             const frameCount = clipData.frames.length;
-            const clipDuration = VideoPlayer.clipLength(durations, clipIndex);
+            const clipDuration = VideoPlayer.frontLength(durations, clipIndex);   // front telemetry: the front's length (#587)
             const baseTime = VideoPlayer.clipStart(durations, clipIndex);
 
             // Sample frames (every ~5 seconds of video = every ~180 frames at 36fps)
@@ -984,8 +1001,8 @@ class TelemetryGraphs {
             for (let i = 0; i < frameCount; i += sampleInterval) {
                 const frame = clipData.frames[i];
 
-                const frameRatio = i / frameCount;
-                const timeInClip = frameRatio * clipDuration;
+                // The frame's own video frame time (#516)
+                const timeInClip = TelemetryGraphs._seiTime(clipData, i, clipDuration);
                 const eventTime = baseTime + timeInClip;
 
                 const point = {
@@ -1353,13 +1370,13 @@ class TelemetryGraphs {
             // Average speed
             const avgSpeed = isMetric ? this.tripStats.avgSpeedKph : this.tripStats.avgSpeedMph;
             if (avgSpeed > 0) {
-                parts.push(`<span>Avg <b>${Math.round(avgSpeed)}</b></span>`);
+                parts.push(`<span>${this._t('telemetry.avg')} <b>${Math.round(avgSpeed)}</b></span>`);
             }
 
             // Max speed
             const maxSpeed = isMetric ? this.tripStats.maxSpeedKph : this.tripStats.maxSpeedMph;
             if (maxSpeed > 0) {
-                parts.push(`<span>Max <b style="color: ${this._getAccentColor()}">${Math.round(maxSpeed)}</b></span>`);
+                parts.push(`<span>${this._t('telemetry.max')} <b style="color: ${this._getAccentColor()}">${Math.round(maxSpeed)}</b></span>`);
             }
 
             // Autopilot percentage with event cycling
@@ -1373,18 +1390,18 @@ class TelemetryGraphs {
                 let apDisplay = '';
                 if (hasEvents) {
                     // Show arrows for cycling through AP events
-                    const prevArrow = `<span class="ap-nav ap-prev" style="cursor: pointer; padding: 0 2px; opacity: 0.6;" title="Previous AP event">◀</span>`;
-                    const nextArrow = `<span class="ap-nav ap-next" style="cursor: pointer; padding: 0 2px; opacity: 0.6;" title="Next AP event">▶</span>`;
+                    const prevArrow = `<span class="ap-nav ap-prev" style="cursor: pointer; padding: 0 2px; opacity: 0.6;" title="${this._t('telemetry.previousApEvent')}">◀</span>`;
+                    const nextArrow = `<span class="ap-nav ap-next" style="cursor: pointer; padding: 0 2px; opacity: 0.6;" title="${this._t('telemetry.nextApEvent')}">▶</span>`;
 
                     if (currentEvent) {
                         // Show current event info
                         const eventLabel = currentEvent.type === 'engaged' ? '▲' :
                                           currentEvent.type === 'disconnected' ? '▼' : '↔';
                         const modeLabel = currentEvent.toMode !== 'NONE' ? currentEvent.toMode : currentEvent.fromMode;
-                        apDisplay = `<span class="ap-events-cycler" style="display: inline-flex; align-items: center; gap: 2px;" title="Click arrows to cycle through ${totalEvents} AP events">${prevArrow}<b style="color: #0078ff">${eventLabel} ${modeLabel}</b> <span style="opacity: 0.6">${eventNum}/${totalEvents}</span>${nextArrow}</span>`;
+                        apDisplay = `<span class="ap-events-cycler" style="display: inline-flex; align-items: center; gap: 2px;" title="${this._t('telemetry.cycleApEvents', { count: totalEvents })}">${prevArrow}<b style="color: #0078ff">${eventLabel} ${modeLabel}</b> <span style="opacity: 0.6">${eventNum}/${totalEvents}</span>${nextArrow}</span>`;
                     } else {
                         // Show AP% with event count
-                        apDisplay = `<span class="ap-events-cycler" style="display: inline-flex; align-items: center; gap: 2px;" title="Click arrows to cycle through ${totalEvents} AP events">${prevArrow}AP <b style="color: #0078ff">${this.tripStats.apPercent}%</b> <span style="opacity: 0.6">(${totalEvents})</span>${nextArrow}</span>`;
+                        apDisplay = `<span class="ap-events-cycler" style="display: inline-flex; align-items: center; gap: 2px;" title="${this._t('telemetry.cycleApEvents', { count: totalEvents })}">${prevArrow}AP <b style="color: #0078ff">${this.tripStats.apPercent}%</b> <span style="opacity: 0.6">(${totalEvents})</span>${nextArrow}</span>`;
                     }
                 } else {
                     apDisplay = `<span>AP <b style="color: #0078ff">${this.tripStats.apPercent}%</b></span>`;
@@ -1396,8 +1413,8 @@ class TelemetryGraphs {
             if (this.tripStats.smoothnessScore) {
                 const score = this.tripStats.smoothnessScore;
                 const color = this._getSmoothnessColor(score.overall);
-                const tooltip = `Steering: ${score.steering}, Accel: ${score.accel}, Lateral: ${score.lateral}`;
-                parts.push(`<span title="${tooltip}" style="cursor: help;">Smooth: <b style="color: ${color}">${score.overall}</b></span>`);
+                const tooltip = this._t('telemetry.smoothTooltip', { steering: score.steering, accel: score.accel, lateral: score.lateral });
+                parts.push(`<span title="${tooltip}" style="cursor: help;">${this._t('telemetry.smooth')} <b style="color: ${color}">${score.overall}</b></span>`);
             }
         }
 
@@ -1421,7 +1438,7 @@ class TelemetryGraphs {
         if (flaggedNearMisses.length > 0) {
             const maxScore = Math.max(...flaggedNearMisses.map(nm => nm.score));
             const color = this._getNearMissColor(maxScore);
-            parts.push(`<span title="Near-miss incidents detected">Near-miss: <b style="color: ${color}">${flaggedNearMisses.length}</b> (max: <b style="color: ${color}">${maxScore.toFixed(1)}</b>)</span>`);
+            parts.push(`<span title="${this._t('telemetry.nearMissDetected')}">${this._t('telemetry.nearMiss')} <b style="color: ${color}">${flaggedNearMisses.length}</b> (${this._t('telemetry.maxLabel')} <b style="color: ${color}">${maxScore.toFixed(1)}</b>)</span>`);
         }
 
         // Incident markers summary (hard braking, sudden swerves)
@@ -1444,11 +1461,11 @@ class TelemetryGraphs {
 
             // Build type breakdown
             const typeInfo = [];
-            if (brakingCount > 0) typeInfo.push(`${brakingCount} brake`);
-            if (swerveCount > 0) typeInfo.push(`${swerveCount} swerve`);
+            if (brakingCount > 0) typeInfo.push(this._t('telemetry.brakeCount', { count: brakingCount }));
+            if (swerveCount > 0) typeInfo.push(this._t('telemetry.swerveCount', { count: swerveCount }));
             const typeBreakdown = typeInfo.length > 0 ? ` (${typeInfo.join(', ')})` : '';
 
-            parts.push(`<span title="Incident markers: hard braking and sudden swerves worth reviewing">Incidents: <b style="color: ${color}">${totalCount}</b>${typeBreakdown}</span>`);
+            parts.push(`<span title="${this._t('telemetry.incidentsTooltip')}">${this._t('telemetry.incidents')} <b style="color: ${color}">${totalCount}</b>${typeBreakdown}</span>`);
         }
 
         // Hard braking/acceleration summary (if anomalies are enabled)
@@ -1458,11 +1475,11 @@ class TelemetryGraphs {
             let hardEventText = '';
 
             if (brakeCount > 0 && accelCount > 0) {
-                hardEventText = `<span title="Hard braking/acceleration events"><b style="color: #ef4444">${brakeCount}</b> brakes, <b style="color: #22c55e">${accelCount}</b> accels</span>`;
+                hardEventText = `<span title="${this._t('telemetry.hardBrakingAccelEvents')}">${this._t('telemetry.brakesAccels', { brakes: `<b style="color: #ef4444">${brakeCount}</b>`, accels: `<b style="color: #22c55e">${accelCount}</b>` })}</span>`;
             } else if (brakeCount > 0) {
-                hardEventText = `<span title="Hard braking events"><b style="color: #ef4444">${brakeCount}</b> hard brake${brakeCount > 1 ? 's' : ''}</span>`;
+                hardEventText = `<span title="${this._t('telemetry.hardBrakingEvents')}">${this._plural('telemetry.hardBrakes', brakeCount, { num: `<b style="color: #ef4444">${brakeCount}</b>` })}</span>`;
             } else if (accelCount > 0) {
-                hardEventText = `<span title="Hard acceleration events"><b style="color: #22c55e">${accelCount}</b> hard accel${accelCount > 1 ? 's' : ''}</span>`;
+                hardEventText = `<span title="${this._t('telemetry.hardAccelEvents')}">${this._plural('telemetry.hardAccels', accelCount, { num: `<b style="color: #22c55e">${accelCount}</b>` })}</span>`;
             }
 
             if (hardEventText) {
@@ -1471,7 +1488,7 @@ class TelemetryGraphs {
         }
 
         if (parts.length === 0) {
-            this.statsContainer.innerHTML = '<span style="color: rgba(255,255,255,0.3);">No data</span>';
+            this.statsContainer.innerHTML = `<span style="color: rgba(255,255,255,0.3);">${this._t('telemetry.noData')}</span>`;
         } else {
             this.statsContainer.innerHTML = parts.join('');
 
@@ -2188,16 +2205,16 @@ class TelemetryGraphs {
         switch (marker.type) {
             case 'incident':
                 const inc = marker.data;
-                const incLabel = inc.type === 'combined' ? 'Combined Incident' :
-                    inc.type === 'swerve' ? 'Sudden Swerve' : 'Hard Braking';
+                const incLabel = inc.type === 'combined' ? this._t('telemetry.incidentCombined') :
+                    inc.type === 'swerve' ? this._t('telemetry.incidentSwerve') : this._t('telemetry.incidentBraking');
                 const incIcon = inc.type === 'combined' ? '⚠' :
                     inc.type === 'swerve' ? '↔' : '⬇';
-                let incDetails = `Time: ${time}<br>Speed: ${Math.round(inc.speed)}&nbsp;mph`;
+                let incDetails = `${this._t('telemetry.tipTime')} ${time}<br>${this._t('telemetry.tipSpeed')} ${Math.round(inc.speed)}&nbsp;mph`;
                 if (inc.type === 'braking' || inc.type === 'combined') {
-                    incDetails += `<br>Braking: ${inc.gForce.toFixed(2)}g, -${inc.speedDrop.toFixed(1)}&nbsp;mph`;
+                    incDetails += `<br>${this._t('telemetry.tipBraking')} ${inc.gForce.toFixed(2)}g, -${inc.speedDrop.toFixed(1)}&nbsp;mph`;
                 }
                 if (inc.type === 'swerve' || inc.type === 'combined') {
-                    incDetails += `<br>Lateral: ${inc.lateralG.toFixed(2)}g`;
+                    incDetails += `<br>${this._t('telemetry.tipLateral')} ${inc.lateralG.toFixed(2)}g`;
                 }
                 if (inc.autopilotMode && inc.autopilotMode !== 'NONE') {
                     incDetails += `<br>AP: ${inc.autopilotMode}`;
@@ -2207,38 +2224,38 @@ class TelemetryGraphs {
 
             case 'hard_brake':
                 const hb = marker.data;
-                content = `<b style="color: #ef4444">Hard Brake</b><br>` +
-                    `Time: ${time}<br>` +
-                    `G-force: ${Math.abs(hb.gForce).toFixed(2)}g`;
+                content = `<b style="color: #ef4444">${this._t('telemetry.hardBrake')}</b><br>` +
+                    `${this._t('telemetry.tipTime')} ${time}<br>` +
+                    `${this._t('telemetry.tipGForce')} ${Math.abs(hb.gForce).toFixed(2)}g`;
                 break;
 
             case 'hard_accel':
                 const ha = marker.data;
-                content = `<b style="color: #22c55e">Hard Accel</b><br>` +
-                    `Time: ${time}<br>` +
-                    `G-force: ${Math.abs(ha.gForce).toFixed(2)}g`;
+                content = `<b style="color: #22c55e">${this._t('telemetry.hardAccel')}</b><br>` +
+                    `${this._t('telemetry.tipTime')} ${time}<br>` +
+                    `${this._t('telemetry.tipGForce')} ${Math.abs(ha.gForce).toFixed(2)}g`;
                 break;
 
             case 'ap_event':
                 const ap = marker.data;
                 const apIcon = ap.type === 'engaged' ? '▲' : ap.type === 'disconnected' ? '▼' : '↔';
                 const apColor = ap.type === 'engaged' ? '#22c55e' : ap.type === 'disconnected' ? '#ef4444' : '#3b82f6';
-                const apLabel = ap.type === 'engaged' ? 'AP Engaged' : ap.type === 'disconnected' ? 'AP Disconnected' : 'AP Mode Change';
+                const apLabel = ap.type === 'engaged' ? this._t('telemetry.apEngaged') : ap.type === 'disconnected' ? this._t('telemetry.apDisconnected') : this._t('telemetry.apModeChange');
                 content = `<b style="color: ${apColor}">${apIcon} ${apLabel}</b><br>` +
-                    `Time: ${time}<br>` +
-                    `Mode: ${ap.toMode !== 'NONE' ? ap.toMode : ap.fromMode}<br>` +
-                    `Speed: ${Math.round(ap.speed)}&nbsp;mph`;
+                    `${this._t('telemetry.tipTime')} ${time}<br>` +
+                    `${this._t('telemetry.tipMode')} ${ap.toMode !== 'NONE' ? ap.toMode : ap.fromMode}<br>` +
+                    `${this._t('telemetry.tipSpeed')} ${Math.round(ap.speed)}&nbsp;mph`;
                 break;
 
             case 'anomaly':
                 const an = marker.data;
-                content = `<b style="color: ${this._getAnomalyColor(an.severity)}">Anomaly</b><br>` +
-                    `Time: ${time}<br>` +
-                    `${an.description || 'Unknown'}`;
+                content = `<b style="color: ${this._getAnomalyColor(an.severity)}">${this._t('telemetry.anomaly')}</b><br>` +
+                    `${this._t('telemetry.tipTime')} ${time}<br>` +
+                    `${an.description || this._t('telemetry.unknown')}`;
                 break;
 
             default:
-                content = `Marker at ${time}`;
+                content = this._t('telemetry.markerAt', { time });
         }
 
         this.tooltip.innerHTML = content;
@@ -2302,7 +2319,7 @@ class TelemetryGraphs {
         // Get raw SEI data from callback
         if (!this.getSeiData) {
             console.warn('[TelemetryGraphs] No getSeiData callback configured');
-            alert('Export failed: Telemetry data system not initialized.');
+            alert(this._t('telemetry.csvNotReady'));
             return;
         }
 
@@ -2314,7 +2331,7 @@ class TelemetryGraphs {
         if (!clipSeiData || (clipSeiData instanceof Map && clipSeiData.size === 0) ||
             (!(clipSeiData instanceof Map) && typeof clipSeiData === 'object' && Object.keys(clipSeiData).length === 0)) {
             console.warn('[TelemetryGraphs] No SEI data available for export');
-            alert('No telemetry data available to export.\n\nMake sure you have played or loaded a video clip first.');
+            alert(this._t('telemetry.csvNoData'));
             return;
         }
 
@@ -2344,14 +2361,13 @@ class TelemetryGraphs {
             }
 
             const clipIndex = typeof key === 'string' ? parseInt(key.split('_')[0]) : key;
-            const clipDuration = VideoPlayer.clipLength(durations, clipIndex);
+            const clipDuration = VideoPlayer.frontLength(durations, clipIndex);   // front telemetry: the front's length (#587)
             const baseTime = VideoPlayer.clipStart(durations, clipIndex);
             const frameCount = clipData.frames.length;
 
             for (let i = 0; i < frameCount; i++) {
                 const frame = clipData.frames[i];
-                const frameRatio = i / frameCount;
-                const timeInClip = frameRatio * clipDuration;
+                const timeInClip = TelemetryGraphs._seiTime(clipData, i, clipDuration);   // #516
                 const eventTime = baseTime + timeInClip;
 
                 allRows.push({
@@ -2375,7 +2391,7 @@ class TelemetryGraphs {
 
         if (allRows.length === 0) {
             console.warn('[TelemetryGraphs] No data rows to export');
-            alert('No telemetry data rows found in the loaded clips.\n\nTry playing through more of the video to load telemetry data.');
+            alert(this._t('telemetry.csvNoRows'));
             return;
         }
 

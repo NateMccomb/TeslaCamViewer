@@ -4,6 +4,12 @@
  */
 
 class InsuranceReport {
+    /** The front video's own length in a clip, which its telemetry spreads over (#587); the clip's
+     *  player length without VideoPlayer (unit tests load this file alone). */
+    static _frontLength(durations, clipIndex) {
+        if (typeof VideoPlayer !== 'undefined' && VideoPlayer.frontLength) return VideoPlayer.frontLength(durations, clipIndex);
+        return durations ? durations[clipIndex] : undefined;
+    }
     constructor(videoPlayer, screenshotCapture) {
         this.videoPlayer = videoPlayer;
         this.screenshotCapture = screenshotCapture;
@@ -221,21 +227,44 @@ class InsuranceReport {
      * @param {number} y
      * @returns {number}
      */
+    /** An English locale for the PDF's dates: the browser's own English variant (en-GB, en-AU), else en-US. */
+    _pdfDateLocale() {
+        try {
+            const nav = typeof navigator !== 'undefined' ? (navigator.languages || [navigator.language]) : [];
+            const en = nav.find(t => /^en-/i.test(t || ''));
+            if (en) { new Intl.DateTimeFormat(en); return en; }
+        } catch (e) { /* en-US */ }
+        return 'en-US';
+    }
+
+    /** Does the computer use a 12-hour clock? (its default locale, the way exports decide) */
+    _pdfHour12() {
+        try {
+            const o = new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions();
+            return o.hour12 !== undefined ? o.hour12 : !/^h2[34]$/.test(o.hourCycle || '');
+        } catch (e) {
+            return true;
+        }
+    }
+
     _addEventInfo(doc, event, y) {
         // Section title
         y = this._addSectionTitle(doc, 'Event Information', y);
 
         const eventDate = new Date(event.timestamp);
-        const dateStr = eventDate.toLocaleDateString('en-US', {
+        // The report is in English; the date order and 12/24-hour clock follow the computer (audit 2.20)
+        const pdfLocale = this._pdfDateLocale();
+        const dateStr = eventDate.toLocaleDateString(pdfLocale, {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric'
         });
-        const timeStr = eventDate.toLocaleTimeString('en-US', {
+        const timeStr = eventDate.toLocaleTimeString(pdfLocale, {
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit'
+            second: '2-digit',
+            hour12: this._pdfHour12()
         });
 
         // Event category (Sentry, Saved, Recent)
@@ -831,6 +860,17 @@ class InsuranceReport {
     }
 
     /**
+     * Seconds into the clip of SEI frame `idx`, at its own video frame
+     * (TelemetryOverlay.seiClipTime, #516). The even spread is only for
+     * contexts that load this file without the overlay, like unit tests.
+     */
+    static _seiTime(data, idx, duration) {
+        if (typeof TelemetryOverlay !== 'undefined') return TelemetryOverlay.seiClipTime(data, idx, duration);
+        const n = (Array.isArray(data) ? data : data.frames).length;
+        return n > 0 ? (idx / n) * duration : 0;
+    }
+
+    /**
      * Get telemetry data at a specific time
      * @param {TelemetryOverlay} telemetryOverlay
      * @param {number} targetTime
@@ -864,11 +904,11 @@ class InsuranceReport {
 
             const clipStartTime = clipStartTimes[clipIndex] || (clipIndex * defaultDuration);
 
-            // Frames carry no timestamp: spread them over the clip, like the other telemetry collectors
-            const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+            // Each frame's own video frame time (#516; a clip whose telemetry starts part-way)
+            const clipDuration = InsuranceReport._frontLength(cachedDurations, clipIndex) || defaultDuration;   // the front's telemetry spreads over the front's length (#587)
             for (let i = 0; i < frames.length; i++) {
                 const frame = frames[i];
-                const absoluteTime = clipStartTime + (i / frames.length) * clipDuration;
+                const absoluteTime = clipStartTime + InsuranceReport._seiTime(data, i, clipDuration);
                 const diff = Math.abs(absoluteTime - targetTime);
 
                 if (diff < closestDiff) {
@@ -1152,13 +1192,13 @@ class InsuranceReport {
                 : clipIndex * defaultDuration;
 
             // Get actual clip duration for accurate frame timing
-            const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+            const clipDuration = InsuranceReport._frontLength(cachedDurations, clipIndex) || defaultDuration;   // the front's telemetry spreads over the front's length (#587)
 
             for (let i = 0; i < frames.length; i++) {
                 const frame = frames[i];
                 if (frame.latitude_deg && frame.longitude_deg) {
                     // Estimate time within clip based on frame position
-                    const timeInClip = (i / frames.length) * clipDuration;
+                    const timeInClip = InsuranceReport._seiTime(data, i, clipDuration);
                     const absoluteTime = baseTime + timeInClip;
 
                     // Filter by time range if provided (with 10s buffer before start for "Before Incident" frame)
@@ -1807,12 +1847,12 @@ class InsuranceReport {
                 : clipIndex * defaultDuration;
 
             // Get actual clip duration for accurate frame timing
-            const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+            const clipDuration = InsuranceReport._frontLength(cachedDurations, clipIndex) || defaultDuration;   // the front's telemetry spreads over the front's length (#587)
 
             for (let i = 0; i < frames.length; i++) {
                 const frame = frames[i];
                 // Estimate time within clip based on frame position
-                const timeInClip = (i / frames.length) * clipDuration;
+                const timeInClip = InsuranceReport._seiTime(data, i, clipDuration);
                 const absoluteTime = baseTime + timeInClip;
 
                 // Filter by time range if provided (with 10s buffer before start for "Before Incident" frame)
@@ -2708,11 +2748,11 @@ class InsuranceReport {
             const baseTime = clipStartTimes[clipIndex] !== undefined
                 ? clipStartTimes[clipIndex]
                 : clipIndex * defaultDuration;
-            const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+            const clipDuration = InsuranceReport._frontLength(cachedDurations, clipIndex) || defaultDuration;   // the front's telemetry spreads over the front's length (#587)
 
             for (let i = 0; i < frames.length; i++) {
                 const frame = frames[i];
-                const timeInClip = (i / frames.length) * clipDuration;
+                const timeInClip = InsuranceReport._seiTime(data, i, clipDuration);
                 const absoluteTime = baseTime + timeInClip;
 
                 if (timeRange) {
@@ -3650,12 +3690,12 @@ class InsuranceReport {
                 const baseTime = clipStartTimes[clipIndex] !== undefined
                     ? clipStartTimes[clipIndex]
                     : clipIndex * defaultDuration;
-                const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+                const clipDuration = InsuranceReport._frontLength(cachedDurations, clipIndex) || defaultDuration;   // the front's telemetry spreads over the front's length (#587)
 
                 for (let i = 0; i < frames.length; i++) {
                     const frame = frames[i];
                     if (frame.latitude_deg && frame.longitude_deg) {
-                        const timeInClip = (i / frames.length) * clipDuration;
+                        const timeInClip = InsuranceReport._seiTime(data, i, clipDuration);
                         const absoluteTime = baseTime + timeInClip;
                         const timeDiff = Math.abs(absoluteTime - targetTime);
 
@@ -3756,12 +3796,12 @@ class InsuranceReport {
             const baseTime = clipStartTimes[clipIndex] !== undefined
                 ? clipStartTimes[clipIndex]
                 : clipIndex * defaultDuration;
-            const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+            const clipDuration = InsuranceReport._frontLength(cachedDurations, clipIndex) || defaultDuration;   // the front's telemetry spreads over the front's length (#587)
 
             for (let i = 0; i < frames.length; i++) {
                 const frame = frames[i];
                 if (frame.latitude_deg && frame.longitude_deg) {
-                    const timeInClip = (i / frames.length) * clipDuration;
+                    const timeInClip = InsuranceReport._seiTime(data, i, clipDuration);
                     const absoluteTime = baseTime + timeInClip;
                     allGpsPoints.push({
                         time: absoluteTime,
@@ -4273,14 +4313,14 @@ class InsuranceReport {
             const baseTime = clipStartTimes[clipIndex] !== undefined
                 ? clipStartTimes[clipIndex]
                 : clipIndex * defaultDuration;
-            const clipDuration = cachedDurations[clipIndex] || defaultDuration;
+            const clipDuration = InsuranceReport._frontLength(cachedDurations, clipIndex) || defaultDuration;   // the front's telemetry spreads over the front's length (#587)
 
             for (let i = 0; i < frames.length; i++) {
                 const frame = frames[i];
 
                 // Calculate absolute time for filtering
                 if (timeRange) {
-                    const timeInClip = (i / frames.length) * clipDuration;
+                    const timeInClip = InsuranceReport._seiTime(data, i, clipDuration);
                     const absoluteTime = baseTime + timeInClip;
                     if (absoluteTime < timeRange.start || absoluteTime > timeRange.end) {
                         continue;

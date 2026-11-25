@@ -429,6 +429,7 @@ class TeslaCamViewerApp {
         // Apply timeline zoom setting
         const enableTimelineZoom = this.settingsManager.get('enableTimelineZoom');
         this.timeline.setZoomEnabled(enableTimelineZoom);
+        this.applyClipMarkerSetting(this.settingsManager.get('showClipMarkers'));
 
         // Apply performance settings
         this.applyPerformanceSettings();
@@ -447,6 +448,7 @@ class TeslaCamViewerApp {
             console.log('Settings changed:', settings);
             // Re-apply settings
             this.timeline.setZoomEnabled(settings.enableTimelineZoom);
+            this.applyClipMarkerSetting(settings.showClipMarkers);
             this.applyPerformanceSettings();
 
             // Handle rememberLastFolder toggle
@@ -463,9 +465,7 @@ class TeslaCamViewerApp {
                 this.telemetryOverlay.setStyle(settings.telemetryOverlayStyle);
                 this.telemetryOverlay.setUnits(settings.telemetryOverlayUnits);
                 // Only toggle if state needs to change (avoid infinite loop with onVisibilityChange)
-                if (settings.telemetryOverlayEnabled && !this.telemetryOverlay.isVisible && this.telemetryOverlay.hasTelemetryData()) {
-                    this.telemetryOverlay.show();
-                } else if (!settings.telemetryOverlayEnabled && this.telemetryOverlay.isVisible) {
+                if (!settings.telemetryOverlayEnabled && this.telemetryOverlay.isVisible) {
                     this.telemetryOverlay.hide();
                 }
             }
@@ -473,15 +473,26 @@ class TeslaCamViewerApp {
             // Apply mini-map settings
             if (this.miniMapOverlay) {
                 // Only toggle if state needs to change (avoid infinite loop with onVisibilityChange)
-                if (settings.miniMapEnabled && !this.miniMapOverlay.isVisible && this.telemetryOverlay?.hasTelemetryData()) {
-                    this.miniMapOverlay.show();
-                } else if (!settings.miniMapEnabled && this.miniMapOverlay.isVisible) {
+                if (!settings.miniMapEnabled && this.miniMapOverlay.isVisible) {
                     this.miniMapOverlay.hide();
                 }
                 // Apply dark mode setting
                 this.miniMapOverlay.setDarkMode(settings.miniMapDarkMode);
             }
+
+            // Turned on: shown by the same rule as when an event's telemetry loads, so only on an event with
+            // telemetry. It counted clips parsed without any, so any setting change (an export format) put an
+            // empty HUD and Map over an event with no telemetry (#635).
+            this._applySavedOverlays();
         });
+    }
+
+    /**
+     * Settings > Timeline > "Show clip markers": the lines between clips on the timeline (audit 5.3: it did nothing).
+     * @param {boolean} show
+     */
+    applyClipMarkerSetting(show) {
+        document.body.classList.toggle('tcv-hide-clip-markers', show === false);
     }
 
     /**
@@ -552,6 +563,8 @@ class TeslaCamViewerApp {
             if (quickstartSelect) {
                 quickstartSelect.value = locale;
             }
+            // The open event's date line: translatePage() just put the "No event loaded" placeholder over it (#571)
+            if (this.currentEvent) this._renderEventDate(this.currentEvent);
         });
 
         // Playback controls - combined play/pause toggle
@@ -2116,9 +2129,10 @@ class TeslaCamViewerApp {
                     dateFilter: settings.dateFilter
                 });
 
-                // Check for session recovery from drive
+                // Check for session recovery from drive. Read-only, and parsing never waits on it (#546).
                 if (this.sessionManager) {
-                    await this.sessionManager.checkDriveRecovery(handle);
+                    this.sessionManager.checkDriveRecovery(handle)
+                        .catch(e => console.warn('Drive licence check failed:', e));
                 }
 
                 // If archive drive, skip loading and just save
@@ -2391,6 +2405,20 @@ class TeslaCamViewerApp {
             // Track event index for navigation
             this.currentEventIndex = this.allEvents.findIndex(e => e.name === event.name);
 
+            // The timeline's per-event state switches now, before the clips
+            // load. The fast player decodes in software, so a load can take a
+            // few seconds; a bookmark added in that time went to the previous
+            // event, IN/OUT marks set in it were cleared when the load ended,
+            // and the previous event's gap and near-miss markers stayed up.
+            this.timeline.setCurrentEvent(event.compoundKey || event.name);
+            if (this.clipMarking) {
+                this.clipMarking.clearMarks();
+            }
+            this.timeline.setGapMarkers([], event.clipGroups);
+            if (typeof this.timeline.setNearMissMarkers === 'function') {
+                this.timeline.setNearMissMarkers([]);
+            }
+
             // Load event in video player
             await this.videoPlayer.loadEvent(event);
             if (superseded()) return;
@@ -2463,16 +2491,14 @@ class TeslaCamViewerApp {
             }
             this.timeline.setGapMarkers(gaps, event.clipGroups);
 
-            // Set current event for bookmark persistence (use compoundKey for multi-drive support)
+            // Set current event for bookmark persistence (use compoundKey for multi-drive support).
+            // Set before the load too; again here so the bookmarks are drawn on this event's length.
             this.timeline.setCurrentEvent(event.compoundKey || event.name);
 
             // Update event info
             this.updateEventInfo(event);
 
-            // Clear any previous export marks
-            if (this.clipMarking) {
-                this.clipMarking.clearMarks();
-            }
+            // Export marks were cleared before the load (marks set while it loaded are kept)
 
             // Clear speed limit display for new event
             this.currentSpeedLimitData = null;
@@ -2562,10 +2588,11 @@ class TeslaCamViewerApp {
     }
 
     /**
-     * Update event info display
+     * The open event's date line, in the current language and the computer's date format. A language switch
+     * calls it again: translatePage() puts #eventDate's "No event loaded" placeholder over the line (#571).
      * @param {Object} event
      */
-    updateEventInfo(event) {
+    _renderEventDate(event) {
         const date = new Date(event.timestamp);
         const dateLocale = window.i18n?.dateLocale?.() || 'en-US';
         const dateStr = date.toLocaleDateString(dateLocale, {
@@ -2581,6 +2608,14 @@ class TeslaCamViewerApp {
         });
 
         this.eventDateElement.textContent = this._t('player.dateAtTime', { date: dateStr, time: timeStr });
+    }
+
+    /**
+     * Update event info display
+     * @param {Object} event
+     */
+    updateEventInfo(event) {
+        this._renderEventDate(event);
 
         if (event.metadata) {
             const city = event.metadata.city || '';
@@ -2625,10 +2660,12 @@ class TeslaCamViewerApp {
             if (event.type === 'SentryClips' && event.metadata.camera) {
                 const camId = event.metadata.camera;
                 const verified = window.cameraIds?.isVerified(camId);
+                const trCam = { '0': 'events.triggerCamera.front', '5': 'events.triggerCamera.leftRepeater', '6': 'events.triggerCamera.rightRepeater' }[String(camId)];
                 const cameraName = verified
-                    ? window.cameraIds.label(camId)
-                    : `Camera ${camId}`;
-                reason += ` • Triggered by ${cameraName} camera`;
+                    ? (trCam && window.i18n ? this._t(trCam) : window.cameraIds.label(camId))
+                    : (window.i18n ? this._t('events.cameraN', { id: camId }) : `Camera ${camId}`);
+                reason += window.i18n ? ` • ${this._t('events.triggeredBy', { camera: cameraName })}`
+                    : ` • Triggered by ${cameraName} camera`;
 
                 // Diagnostic logging for ground-truth collection (task #44).
                 // Logs the available clip cameras alongside the trigger ID
@@ -3028,6 +3065,31 @@ class TeslaCamViewerApp {
     }
 
     /**
+     * The HUD and Map as the user left them (the T and M buttons, Settings), on the open event: shown once it has
+     * telemetry frames, from whichever clip they come. Runs when a clip's telemetry loads and on every settings
+     * change, so both follow one rule, and an event with no telemetry keeps them hidden (#635).
+     * Hiding is left to the settings handler and the user (a hide here would also clear the saved setting).
+     * @returns {boolean} true when it showed one
+     */
+    _applySavedOverlays() {
+        const hud = this.telemetryOverlay;
+        if (!hud || !hud.hasTelemetryFrames()) return false;
+        let res = false;
+        if (!hud.isVisible && this.settingsManager.get('telemetryOverlayEnabled') !== false) {
+            hud.show();
+            res = true;
+        }
+        const map = this.miniMapOverlay;
+        // the HUD's show() saves its setting, and that change can show the Map first (re-entry): checked after it
+        if (map && !map.isVisible && this.settingsManager.get('miniMapEnabled')) {
+            map.show();
+            res = true;
+        }
+        if (res) this._updateOverlayButtonStates();
+        return res;
+    }
+
+    /**
      * Update overlay button active states
      */
     _updateOverlayButtonStates() {
@@ -3115,7 +3177,7 @@ class TeslaCamViewerApp {
         this.streetViewTooltip.className = 'street-view-tooltip';
         this.streetViewTooltip.innerHTML = `
             <div class="coords">--</div>
-            <div class="hint">Click to open Street View</div>
+            <div class="hint">${this._t('player.streetViewHint')}</div>
         `;
         this.streetViewBtn.appendChild(this.streetViewTooltip);
 
@@ -3310,7 +3372,7 @@ class TeslaCamViewerApp {
             if (!clipData?.frames) return;
 
             const frameCount = clipData.frames.length;
-            const clipDuration = VideoPlayer.clipLength(durations, clipIndex);
+            const clipDuration = VideoPlayer.frontLength(durations, clipIndex);   // front telemetry: the front's length (#587)
             const baseTime = VideoPlayer.clipStart(durations, clipIndex);
 
             // Sample every ~10 seconds (360 frames at 36fps)
@@ -3319,8 +3381,7 @@ class TeslaCamViewerApp {
             for (let i = 0; i < frameCount; i += sampleInterval) {
                 const frame = clipData.frames[i];
                 if (frame.latitude_deg && frame.longitude_deg) {
-                    const frameRatio = i / frameCount;
-                    const eventTime = baseTime + (frameRatio * clipDuration);
+                    const eventTime = baseTime + TelemetryOverlay.seiClipTime(clipData, i, clipDuration);   // #516
                     positions.push({
                         lat: frame.latitude_deg,
                         lng: frame.longitude_deg,
@@ -3610,18 +3671,25 @@ class TeslaCamViewerApp {
 
             // Get the focused camera or default to front
             const focusCamera = this.layoutManager.focusCamera || 'front';
-            const videoMap = {
-                front: document.getElementById('videoFront'),
-                back: document.getElementById('videoBack'),
-                left_repeater: document.getElementById('videoLeft'),
-                right_repeater: document.getElementById('videoRight')
-            };
+            const cameraEl = this.videoPlayer.videos[focusCamera] || this.videoPlayer.videos.front;
 
-            const videoElement = videoMap[focusCamera];
-
-            if (!videoElement || !videoElement.src) {
+            if (!cameraEl || !cameraEl.src) {
                 alert('No video loaded. Please select an event first.');
                 return;
+            }
+
+            // The fast player draws into a <canvas>, which has no
+            // Picture-in-Picture of its own: show the canvas's live stream
+            // in a hidden <video> and put that one in the PiP window.
+            let videoElement = cameraEl;
+            if (typeof cameraEl.requestPictureInPicture !== 'function' && cameraEl.captureStream) {
+                videoElement = this._pipStreamVideo(cameraEl);
+                if (videoElement.readyState < 1) {
+                    await new Promise((resolve) => {
+                        videoElement.addEventListener('loadedmetadata', resolve, { once: true });
+                        setTimeout(resolve, 3000);
+                    });
+                }
             }
 
             // Request Picture-in-Picture
@@ -3631,6 +3699,7 @@ class TeslaCamViewerApp {
             // Listen for PiP window close
             videoElement.addEventListener('leavepictureinpicture', () => {
                 this.pipBtn.classList.remove('active');
+                if (videoElement !== cameraEl) this._stopPipStream();
             }, { once: true });
 
         } catch (error) {
@@ -3639,6 +3708,38 @@ class TeslaCamViewerApp {
                 alert('Picture-in-Picture was blocked. Try clicking the button again.');
             }
         }
+    }
+
+    /**
+     * A hidden <video> that plays a fast-player canvas's live stream, for
+     * Picture-in-Picture (a canvas can't go into PiP itself).
+     * @param {HTMLCanvasElement} canvas
+     * @returns {HTMLVideoElement}
+     */
+    _pipStreamVideo(canvas) {
+        this._stopPipStream();
+        const v = document.createElement('video');
+        v.muted = true;
+        v.playsInline = true;
+        v.setAttribute('aria-hidden', 'true');
+        v.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0;';
+        v.srcObject = canvas.captureStream(30);
+        // A stream only gets a frame when the canvas is drawn; while paused
+        // nothing draws, so redraw it onto itself once to send the first frame.
+        try { canvas.getContext('2d').drawImage(canvas, 0, 0); } catch (e) { /* empty canvas */ }
+        document.body.appendChild(v);
+        v.play().catch(() => {});
+        this._pipStream = v;
+        return v;
+    }
+
+    _stopPipStream() {
+        const v = this._pipStream;
+        if (!v) return;
+        this._pipStream = null;
+        try { v.srcObject?.getTracks?.().forEach(t => t.stop()); } catch (e) { /* already stopped */ }
+        v.srcObject = null;
+        v.remove();
     }
 
     /**
@@ -4927,6 +5028,50 @@ class TeslaCamViewerApp {
 
             // Extract SEI from each clip (front camera has the telemetry)
             const clipGroups = event.clipGroups || [];
+            // One front clip's telemetry. Resolves false when its file couldn't be read (read again below), else true.
+            const loadClip = (frontClip, i) => frontClip.fileHandle.getFile().then(file => {
+                if (!isCurrent()) return null;
+                return this.telemetryOverlay.loadClipData(file, i);
+            }, () => ({ frames: [], readError: true })).then(data => {
+                if (!isCurrent()) return true;
+                if (data && data.readError) return false;
+                if (data && data.frames.length > 0) {
+                    console.log(`SEI telemetry loaded for clip ${i}: ${data.frames.length} frames`);
+                    // The HUD and Map as the user left them: this event has telemetry (#635: the same rule as a
+                    // settings change)
+                    this._applySavedOverlays();
+                    // Auto-show telemetry graphs if enabled (includes elevation)
+                    // Note: telemetryGraphs now shows in sidebar panel
+                    if (this.telemetryGraphs && !this.telemetryGraphs.isVisible) {
+                        this.telemetryGraphs.show();
+                    }
+                    // Auto-show Bird's Eye View panel when GPS data is available
+                    // Note: collisionReconstruction now shows in sidebar panel
+                    if (this.collisionReconstruction && !this.collisionReconstruction.isVisible) {
+                        this.collisionReconstruction.show();
+                    }
+                    // Update overlay button states to reflect current visibility
+                    this._updateOverlayButtonStates();
+                    // Load elevation data after first clip with GPS data (debounced)
+                    this._scheduleElevationLoad(event);
+                    // Load telemetry graphs data (debounced)
+                    this._scheduleGraphsLoad(event);
+                    // Compute intervention severity (debounced) once more
+                    // SEI data is available; uses whatever clips have
+                    // loaded so far and updates when more arrive.
+                    this._scheduleSeverityCompute(event);
+                    // Fetch weather from telemetry if not already available from metadata
+                    // (useful for RecentClips which don't have event.json)
+                    if (!event.metadata?.est_lat && !this._weatherFetchedFromTelemetry) {
+                        this._fetchWeatherFromTelemetry(event, data);
+                    }
+                }
+                return true;
+            }).catch(err => {
+                // Silently ignore - older clips won't have SEI data
+                return true;
+            });
+            const loading = [];
             for (let i = 0; i < clipGroups.length; i++) {
                 const group = clipGroups[i];
                 // clips is an object keyed by camera name, not an array
@@ -4934,55 +5079,23 @@ class TeslaCamViewerApp {
 
                 if (frontClip && frontClip.fileHandle) {
                     // Get File from FileHandle and load SEI data (async)
-                    frontClip.fileHandle.getFile().then(file => {
-                        if (!isCurrent()) return null;
-                        return this.telemetryOverlay.loadClipData(file, i);
-                    }).then(data => {
-                        if (!isCurrent()) return;
-                        if (data && data.frames.length > 0) {
-                            console.log(`SEI telemetry loaded for clip ${i}: ${data.frames.length} frames`);
-                            // Auto-show telemetry overlay if we have telemetry data
-                            if (!this.telemetryOverlay.isVisible && this.settingsManager.get('telemetryOverlayEnabled') !== false) {
-                                this.telemetryOverlay.show();
-                            }
-                            // Auto-show mini-map if enabled and we have GPS telemetry data
-                            if (this.miniMapOverlay && !this.miniMapOverlay.isVisible && this.settingsManager.get('miniMapEnabled')) {
-                                this.miniMapOverlay.show();
-                            }
-                            // Auto-show telemetry graphs if enabled (includes elevation)
-                            // Note: telemetryGraphs now shows in sidebar panel
-                            if (this.telemetryGraphs && !this.telemetryGraphs.isVisible) {
-                                this.telemetryGraphs.show();
-                            }
-                            // Auto-show Bird's Eye View panel when GPS data is available
-                            // Note: collisionReconstruction now shows in sidebar panel
-                            if (this.collisionReconstruction && !this.collisionReconstruction.isVisible) {
-                                this.collisionReconstruction.show();
-                            }
-                            // Update overlay button states to reflect current visibility
-                            this._updateOverlayButtonStates();
-                            // Load elevation data after first clip with GPS data (debounced)
-                            this._scheduleElevationLoad(event);
-                            // Load telemetry graphs data (debounced)
-                            this._scheduleGraphsLoad(event);
-                            // Compute intervention severity (debounced) once more
-                            // SEI data is available; uses whatever clips have
-                            // loaded so far and updates when more arrive.
-                            this._scheduleSeverityCompute(event);
-                            // Fetch weather from telemetry if not already available from metadata
-                            // (useful for RecentClips which don't have event.json)
-                            if (!event.metadata?.est_lat && !this._weatherFetchedFromTelemetry) {
-                                this._fetchWeatherFromTelemetry(event, data);
-                            }
-                        }
-                    }).catch(err => {
-                        // Silently ignore - older clips won't have SEI data
-                    });
+                    loading.push(loadClip(frontClip, i).then(read => (read ? null : [frontClip, i])));
                 }
             }
 
             // Set up playback time update handler for telemetry
             this.setupTelemetryUpdateHandler();
+
+            // A front clip whose file couldn't be read in that first pass is read again once the others are done,
+            // one at a time. Every front clip is read whole at once, next to the player's own reads of every camera,
+            // and on a big event the browser can fail some of those reads. Such a clip counted as one without
+            // telemetry, so an event whose telemetry starts after its first clip could show none (#635).
+            Promise.all(loading).then(async (res) => {
+                for (const tmp of res) {
+                    if (!tmp || !isCurrent()) continue;
+                    await loadClip(tmp[0], tmp[1]);
+                }
+            });
 
         } catch (error) {
             console.warn('SEI extraction not available:', error.message);
@@ -6133,11 +6246,11 @@ class TeslaCamViewerApp {
                     </svg>
                 </div>
                 <div class="update-toast-text">
-                    <strong>New files detected</strong>
-                    <span>${FolderParser.escapeHtml(label)} — refresh to load new events</span>
+                    <strong>${this._t('sidebar.newFilesTitle')}</strong>
+                    <span>${this._t('sidebar.newFilesText', { drive: FolderParser.escapeHtml(label) })}</span>
                 </div>
-                <button class="update-toast-btn" data-action="refresh">Refresh</button>
-                <button class="update-toast-close" data-action="dismiss" title="Dismiss">&times;</button>
+                <button class="update-toast-btn" data-action="refresh">${this._t('sidebar.refresh')}</button>
+                <button class="update-toast-close" data-action="dismiss" title="${this._t('sidebar.dismiss')}">&times;</button>
             </div>
         `;
         document.body.appendChild(toast);

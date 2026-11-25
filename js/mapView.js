@@ -118,6 +118,29 @@ class MapView {
         return window.i18n ? window.i18n.t(key) : key.split('.').pop();
     }
 
+    /** Translated text with {{params}}; the English fallback when i18n or the key isn't there */
+    _t(key, english, params = {}) {
+        const t = window.i18n ? window.i18n.t(key, params) : key;
+        return t === key ? english : t;
+    }
+
+    /** Plural form for count (English fallback as in _t) */
+    _p(key, count, english, params = {}) {
+        if (!window.i18n) return english;
+        const t = window.i18n.plural(key, count, params);
+        return t === key ? english : t;
+    }
+
+    /** Locale for dates and times (en-US for English, as before) */
+    _dateLocale() {
+        return window.i18n?.dateLocale?.() || 'en-US';
+    }
+
+    /** Event type name (Saved / Sentry / Recent) from a type class; unknown types as they are */
+    _typeName(typeClass) {
+        return this._t('events.' + typeClass, typeClass);
+    }
+
     /**
      * Generate cache key based on event timestamps
      */
@@ -181,7 +204,7 @@ class MapView {
         // Show toast notification if available
         if (window.app?.showToast) {
             window.app.showToast(
-                `${featureName} data will be rescanned due to detection improvements in this update.`,
+                this._t('map.rescanNotice', `${featureName} data will be rescanned due to detection improvements in this update.`, { name: featureName }),
                 'info',
                 5000
             );
@@ -204,13 +227,13 @@ class MapView {
         progressEl.innerHTML = `
             <div class="scan-progress-content">
                 <div class="scan-progress-header">
-                    <span class="scan-progress-title">Scanning ${scanType}...</span>
-                    <button class="scan-progress-cancel" title="Cancel scan">✕</button>
+                    <span class="scan-progress-title">${scanType === 'GPS Telemetry' ? this._t('map.scanningGps', `Scanning ${scanType}...`) : scanType === 'All Events' ? this._t('map.scanningAll', `Scanning ${scanType}...`) : `Scanning ${scanType}...`}</span>
+                    <button class="scan-progress-cancel" title="${this._t('map.cancelScan', 'Cancel scan')}">✕</button>
                 </div>
                 <div class="scan-progress-bar">
                     <div class="scan-progress-fill" style="width: 0%"></div>
                 </div>
-                <div class="scan-progress-text">0 / ${totalEvents} events</div>
+                <div class="scan-progress-text">${this._t('map.scanProgress', `0 / ${totalEvents} events`, { current: 0, total: totalEvents })}</div>
             </div>
         `;
 
@@ -218,7 +241,7 @@ class MapView {
         const cancelBtn = progressEl.querySelector('.scan-progress-cancel');
         cancelBtn.addEventListener('click', () => {
             this._scanCancelled = true;
-            progressEl.querySelector('.scan-progress-title').textContent = 'Cancelling...';
+            progressEl.querySelector('.scan-progress-title').textContent = this._t('map.cancelling', 'Cancelling...');
         });
 
         // Style the progress element
@@ -294,11 +317,11 @@ class MapView {
 
         if (fill) fill.style.width = `${percent}%`;
         if (text) {
-            let statusText = `${current} / ${total} events`;
+            let statusText = this._t('map.scanProgress', `${current} / ${total} events`, { current, total });
             if (clipsProcessed !== null) {
-                statusText += ` (${clipsProcessed} clips)`;
+                statusText += ' ' + this._t('map.scanClips', `(${clipsProcessed} clips)`, { count: clipsProcessed });
             }
-            statusText += ` • ${foundCount} found`;
+            statusText += ' • ' + this._t('map.scanFound', `${foundCount} found`, { count: foundCount });
             text.textContent = statusText;
         }
     }
@@ -348,13 +371,13 @@ class MapView {
                 <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M23.64 7c-.45-.34-4.93-4-11.64-4-1.5 0-2.89.19-4.15.48L18.18 13.8 23.64 7zM17.04 15.22L3.27 1.44 2 2.72l2.05 2.06C1.91 5.76.59 6.82.36 7l11.63 14.49.01.01.01-.01 3.9-4.86 3.32 3.32 1.27-1.27-3.46-3.46z"/>
                 </svg>
-                <h3>Map Unavailable Offline</h3>
-                <p>Map tiles require an internet connection to load.</p>
+                <h3>${this._t('map.offlineTitle', 'Map Unavailable Offline')}</h3>
+                <p>${this._t('map.offlineText', 'Map tiles require an internet connection to load.')}</p>
                 <button class="map-offline-retry-btn">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                     </svg>
-                    Check Connection
+                    ${this._t('map.checkConnection', 'Check Connection')}
                 </button>
             </div>
         `;
@@ -441,6 +464,10 @@ class MapView {
 
             // Create Leaflet map (keyboard: false prevents arrow keys from panning map)
             this.map = L.map(this.container, { keyboard: false }).setView(defaultCenter, defaultZoom);
+
+            // A popup never gets wider than the map it opens in: the sidebar map can be ~250 px wide, and an event
+            // popup (200 px + margins, 400 px for hotspots) was cut off at its edge (#548).
+            this.map.on('popupopen', (e) => this.fitPopupToMap(e.popup));
 
             // Load dark mode preference
             this.isDarkMode = localStorage.getItem(this.DARK_MODE_KEY) === 'true';
@@ -575,6 +602,45 @@ class MapView {
      * @param {Object} event
      * @returns {L.Marker|null}
      */
+    /**
+     * Shrink a popup to fit the map's width left of the map's own buttons (the column at the top right: heat map,
+     * incidents, dark mode...), then let Leaflet pan it into view there. The buttons covered the end of a long place
+     * name and the popup's close button in the sidebar map.
+     * @param {L.Popup} popup
+     */
+    fitPopupToMap(popup) {
+        if (!popup || !this.map) return;
+        const mapW = this.map.getSize().x;
+        if (!mapW) return;
+        if (popup._tcvMaxWidth === undefined) popup._tcvMaxWidth = popup.options.maxWidth || 300;
+        const ctlW = this._rightControlsWidth();
+        // 48: 24 px of map on each side; 40: Leaflet's content margins; ctlW: the map's buttons on the right
+        const fit = Math.max(120, Math.min(popup._tcvMaxWidth, mapW - ctlW - 48 - 40));
+        popup.options.minWidth = Math.min(popup.options.minWidth || 50, fit);
+        popup.options.maxWidth = fit;
+        popup.options.autoPanPadding = L.point(8, 8);
+        popup.options.autoPanPaddingTopLeft = L.point(8, 8);
+        popup.options.autoPanPaddingBottomRight = L.point(ctlW + 8, 8);
+        popup.getElement()?.classList.add('tcv-fitted-popup');
+        popup.update();
+    }
+
+    /**
+     * Width of the column of map buttons at the map's right edge (0 when there are none on screen), in px.
+     * @returns {number}
+     */
+    _rightControlsWidth() {
+        const el = this.map && this.map.getContainer ? this.map.getContainer() : null;
+        if (!el || !el.getBoundingClientRect) return 0;
+        const right = el.getBoundingClientRect().right;
+        let left = right;
+        for (const ctl of el.querySelectorAll('.leaflet-top.leaflet-right .leaflet-control')) {
+            const r = ctl.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0) left = Math.min(left, r.left);   // build:pop47
+        }
+        return Math.max(0, Math.round(right - left));
+    }
+
     createMarker(event) {
         try {
             const lat = parseFloat(event.metadata.est_lat);
@@ -644,12 +710,12 @@ class MapView {
      */
     createPopupContent(event) {
         const date = new Date(event.timestamp);
-        const dateStr = date.toLocaleDateString('en-US', {
+        const dateStr = date.toLocaleDateString(this._dateLocale(), {
             month: 'short',
             day: 'numeric',
             year: 'numeric'
         });
-        const timeStr = date.toLocaleTimeString('en-US', {
+        const timeStr = date.toLocaleTimeString(this._dateLocale(), {
             hour: '2-digit',
             minute: '2-digit'
         });
@@ -680,7 +746,7 @@ class MapView {
         let html = `
             <div class="map-popup">
                 <div class="map-popup-header">
-                    <span class="event-type ${typeClass}">${typeClass}</span>
+                    <span class="event-type ${typeClass}">${FolderParser.escapeHtml(this._typeName(typeClass))}</span>
                     <span class="map-popup-date">${dateStr}</span>
                 </div>
                 <div class="map-popup-time">${timeStr}</div>
@@ -695,8 +761,8 @@ class MapView {
         }
 
         html += `
-                <div class="map-popup-clips">${event.clipGroups.length} clips</div>
-                <div class="map-popup-action">Click to view event</div>
+                <div class="map-popup-clips">${this._p('map.clips', event.clipGroups.length, `${event.clipGroups.length} clips`)}</div>
+                <div class="map-popup-action">${this._t('map.clickToView', 'Click to view event')}</div>
             </div>
         `;
 
@@ -1370,7 +1436,7 @@ class MapView {
             if (this.apDisengagementPoints.length === 0) {
                 if (window.app?.showToast) {
                     window.app.showToast(
-                        'AP struggle zone data is collected as you view events. Use "Scan All Events" in settings for full map coverage.',
+                        this._t('map.struggleEmpty', 'AP struggle zone data is collected as you view events. Use "Scan All Events" in settings for full map coverage.'),
                         'info',
                         6000
                     );
@@ -1528,7 +1594,7 @@ class MapView {
         if (!window.seiExtractor || !events || events.length === 0) {
             console.log('[MapView] No SEI extractor or events available for bulk scan');
             if (window.app?.showToast) {
-                window.app.showToast('No events available to scan', 'warning', 3000);
+                window.app.showToast(this._t('map.noEventsToScan', 'No events available to scan'), 'warning', 3000);
             }
             return { incidents: 0, apDisengagements: 0 };
         }
@@ -1780,7 +1846,7 @@ class MapView {
 
             if (window.app?.showToast) {
                 window.app.showToast(
-                    `Scan complete: ${totalIncidents} incidents, ${totalApDisengagements} AP issues found`,
+                    this._t('map.scanCompleteIssues', `Scan complete: ${totalIncidents} incidents, ${totalApDisengagements} AP issues found`, { incidents: totalIncidents, ap: totalApDisengagements }),
                     'success',
                     5000
                 );
@@ -1996,7 +2062,7 @@ class MapView {
 
         // Format type breakdown
         const typeBreakdown = Object.entries(byType)
-            .map(([type, cnt]) => `<span class="struggle-zone-type ${type.toLowerCase().replace('clips', '')}">${cnt}x ${type.replace('Clips', '')}</span>`)
+            .map(([type, cnt]) => `<span class="struggle-zone-type ${type.toLowerCase().replace('clips', '')}">${cnt}x ${this._t('events.' + type.toLowerCase().replace('clips', ''), type.replace('Clips', ''))}</span>`)
             .join(' ');
 
         // Format AP state breakdown
@@ -2016,13 +2082,13 @@ class MapView {
             .slice(0, 6)
             .map((point, idx) => {
                 const date = new Date(point.timestamp);
-                const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = date.toLocaleDateString(this._dateLocale(), { month: 'short', day: 'numeric' });
+                const timeStr = date.toLocaleTimeString(this._dateLocale(), { hour: '2-digit', minute: '2-digit' });
                 const speed = Math.round(point.speed_mph || 0);
                 return `
                     <div class="struggle-zone-event clickable"
                          data-event-idx="${idx}"
-                         title="Click to view this event">
+                         title="${this._t('map.clickToViewThis', 'Click to view this event')}">
                         <span class="event-date">${dateStr} ${timeStr}</span>
                         <span class="event-from-state">${point.fromState}</span>
                         <span class="event-speed">${speed} mph</span>
@@ -2036,7 +2102,7 @@ class MapView {
             })
             .join('');
 
-        const moreCount = points.length > 6 ? `<div class="struggle-zone-more">+${points.length - 6} more events</div>` : '';
+        const moreCount = points.length > 6 ? `<div class="struggle-zone-more">${this._t('map.moreEvents', `+${points.length - 6} more events`, { count: points.length - 6 })}</div>` : '';
 
         return `
             <div class="struggle-zone-popup">
@@ -2044,27 +2110,29 @@ class MapView {
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="#f44336">
                         <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
                     </svg>
-                    <span class="struggle-zone-title">AP Struggle Zone</span>
-                    ${direction ? `<span class="struggle-zone-direction" title="Direction of travel">${directionArrow} ${direction.name}bound</span>` : ''}
+                    <span class="struggle-zone-title">${this._t('map.struggleZone', 'AP Struggle Zone')}</span>
+                    ${direction ? `<span class="struggle-zone-direction" title="${this._t('map.directionOfTravel', 'Direction of travel')}">${directionArrow} ${this._t('map.bound.' + direction.shortName, `${direction.name}bound`)}</span>` : ''}
                 </div>
-                <div class="struggle-zone-count">${count} Disengagement${count > 1 ? 's' : ''} heading ${direction ? direction.shortName : 'unknown'}</div>
+                <div class="struggle-zone-count">${this._p('map.disengagementsHeading', count, `${count} Disengagement${count > 1 ? 's' : ''} heading ${direction ? direction.shortName : 'unknown'}`, { dir: direction ? this._t('map.dirShort.' + direction.shortName, direction.shortName) : this._t('map.dirUnknown', 'unknown') })}</div>
                 <div class="struggle-zone-breakdown">
                     <div class="breakdown-row">
-                        <label>Event Types:</label>
+                        <label>${this._t('map.eventTypes', 'Event Types:')}</label>
                         ${typeBreakdown}
                     </div>
                     <div class="breakdown-row">
-                        <label>AP Modes:</label>
+                        <label>${this._t('map.apModes', 'AP Modes:')}</label>
                         ${stateBreakdown}
                     </div>
                 </div>
-                <div class="struggle-zone-events-header">Click to view clip:</div>
+                <div class="struggle-zone-events-header">${this._t('map.clickToViewClip', 'Click to view clip:')}</div>
                 <div class="struggle-zone-events">
                     ${eventsList}
                     ${moreCount}
                 </div>
                 <div class="struggle-zone-tip">
-                    <small>Pattern: ${count} disengagements when driving ${direction ? direction.name.toLowerCase() : 'through this area'}.</small>
+                    <small>${direction
+                        ? this._t('map.patternDir', `Pattern: ${count} disengagements when driving ${direction.name.toLowerCase()}.`, { count, dir: this._t('map.dirName.' + direction.shortName, direction.name.toLowerCase()) })
+                        : this._t('map.patternArea', `Pattern: ${count} disengagements when driving through this area.`, { count })}</small>
                 </div>
             </div>
         `;
@@ -2244,7 +2312,7 @@ class MapView {
             if (this.incidentPoints.length === 0) {
                 if (window.app?.showToast) {
                     window.app.showToast(
-                        'Incident data is collected as you view events. Browse events to populate the map.',
+                        this._t('map.incidentsEmpty', 'Incident data is collected as you view events. Browse events to populate the map.'),
                         'info',
                         5000
                     );
@@ -2311,7 +2379,7 @@ class MapView {
                     // Don't allow if already scanning
                     if (this._isScanning) {
                         if (window.app?.showToast) {
-                            window.app.showToast('Scan already in progress...', 'info', 2000);
+                            window.app.showToast(this._t('map.scanRunning', 'Scan already in progress...'), 'info', 2000);
                         }
                         return;
                     }
@@ -2320,7 +2388,7 @@ class MapView {
                     const eventCount = this.events?.length || 0;
                     if (eventCount === 0) {
                         if (window.app?.showToast) {
-                            window.app.showToast('No events available to scan', 'warning', 3000);
+                            window.app.showToast(this._t('map.noEventsToScan', 'No events available to scan'), 'warning', 3000);
                         }
                         return;
                     }
@@ -2334,7 +2402,7 @@ class MapView {
                     if (result.incidents > 0 || result.apDisengagements > 0) {
                         if (window.app?.showToast) {
                             window.app.showToast(
-                                `Scan complete: ${result.incidents} incidents, ${result.apDisengagements} AP disengagements found`,
+                                this._t('map.scanComplete', `Scan complete: ${result.incidents} incidents, ${result.apDisengagements} AP disengagements found`, { incidents: result.incidents, apDisengagements: result.apDisengagements }),
                                 'success',
                                 5000
                             );
@@ -2624,13 +2692,13 @@ class MapView {
         // Format severity breakdown
         const severityBreakdown = [];
         if (severityCounts.critical > 0) {
-            severityBreakdown.push(`<span class="incident-severity critical">${severityCounts.critical} Critical</span>`);
+            severityBreakdown.push(`<span class="incident-severity critical">${this._t('map.sevCritical', `${severityCounts.critical} Critical`, { count: severityCounts.critical })}</span>`);
         }
         if (severityCounts.warning > 0) {
-            severityBreakdown.push(`<span class="incident-severity warning">${severityCounts.warning} Warning</span>`);
+            severityBreakdown.push(`<span class="incident-severity warning">${this._t('map.sevWarning', `${severityCounts.warning} Warning`, { count: severityCounts.warning })}</span>`);
         }
         if (severityCounts.info > 0) {
-            severityBreakdown.push(`<span class="incident-severity info">${severityCounts.info} Info</span>`);
+            severityBreakdown.push(`<span class="incident-severity info">${this._t('map.sevInfo', `${severityCounts.info} Info`, { count: severityCounts.info })}</span>`);
         }
 
         // Group by incident type
@@ -2640,9 +2708,9 @@ class MapView {
             byType[type] = (byType[type] || 0) + 1;
         }
         const typeBreakdown = [];
-        if (byType.braking > 0) typeBreakdown.push(`<span class="incident-type braking">⬇ ${byType.braking} Braking</span>`);
-        if (byType.swerve > 0) typeBreakdown.push(`<span class="incident-type swerve">↔ ${byType.swerve} Swerve</span>`);
-        if (byType.combined > 0) typeBreakdown.push(`<span class="incident-type combined">⚠ ${byType.combined} Combined</span>`);
+        if (byType.braking > 0) typeBreakdown.push(`<span class="incident-type braking">⬇ ${this._t('map.nBraking', `${byType.braking} Braking`, { count: byType.braking })}</span>`);
+        if (byType.swerve > 0) typeBreakdown.push(`<span class="incident-type swerve">↔ ${this._t('map.nSwerve', `${byType.swerve} Swerve`, { count: byType.swerve })}</span>`);
+        if (byType.combined > 0) typeBreakdown.push(`<span class="incident-type combined">⚠ ${this._t('map.nCombined', `${byType.combined} Combined`, { count: byType.combined })}</span>`);
 
         // Group by AP mode
         const byApMode = {};
@@ -2664,8 +2732,8 @@ class MapView {
             .slice(0, 6)
             .map((point, idx) => {
                 const date = new Date(point.timestamp);
-                const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                const dateStr = date.toLocaleDateString(this._dateLocale(), { month: 'short', day: 'numeric' });
+                const timeStr = date.toLocaleTimeString(this._dateLocale(), { hour: '2-digit', minute: '2-digit' });
                 // Format eventTime as MM:SS offset within the clip
                 const eventTimeSec = point.eventTime || 0;
                 const mins = Math.floor(eventTimeSec / 60);
@@ -2675,15 +2743,16 @@ class MapView {
                 const gForce = (point.gForce || 0).toFixed(2);
                 const lateralG = point.lateralG ? (point.lateralG).toFixed(2) : null;
                 const severityClass = point.severity || 'info';
-                const typeLabel = point.type === 'combined' ? '⚠ Combined' :
-                    point.type === 'swerve' ? '↔ Swerve' : '⬇ Braking';
+                const typeLabel = point.type === 'combined' ? '⚠ ' + this._t('map.combined', 'Combined') :
+                    point.type === 'swerve' ? '↔ ' + this._t('map.swerve', 'Swerve') : '⬇ ' + this._t('map.braking', 'Braking');
+                const sevLabel = { critical: this._t('map.critical', 'critical'), warning: this._t('map.warning', 'warning'), info: this._t('map.info', 'info') }[point.severity] ?? point.severity;
                 const gForceText = point.type === 'swerve' ? `${lateralG}g lat` :
                     point.type === 'combined' ? `${gForce}g / ${lateralG}g` : `${gForce}g`;
                 return `
-                    <div class="incident-event clickable" data-event-idx="${idx}" title="Click to view this event">
+                    <div class="incident-event clickable" data-event-idx="${idx}" title="${this._t('map.clickToViewThis', 'Click to view this event')}">
                         <span class="event-date">${dateStr} ${timeStr} <span class="event-offset">${offsetStr}</span></span>
                         <span class="event-type">${typeLabel}</span>
-                        <span class="event-severity ${severityClass}">${point.severity}</span>
+                        <span class="event-severity ${severityClass}">${sevLabel}</span>
                         <span class="event-speed">${speed} mph</span>
                         <span class="event-gforce">${gForceText}</span>
                         <span class="event-view-icon">
@@ -2696,7 +2765,7 @@ class MapView {
             })
             .join('');
 
-        const moreCount = points.length > 6 ? `<div class="incident-more">+${points.length - 6} more events</div>` : '';
+        const moreCount = points.length > 6 ? `<div class="incident-more">${this._t('map.moreEvents', `+${points.length - 6} more events`, { count: points.length - 6 })}</div>` : '';
 
         return `
             <div class="incident-popup">
@@ -2705,36 +2774,36 @@ class MapView {
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z"/>
                         <path d="M7 11h10v2H7z"/>
                     </svg>
-                    <span class="incident-title">Incident Hotspot</span>
+                    <span class="incident-title">${this._t('map.incidentHotspot', 'Incident Hotspot')}</span>
                 </div>
-                <div class="incident-count">${count} Incident${count > 1 ? 's' : ''} at this location</div>
+                <div class="incident-count">${this._p('map.incidentsHere', count, `${count} Incident${count > 1 ? 's' : ''} at this location`)}</div>
                 <div class="incident-breakdown">
                     <div class="breakdown-row">
-                        <label>Types:</label>
+                        <label>${this._t('map.types', 'Types:')}</label>
                         ${typeBreakdown.join(' ')}
                     </div>
                     <div class="breakdown-row">
-                        <label>Severity:</label>
+                        <label>${this._t('map.severity', 'Severity:')}</label>
                         ${severityBreakdown.join(' ')}
                     </div>
                     <div class="breakdown-row">
-                        <label>AP Modes:</label>
+                        <label>${this._t('map.apModes', 'AP Modes:')}</label>
                         ${apModeBreakdown}
                     </div>
                     <div class="breakdown-row">
-                        <label>Avg Speed:</label>
+                        <label>${this._t('map.avgSpeed', 'Avg Speed:')}</label>
                         <span>${Math.round(avgSpeed)} mph</span>
-                        <label style="margin-left: 12px;">G-Force:</label>
+                        <label style="margin-left: 12px;">${this._t('map.gForce', 'G-Force:')}</label>
                         <span>${avgGForce.toFixed(2)}g${avgLateralG > 0.1 ? ` / ${avgLateralG.toFixed(2)}g lat` : ''}</span>
                     </div>
                 </div>
-                <div class="incident-events-header">Click to view clip:</div>
+                <div class="incident-events-header">${this._t('map.clickToViewClip', 'Click to view clip:')}</div>
                 <div class="incident-events">
                     ${eventsList}
                     ${moreCount}
                 </div>
                 <div class="incident-tip">
-                    <small>This location has repeated incidents - consider investigating the footage to understand what happened.</small>
+                    <small>${this._t('map.incidentTip', 'This location has repeated incidents - consider investigating the footage to understand what happened.')}</small>
                 </div>
             </div>
         `;

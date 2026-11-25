@@ -8,19 +8,32 @@ class VideoPlayer {
     constructor() {
         this._uid = 0x4E617465; // internal tracking
 
-        // Feature flag — WebCodecs-backed player for users whose hardware
-        // struggles with 4+ HTML5 <video> elements (Intel iGPU overlay-slot
-        // starvation). When enabled, each <video> in the grid is replaced
-        // with a <canvas> that gets HTMLVideoElement-style properties
-        // installed by WebCodecsVideoElement.install. All downstream code
-        // accessing `this.videos.front.currentTime` etc. works unchanged.
+        // The fast player (WebCodecs), the default since 2026.47.5.1: each
+        // <video> in the grid is replaced with a <canvas> that gets
+        // HTMLVideoElement-style properties installed by
+        // WebCodecsVideoElement.install, so code reading
+        // `this.videos.front.currentTime` etc. works unchanged. It plays
+        // 4-6 cameras without the HTML5 <video> stalls (Intel iGPU
+        // overlay-slot starvation). The Compatibility player is the HTML5
+        // <video> one: the user's choice in Settings, or an automatic
+        // fall-back where WebCodecs can't play (no VideoDecoder, the codec
+        // isn't supported, decode errors: _fallBackToCompat).
         //
         // VideoPlayer is constructed from app.js BEFORE `window.app` is
         // assigned, so we read settings directly from localStorage rather
         // than via settingsManager. Key matches SettingsManager.STORAGE_KEY.
-        this._useWebCodecs = this._readFlag('useWebCodecsPlayer')
-            && window.WebCodecsVideoElement?.isSupported?.();
-        if (this._useWebCodecs) {
+        this._compatReason = null;   // why the Compatibility player plays although the fast one is chosen
+        this._nativeVideos = {};     // the page's own <video> elements while canvases stand in for them
+        this._wcFailures = [];       // recent decode failures (ms timestamps)
+        this._compatSwitching = false;
+        const wantFast = this._wantsFastPlayer();
+        const blocker = wantFast ? this._fastPlayerBlocker() : null;
+        this._useWebCodecs = wantFast && !blocker;
+        if (blocker) {
+            this._compatReason = blocker;
+            console.warn(`[VideoPlayer] Fast player not available here (${blocker}): using the Compatibility player`);
+            this._noteFallback(blocker);
+        } else if (this._useWebCodecs) {
             console.log('[VideoPlayer] WebCodecs-backed player enabled');
         }
 
@@ -33,7 +46,8 @@ class VideoPlayer {
         this.loopEnabled = false;
         this.disableAutoAdvance = false; // Can be set to prevent auto-advance during export
         this.hasPillarCameras = false; // Set when loading event with pillar cameras
-        this.cachedClipDurations = []; // Cached durations from getTotalDuration for consistent seeking
+        this.cachedClipDurations = []; // Cached durations from getTotalDuration for consistent seeking: a clip lasts until its longest camera ends (#587)
+        this.cachedCameraDurations = []; // per clip: { camera: its own length }, for "this camera has ended" (#586)
         // Seeks and event loads run one at a time, in order. Two seeks used to
         // overlap (a timeline click sends one from mouseup and one from click),
         // and the second saw the clip the first was still loading as 0 s long
@@ -45,6 +59,16 @@ class VideoPlayer {
         // Clip steps (Next/Previous Clip, auto-advance at the end of a clip)
         // go through the same queue (#526). A new event drops the old one's.
         this._eventGen = 0;
+        // A playback start that waits in the queue (#596): the move to the
+        // next clip when one ends while playing, or Play pressed while a seek
+        // or clip load is still running. {play} until it starts: false once
+        // Pause is pressed meanwhile, true again on Play. Before, the queued
+        // clip end always played on after the load, and the player said "not
+        // playing" during it, so a press of Space there started the ended clip
+        // again; Play pressed during a seek into another clip was lost, and
+        // the fast player started its clock while cameras still showed the
+        // picture from before the seek.
+        this._pendingPlay = null;
         // Per camera: the newest clip load, and how to end an older load's
         // wait. A load that was overtaken must not touch the element.
         this._loadTokens = {};
@@ -107,19 +131,149 @@ class VideoPlayer {
         };
 
         this.setupEventListeners();
+
+        // One quick check that WebCodecs here decodes H.264 at all, before
+        // the first event opens (each clip is checked again when it loads).
+        if (this._useWebCodecs && window.WebCodecsVideoElement?.probeH264) {
+            window.WebCodecsVideoElement.probeH264().then(ok => {
+                if (!ok) this._fallBackToCompat('codec', 'H.264 decoding is not supported by WebCodecs here');
+            });
+        }
     }
 
     /**
-     * Read a boolean setting directly from localStorage. Used pre-window.app
-     * in the constructor.
+     * Fast player or Compatibility player, from the saved settings (read
+     * directly from localStorage: this runs before window.app exists). Only
+     * a choice made in Settings turns the fast player off; see
+     * SettingsManager.wantsFastPlayer for the saved-default rule.
      */
-    _readFlag(key) {
+    _wantsFastPlayer() {
+        let saved = null;
         try {
-            const raw = localStorage.getItem('teslacamviewer_settings');
-            if (!raw) return false;
-            const obj = JSON.parse(raw);
-            return obj?.[key] === true;
-        } catch { return false; }
+            saved = JSON.parse(localStorage.getItem('teslacamviewer_settings') || 'null');
+        } catch { saved = null; }
+        if (typeof SettingsManager !== 'undefined' && SettingsManager.wantsFastPlayer) {
+            return SettingsManager.wantsFastPlayer(saved);
+        }
+        return !saved || saved.videoPlayerChosen !== true || saved.useWebCodecsPlayer !== false;
+    }
+
+    /**
+     * Why the fast player can't start in this browser, or null.
+     * @private
+     */
+    _fastPlayerBlocker() {
+        const W = window.WebCodecsVideoElement;
+        if (!W) return 'library';
+        const why = W.unsupportedReason ? W.unsupportedReason() : (W.isSupported() ? null : 'unsupported');
+        if (why) return why;
+        const remembered = window.PlayerFallback?.active?.();
+        return remembered ? (remembered.kind || 'codec') : null;
+    }
+
+    /**
+     * A camera's canvas reports that WebCodecs can't play its clip.
+     * 'codec' and 'file': the browser's own player can open the clip, so
+     * switch now. 'decode': a decode error while playing; one can be a
+     * damaged spot in a clip, so switch on the 3rd within 30 s.
+     * @private
+     */
+    _onWebCodecsFailure(camera, detail) {
+        if (!this._useWebCodecs || this._compatSwitching) return;
+        const kind = detail?.kind || 'decode';
+        const message = `${camera}: ${detail?.message || kind}`;
+        if (kind === 'decode') {
+            const now = Date.now();
+            this._wcFailures = this._wcFailures.filter(t => now - t < 30000);
+            this._wcFailures.push(now);
+            if (this._wcFailures.length < 3) return;
+        }
+        this._fallBackToCompat(kind, message);
+    }
+
+    /**
+     * Switch from the fast player to the Compatibility player now, without a
+     * page reload: the page's own <video> elements go back in place of the
+     * canvases (the same objects in this.videos, which SyncController also
+     * holds), and the open event reloads at the same moment, playing again
+     * if it was. Runs in the seek/load queue, after the load that failed.
+     * @param {string} kind  see PlayerFallback
+     * @param {string} [message]
+     * @returns {Promise<void>|undefined}
+     */
+    _fallBackToCompat(kind, message) {
+        if (!this._useWebCodecs || this._compatSwitching) return;
+        this._compatSwitching = true;
+        console.warn(`[VideoPlayer] Switching to the Compatibility player (${kind}): ${message || ''}`);
+        window.PlayerFallback?.record?.(kind, message);
+        const event = this.currentEvent;
+        let wasPlaying = this.isPlaying;
+        this._compatResumePlay = false;
+        const run = this._exclusive(async () => {
+            // Read where the player is once the load before this has finished
+            const at = event && this.currentEvent === event ? this.getCurrentAbsoluteTime() : 0;
+            wasPlaying = wasPlaying || this.isPlaying || this._compatResumePlay;
+            if (this.isPlaying) await this.pause();
+            this._stopWebCodecsMasterClock();
+            for (const camera of Object.keys(this.videos)) {
+                const canvas = this.videos[camera];
+                const native = this._nativeVideos[camera];
+                if (!canvas || !native || canvas === native) continue;
+                try { canvas.pause(); } catch (e) { /* already stopped */ }
+                try { canvas.src = ''; } catch (e) { /* decoder already closed */ }
+                native.className = canvas.className;
+                native.style.cssText = canvas.style.cssText;
+                if (canvas.parentNode) canvas.parentNode.replaceChild(native, canvas);
+                this.videos[camera] = native;
+                if (this.videoURLs[camera]) {
+                    URL.revokeObjectURL(this.videoURLs[camera]);
+                    this.videoURLs[camera] = null;
+                }
+            }
+            this._nativeVideos = {};
+            this._useWebCodecs = false;
+            this._compatReason = kind;
+            this._wcFailures = [];
+            this._setupMediaListeners();
+            if (event && this.currentEvent === event) {
+                await this._loadEventNow(event);
+                if (at > 0) await this._seekToEventTimeNow(at);
+            }
+        });
+        return run.then(async () => {
+            this._compatSwitching = false;
+            if (event && this.currentEvent === event && wasPlaying) await this.play();
+            window.dispatchEvent(new CustomEvent('tcv-player-fallback', { detail: { kind } }));
+            this._noteFallback(kind);
+        }, (err) => {
+            this._compatSwitching = false;
+            console.error('[VideoPlayer] Switch to the Compatibility player failed:', err);
+        });
+    }
+
+    /**
+     * The one-time note: shown the first time the app switches to the
+     * Compatibility player for this reason in this browser.
+     * @private
+     */
+    _noteFallback(kind) {
+        if (!window.PlayerFallback?.firstNote?.(kind)) return;
+        let tries = 0;
+        const show = () => {
+            const app = window.app;
+            if (!app?.showToast) {
+                if (++tries < 40) setTimeout(show, 500);
+                return;
+            }
+            const t = (k, fb) => {
+                const s = window.i18n?.t ? window.i18n.t(k) : null;
+                return s && s !== k ? s : fb;
+            };
+            app.showToast(t('player.fallbackNote',
+                'This browser can\'t use the fast video player here, so TeslaCamViewer switched to the Compatibility player. You can change the player in Settings, Advanced.'),
+            'info', 12000);
+        };
+        show();
     }
 
     /**
@@ -166,6 +320,9 @@ class VideoPlayer {
             if (oldEl.style.height) canvas.style.height = oldEl.style.height;
             oldEl.parentNode.replaceChild(canvas, oldEl);
             window.WebCodecsVideoElement.install(canvas);
+            // Kept to put back if the app has to switch to the Compatibility player
+            this._nativeVideos[cam] = oldEl;
+            canvas.addEventListener('webcodecsfailure', (e) => this._onWebCodecsFailure(cam, e.detail));
             out[cam] = canvas;
         }
         return out;
@@ -175,12 +332,40 @@ class VideoPlayer {
      * Setup video element event listeners
      */
     setupEventListeners() {
-        // Listen to front camera for time updates (master)
-        this.videos.front.addEventListener('timeupdate', () => {
-            if (this.onTimeUpdate) {
-                this.onTimeUpdate(this.videos.front.currentTime);
-            }
-        });
+        this._setupMediaListeners();
+
+        // Add double-click for fullscreen (on the boxes, which stay when the
+        // player switches elements)
+        for (const [camera, video] of Object.entries(this.videos)) {
+            video.parentElement.addEventListener('dblclick', () => {
+                this.toggleFullscreen(video.parentElement);
+            });
+        }
+    }
+
+    /**
+     * Listeners on the camera elements themselves. Run again for the new
+     * elements when the player switches to the Compatibility player.
+     * @private
+     */
+    _setupMediaListeners() {
+        // Time updates: the front camera's, and once the front has ended, the
+        // cameras still playing the rest of the clip (#587: the clip runs
+        // until its longest camera ends, so the timeline keeps moving).
+        // The time is the clip's clock (getCurrentTime), not the front's.
+        for (const [camera, video] of Object.entries(this.videos)) {
+            if (!video) continue;
+            video.addEventListener('timeupdate', () => {
+                if (!this.onTimeUpdate) return;
+                if (camera !== 'front') {
+                    const f = this.videos.front;
+                    const frontDone = !f || !this._hasSource(f) || f.ended
+                        || (f.duration > 0 && f.currentTime >= f.duration - VideoPlayer.END_HOLD_SEC - 1e-3);
+                    if (!frontDone) return;
+                }
+                this.onTimeUpdate(this.getCurrentTime());
+            });
+        }
 
         // Listen for all videos ending
         for (const [camera, video] of Object.entries(this.videos)) {
@@ -244,13 +429,6 @@ class VideoPlayer {
             video.muted = true;
             video.volume = 0;
         }
-
-        // Add double-click for fullscreen
-        for (const [camera, video] of Object.entries(this.videos)) {
-            video.parentElement.addEventListener('dblclick', () => {
-                this.toggleFullscreen(video.parentElement);
-            });
-        }
     }
 
     /**
@@ -303,6 +481,7 @@ class VideoPlayer {
         // finishes first, so it can't land on this event's clips.
         this._seekReq++;
         this._eventGen++;
+        this._pendingPlay = null;   // a waiting start for the old event is dropped too
         return this._exclusive(() => this._loadEventNow(event));
     }
 
@@ -594,8 +773,11 @@ class VideoPlayer {
 
         await Promise.all(loadPromises);
 
-        // Reapply playback rate after loading new videos (browser resets to 1)
-        this.setPlaybackRate(currentRate);
+        // Reapply playback rate after loading new videos (browser resets to 1).
+        // A speed picked while the clip was loading wins over the one read
+        // when the load started: before, picking 2x during a slow clip load
+        // (the fast player decodes in software) was undone at its end.
+        this.setPlaybackRate(this._desiredRate || currentRate);
 
         if (this.onClipChange) {
             this.onClipChange(clipIndex);
@@ -711,6 +893,21 @@ class VideoPlayer {
      * Play all videos synchronized
      */
     async play() {
+        // A start is already waiting (the next clip loading after a clip end,
+        // or an earlier Play): it plays once ready, a Pause pressed meanwhile
+        // is undone. Playing now would start the ended clip again (#596).
+        if (this._pendingPlay) {
+            this._pendingPlay.play = true;
+            if (this.onPlayStateChange) this.onPlayStateChange(true);
+            return;
+        }
+        // A seek or clip load is queued or running, or a fast-player camera
+        // is still decoding the picture of a seek: play once it's done, from
+        // where it lands (#596).
+        if (this.currentEvent && (this._seekPending > 0 || this._canvasSeeking())) {
+            if (this.onPlayStateChange) this.onPlayStateChange(true);
+            return this._queuePlay(null);
+        }
         // Nothing playable in this clip: _playNow loads the next one, so it
         // runs in the queue like any other clip load (#526).
         if (this.currentEvent && this._loadedVideos().length === 0) {
@@ -727,6 +924,14 @@ class VideoPlayer {
         try {
             // Only play this event's videos that have a source loaded
             const activeVideos = this._loadedVideos();
+
+            // Every camera failed in the fast player and the switch to the
+            // Compatibility player is queued: it reloads this clip and plays
+            // it. Advancing here would try every later clip first.
+            if (activeVideos.length === 0 && this._compatSwitching) {
+                this._compatResumePlay = true;
+                return;
+            }
 
             // If no videos have sources (all failed to load), skip to next clip
             if (activeVideos.length === 0) {
@@ -789,10 +994,11 @@ class VideoPlayer {
         const state = {
             rafHandle: null,
             lastT: performance.now(),
-            // We advance "clip-local" time (videos share the same clip load,
-            // so their internal duration bounds match). Start from front's
-            // currentTime to pick up any existing seek position.
-            currentClipTime: this.videos.front?.currentTime || 0
+            // We advance "clip-local" time (videos share the same clip load).
+            // Start from the clip's clock to pick up any existing seek
+            // position: the furthest camera, as the front may have ended
+            // before the others (#587).
+            currentClipTime: this.getCurrentTime()
         };
         this._wcMasterClock = state;
 
@@ -895,6 +1101,8 @@ class VideoPlayer {
      * Pause all videos
      */
     async pause() {
+        // A start still waiting for its clip or seek doesn't happen (#596)
+        if (this._pendingPlay) this._pendingPlay.play = false;
         if (this._useWebCodecs) this._stopWebCodecsMasterClock();
         for (const video of Object.values(this.videos)) {
             video.pause();
@@ -946,17 +1154,37 @@ class VideoPlayer {
     }
 
     /**
-     * Length of the loaded clip: the front video's, or the cached probe of
-     * this clip while the front has none (missing or unreadable front file).
-     * 0 when neither is known.
+     * Length of the loaded clip: its LONGEST loaded camera's (#587: the
+     * cameras of a clip end up to ~0.5 s apart, and the clip plays until the
+     * last one ends), or the cached probe of this clip while no camera knows
+     * its length yet. 0 when neither is known. (It was the front video's
+     * length: a seek or frame step past the front's end loaded the next clip
+     * while the other cameras still had frames to show.)
      * @private
      */
     _clipDuration() {
-        const front = this.videos.front;
-        const d = front && this._hasSource(front) ? front.duration : NaN;
-        if (Number.isFinite(d) && d > 0) return d;
+        let d = 0;
+        for (const v of this._loadedVideos()) {
+            const vd = v.duration;
+            if (Number.isFinite(vd) && vd > d) d = vd;
+        }
+        if (d > 0) return d;
         const cached = this.cachedClipDurations[this.currentClipIndex];
         return Number.isFinite(cached) && cached > 0 ? cached : 0;
+    }
+
+    /**
+     * Where a seek to clip time `t` puts one camera: `t`, but never past the
+     * camera's own last frame. A camera shorter than the clip holds its last
+     * frame through the rest of the clip, as it does while playing (#587).
+     * The margin is less than a frame (Tesla's frames are 19-37 ms apart):
+     * the old 0.05 s showed the frame before the last one.
+     * @private
+     */
+    _cameraTime(video, t) {
+        const d = video.duration;
+        const max = Number.isFinite(d) && d > 0 ? Math.max(0, d - VideoPlayer.END_HOLD_SEC) : t;
+        return Math.max(0, Math.min(t, max));
     }
 
     /** @private */
@@ -969,9 +1197,10 @@ class VideoPlayer {
             const duration = this._clipDuration();
             const newTime = Math.max(0, duration + time); // time is negative
             for (const video of this._loadedVideos()) {
-                video.currentTime = newTime;
+                video.currentTime = this._cameraTime(video, newTime);
             }
             if (this._wcMasterClock) this._wcMasterClock.currentClipTime = newTime;
+            this._refreshEndedLabels(newTime);
             return;
         }
 
@@ -985,20 +1214,24 @@ class VideoPlayer {
             await this.loadClip(this.currentClipIndex + 1);
             // Seek to the overflow amount in the new clip
             for (const video of this._loadedVideos()) {
-                video.currentTime = overflow;
+                video.currentTime = this._cameraTime(video, overflow);
             }
             if (this._wcMasterClock) this._wcMasterClock.currentClipTime = overflow;
+            this._refreshEndedLabels(overflow);
             return;
         }
 
-        // Normal seek within current clip
-        // Clamp time to valid range [0, duration - 0.05] to avoid end-of-video issues
+        // Normal seek within current clip. Each camera goes to `time` or its
+        // own last frame (_cameraTime); the clip's clock goes to `time`, up to
+        // just before the longest camera's end.
         let effectiveTime = null;
         for (const video of this._loadedVideos()) {
-            const maxTime = video.duration ? Math.max(0, video.duration - 0.05) : time;
-            const t = Math.max(0, Math.min(time, maxTime));
-            video.currentTime = t;
-            if (effectiveTime === null) effectiveTime = t;
+            video.currentTime = this._cameraTime(video, time);
+        }
+        if (this._loadedVideos().length) {
+            const dur = this._clipDuration();
+            effectiveTime = Math.max(0, dur > 0 ? Math.min(time, Math.max(0, dur - VideoPlayer.END_HOLD_SEC)) : time);
+            this._refreshEndedLabels(effectiveTime);
         }
 
         // Keep the WebCodecs master clock in sync with the seek. Without
@@ -1011,11 +1244,61 @@ class VideoPlayer {
     }
 
     /**
-     * Get current playback time (from front camera)
+     * Current time in the clip: the clip's own clock, which runs until its
+     * longest camera ends (#587). While the WebCodecs player plays that is
+     * its master clock; otherwise the furthest loaded camera (a camera that
+     * ended stops at its own length while the others play on, so the front's
+     * time alone stood still in the last part of the clip and a frame step
+     * from there jumped to the next clip).
      * @returns {number}
      */
     getCurrentTime() {
-        return this.videos.front.currentTime || 0;
+        if (this._wcMasterClock && Number.isFinite(this._wcMasterClock.currentClipTime)) {
+            return this._wcMasterClock.currentClipTime;
+        }
+        let t = null;
+        for (const v of this._loadedVideos()) {
+            const ct = v.currentTime;
+            if (Number.isFinite(ct) && (t === null || ct > t)) t = ct;
+        }
+        return t !== null ? t : (this.videos.front?.currentTime || 0);
+    }
+
+    /**
+     * Cameras that have ended at clip time `t` of clip `clipIndex`: a loaded
+     * camera whose own length (cachedCameraDurations, else its element's)
+     * is at or before `t`. Its label is red from there until the next clip,
+     * live and in exports (#586).
+     * @param {number} clipIndex
+     * @param {number} t - seconds into that clip
+     * @returns {Set<string>}
+     */
+    endedCamerasAt(clipIndex, t) {
+        const out = new Set();
+        const per = this.cachedCameraDurations?.[clipIndex] || null;
+        const group = this.currentEvent?.clipGroups?.[clipIndex];
+        for (const cam of this._eventCameras()) {
+            let d = per ? per[cam] : undefined;
+            if (!(d > 0) && clipIndex === this.currentClipIndex) {
+                const v = this.videos[cam];
+                if (v && this._hasSource(v)) d = v.duration;
+            }
+            if (!(d > 0)) continue;
+            if (group && !group.clips?.[cam]) continue;
+            if (t >= d - 1e-6) out.add(cam);
+        }
+        return out;
+    }
+
+    /**
+     * After a seek: a camera's label is red when the clip's clock is at or
+     * past that camera's end, else not (it used to stay red after seeking
+     * back from the end of a clip, until the camera played again).
+     * @private
+     */
+    _refreshEndedLabels(clipTime) {
+        const ended = this.endedCamerasAt(this.currentClipIndex, clipTime + VideoPlayer.END_HOLD_SEC);
+        for (const cam of this._eventCameras()) this.updateVideoLabelState(cam, ended.has(cam));
     }
 
     /**
@@ -1035,7 +1318,16 @@ class VideoPlayer {
         // Only check videos that have a source loaded (src is set and not empty)
         const activeVideos = this._loadedVideos();
         // Consider a video "done" if it ended OR errored (don't block on corrupted files)
-        const allEnded = activeVideos.length > 0 && activeVideos.every(v => v.ended || v.error);
+        // A Compatibility-player camera held on its own last frame (a seek past
+        // its end puts it END_HOLD_SEC before its length, #587) counts as
+        // ended, and so does one whose length is behind a camera that has
+        // ended (the clip's clock is past its end): Chrome may never fire
+        // 'ended' for a <video> played from that close to its end, and the
+        // clip then never moved on (#596).
+        const clock = activeVideos.reduce((m, v) => (v.ended && v.duration > m ? v.duration : m), 0);
+        const done = v => !this._useWebCodecs && Number.isFinite(v.duration) && v.duration > 0
+            && (v.currentTime >= v.duration - VideoPlayer.END_HOLD_SEC - 0.005 || v.duration <= clock + 0.001);
+        const allEnded = activeVideos.length > 0 && activeVideos.every(v => v.ended || v.error || done(v));
 
         if (!allEnded) {
             // Not all videos finished yet, keep waiting
@@ -1062,11 +1354,7 @@ class VideoPlayer {
         // press, so it can't overlap another clip load: #526)
         if (wasPlaying && this.currentClipIndex < this.currentEvent.clipGroups.length - 1) {
             const endedClip = this.currentClipIndex;
-            this._queueClipStep(async () => {
-                if (this.currentClipIndex !== endedClip) return; // something else moved on already
-                await this.loadClip(endedClip + 1);
-                await this._playNow();
-            }).catch(err => {
+            this._queuePlay(() => this._advanceFrom(endedClip, endedClip + 1)).catch(err => {
                 console.error('Error loading next clip:', err);
                 if (this.onPlayStateChange) {
                     this.onPlayStateChange(false);
@@ -1077,11 +1365,7 @@ class VideoPlayer {
             if (this.loopEnabled) {
                 // Loop back to first clip
                 const endedClip = this.currentClipIndex;
-                this._queueClipStep(async () => {
-                    if (this.currentClipIndex !== endedClip) return;
-                    await this.loadClip(0);
-                    await this._playNow();
-                }).catch(err => {
+                this._queuePlay(() => this._advanceFrom(endedClip, 0)).catch(err => {
                     console.error('Error looping to first clip:', err);
                     if (this.onPlayStateChange) {
                         this.onPlayStateChange(false);
@@ -1097,6 +1381,65 @@ class VideoPlayer {
                 }
             }
         }
+    }
+
+    /**
+     * Start playback from the clip-step queue, after the seeks and clip loads
+     * queued before it (#596): first `prep` (an async step returning false
+     * when there is nothing to play, e.g. the next clip's load after a clip
+     * end), then, on the fast player, until every camera shows its seeked
+     * picture (3 s at most), then play. A Pause pressed meanwhile cancels the
+     * start, Play again brings it back (see _pendingPlay).
+     * @private
+     */
+    _queuePlay(prep) {
+        const p = { play: true };
+        this._pendingPlay = p;
+        return this._queueClipStep(async () => {
+            if (this._pendingPlay !== p) return;                // a new event dropped it
+            if (prep && !(await prep())) return;
+            if (this._useWebCodecs) {
+                const t0 = performance.now();
+                while (this._pendingPlay === p && p.play && this._canvasSeeking() && performance.now() - t0 < 3000) {
+                    await new Promise(r => setTimeout(r, 16));
+                }
+            }
+            if (this._pendingPlay !== p) return;
+            this._pendingPlay = null;
+            if (p.play) {
+                await this._playNow();
+            } else if (this.onPlayStateChange) {
+                this.onPlayStateChange(false);
+            }
+        }).finally(() => {
+            // dropped, nothing to play, or failed: the button follows what really plays
+            if (this._pendingPlay === p) {
+                this._pendingPlay = null;
+                if (this.onPlayStateChange) this.onPlayStateChange(this.isPlaying);
+            }
+        });
+    }
+
+    /**
+     * The clip-end step of _queuePlay: clip `endedClip` ended while playing,
+     * load `nextClip` (the next one, or the first when looping). False when
+     * something else moved on already.
+     * @private
+     */
+    async _advanceFrom(endedClip, nextClip) {
+        if (this.currentClipIndex !== endedClip) return false;
+        await this.loadClip(nextClip);
+        return true;
+    }
+
+    /**
+     * True while a loaded fast-player camera is still decoding the picture of
+     * a seek (its canvas shows the picture from before it).
+     * @private
+     */
+    _canvasSeeking() {
+        if (!this._useWebCodecs) return false;
+        return this._loadedVideos().some(v => v._wcv && v.seeking);
     }
 
     /**
@@ -1138,6 +1481,7 @@ class VideoPlayer {
      * @param {number} rate Playback rate (0.25, 0.5, 1, 1.5, 2, etc.)
      */
     setPlaybackRate(rate) {
+        this._desiredRate = rate;
         for (const video of Object.values(this.videos)) {
             video.playbackRate = rate;
         }
@@ -1160,12 +1504,14 @@ class VideoPlayer {
     }
 
     // --- Clip timing shared with everything drawn against event time (#537)
-    // The player's per-clip lengths (cachedClipDurations, probed from each
-    // clip's front video) are the one source of truth: the short last clip
-    // keeps its real length, and a clip group with no front video is 0 s
-    // because the player skips it. Graphs, markers, thumbnails, CSV times and
-    // export overlays use these helpers so they line up with the player.
+    // The player's per-clip lengths (cachedClipDurations: each clip lasts until
+    // its longest camera ends, #587) are the one source of truth: the short
+    // last clip keeps its real length, and a clip group with no front video is
+    // 0 s because the player skips it. Graphs, markers, thumbnails, CSV times
+    // and export overlays use these helpers so they line up with the player.
     // 60 s is only the fallback for a clip whose length isn't known yet.
+    // Telemetry comes from the front video, so its frames spread over the
+    // front's own length (frontLength), which can be shorter than the clip.
 
     /**
      * Length of one clip in event seconds.
@@ -1176,6 +1522,21 @@ class VideoPlayer {
     static clipLength(durations, clipIndex) {
         const d = Array.isArray(durations) ? durations[clipIndex] : undefined;
         return Number.isFinite(d) && d >= 0 ? d : VideoPlayer.FALLBACK_CLIP_SEC;
+    }
+
+    /**
+     * The front video's own length in one clip: what the front's telemetry
+     * frames spread over (#587). It is the clip's length when the per-camera
+     * lengths aren't known (`durations.cameras`, set with cachedClipDurations).
+     * @param {number[]} durations - cachedClipDurations (may be empty)
+     * @param {number} clipIndex
+     * @returns {number}
+     */
+    static frontLength(durations, clipIndex) {
+        const len = VideoPlayer.clipLength(durations, clipIndex);
+        const per = durations && Array.isArray(durations.cameras) ? durations.cameras[clipIndex] : null;
+        const f = per ? per.front : undefined;
+        return Number.isFinite(f) && f > 0 && len > 0 ? Math.min(f, len) : len;
     }
 
     /**
@@ -1227,36 +1588,62 @@ class VideoPlayer {
         // into the next event's array.
         const event = this.currentEvent;
         const durations = [];
+        const cameraDurations = [];
         let total = 0;
+        const cameras = this._eventCameras();
 
         for (let i = 0; i < event.clipGroups.length; i++) {
             const clipGroup = event.clipGroups[i];
-            // Use front camera as reference
+            // A clip group without a front video is 0 s: the player skips it (#537).
             const clip = clipGroup.clips.front;
             let duration = 0;
+            const perCamera = {};
 
             if (clip && clip.fileHandle) {
-                try {
-                    const file = await clip.fileHandle.getFile();
-
-                    // Skip empty/corrupted files
-                    if (file.size < 1024) {
-                        console.warn(`Skipping empty file for duration: ${file.name}`);
-                        duration = 60; // Default
-                    } else {
-                        duration = await this._probeClipDuration(file);
+                // A clip lasts until its LONGEST camera ends (#587). Tesla's
+                // cameras end a clip up to ~0.5 s apart (on a real 6-camera event
+                // the front was 0.48 s shorter than the repeaters in 3 of 10
+                // clips), and the player waits for every camera to end before
+                // the next clip. The clip used to be measured by its front
+                // video alone, so seeks, frame steps and exports moved to the
+                // next clip at the front's end and cut the other cameras'
+                // last frames. Every camera's own length is kept too: a
+                // camera has ended from there on (its label turns red).
+                const probes = await Promise.all(cameras.map(async (cam) => {
+                    const c = clipGroup.clips[cam];
+                    if (!c || !c.fileHandle) return [cam, null];
+                    try {
+                        const file = await c.fileHandle.getFile();
+                        // Skip empty/corrupted files
+                        if (file.size < 1024) {
+                            console.warn(`Skipping empty file for duration: ${file.name}`);
+                            return [cam, null];
+                        }
+                        return [cam, await this._probeClipDuration(file, null)];
+                    } catch (error) {
+                        console.error('Error getting clip duration:', error);
+                        return [cam, null];
                     }
-                } catch (error) {
-                    console.error('Error getting clip duration:', error);
-                    duration = 60; // Default
+                }));
+                for (const [cam, d] of probes) {
+                    if (Number.isFinite(d) && d > 0) {
+                        perCamera[cam] = d;
+                        if (d > duration) duration = d;
+                    }
                 }
+                if (!(duration > 0)) duration = 60; // Default: no camera's length could be read
             }
 
             durations.push(duration);
+            cameraDurations.push(perCamera);
             total += duration;
         }
 
-        if (this.currentEvent === event) this.cachedClipDurations = durations;
+        if (this.currentEvent === event) {
+            durations.cameras = cameraDurations;   // for VideoPlayer.frontLength
+            this.cachedClipDurations = durations;
+            this.cachedCameraDurations = cameraDurations;
+        }
         console.log(`[VideoPlayer] Cached ${this.cachedClipDurations.length} clip durations, total: ${total.toFixed(1)}s`);
         return total;
     }
@@ -1265,13 +1652,19 @@ class VideoPlayer {
      * Probe a single clip's duration by briefly loading it in a throwaway
      * <video> element. Retries once on transient failure — most metadata
      * errors during event load are decoder/IO contention rather than
-     * actually corrupt files. Falls back to the 60s default if both
-     * attempts fail.
+     * actually corrupt files. Falls back to `fallback` (the 60s default) if
+     * both attempts fail. A length once read is remembered for that file
+     * (name, size, date): every export re-reads the event's clip lengths,
+     * and that's 6 files a clip now (#587).
      * @param {File} file
-     * @returns {Promise<number>}
+     * @param {number|null} [fallback=60]
+     * @returns {Promise<number|null>}
      * @private
      */
-    async _probeClipDuration(file) {
+    async _probeClipDuration(file, fallback = 60) {
+        if (!this._probedDurations) this._probedDurations = new Map();
+        const key = `${file.name}|${file.size}|${file.lastModified}`;
+        if (this._probedDurations.has(key)) return this._probedDurations.get(key);
         const attempt = () => new Promise((resolve) => {
             const video = document.createElement('video');
             const url = URL.createObjectURL(file);
@@ -1302,9 +1695,12 @@ class VideoPlayer {
             res = await attempt();
         }
         if (!res.ok) {
-            console.warn(`Unable to probe duration for ${file.name} after retry (${res.reason}); using 60s default`);
-            return 60;
+            console.warn(`Unable to probe duration for ${file.name} after retry (${res.reason})` +
+                (fallback === null ? '' : `; using ${fallback}s default`));
+            return fallback;
         }
+        if (this._probedDurations.size > 2000) this._probedDurations.clear();
+        this._probedDurations.set(key, res.duration);
         return res.duration;
     }
 
@@ -1453,6 +1849,7 @@ class VideoPlayer {
         this.currentEvent = null;
         this.currentClipIndex = -1;
         this.cachedClipDurations = []; // Clear duration cache
+        this.cachedCameraDurations = [];
         this._stopStuckVideoWatchdog();
     }
 
@@ -1461,7 +1858,9 @@ class VideoPlayer {
      * @returns {boolean}
      */
     getIsPlaying() {
-        return this.isPlaying;
+        // A start waiting for its clip or seek is playing as far as the user
+        // is concerned: Pause shows, Space pauses (#596)
+        return this.isPlaying || !!(this._pendingPlay && this._pendingPlay.play);
     }
 
     /**
@@ -1675,3 +2074,6 @@ class VideoPlayer {
 
 // Length assumed for a clip whose real length is not known yet (#537)
 VideoPlayer.FALLBACK_CLIP_SEC = 60;
+// A seek stops this far before a camera's end, so it shows that camera's last
+// frame without ending it (less than a frame: Tesla's frames are 19-37 ms apart).
+VideoPlayer.END_HOLD_SEC = 0.01;

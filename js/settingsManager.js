@@ -67,11 +67,18 @@ class SettingsManager {
             exportResolution: 'full',                  // 'full' | 'hd' | 'web' | 'custom'
             exportResolutionCustomHeight: 1920,        // used only when exportResolution === 'custom'
 
-            // Experimental WebCodecs-backed player — replaces HTML5 <video>
-            // elements with canvas + VideoDecoder rendering. Helps on Intel
-            // integrated GPUs where the 2-YUV-overlay-slot limit causes
-            // flickering with 4+ videos. Requires page reload to apply.
-            useWebCodecsPlayer: false,
+            // The fast player (WebCodecs): canvas + VideoDecoder rendering
+            // instead of HTML5 <video> elements. On by default since
+            // 2026.47.5.1 (it was an opt-in BETA before). Off = the
+            // Compatibility player (the HTML5 <video> one). Applies after a
+            // page reload. The app falls back to the Compatibility player by
+            // itself where WebCodecs can't play (js/videoPlayer.js).
+            useWebCodecsPlayer: true,
+            // True once the user picked a player in Settings. Earlier builds
+            // saved every setting, the player's old default (off) too, so a
+            // saved "off" without this flag was never a choice: see
+            // SettingsManager.wantsFastPlayer().
+            videoPlayerChosen: false,
 
             // Fast Export — WebCodecs VideoDecoder + VideoEncoder path.
             // Now default on (was experimental). Set to false to force the
@@ -116,6 +123,7 @@ class SettingsManager {
         try {
             const stored = localStorage.getItem(this.STORAGE_KEY);
             let settings = stored ? { ...this.defaults, ...JSON.parse(stored) } : { ...this.defaults };
+            settings.useWebCodecsPlayer = SettingsManager.wantsFastPlayer(settings);
 
             // Sync mini-map dark mode from mini-map's own localStorage (for backwards compatibility)
             const miniMapDarkMode = localStorage.getItem('teslacamviewer_minimap_dark_mode');
@@ -195,6 +203,80 @@ class SettingsManager {
     resetToDefaults() {
         this.settings = { ...this.defaults };
         this.saveSettings();
+    }
+
+    /**
+     * Does this saved settings object ask for the fast (WebCodecs) player?
+     * Only a choice made in Settings (videoPlayerChosen) can turn it off.
+     * Every build before 2026.47.5.1 saved the whole settings object, the
+     * player's old default (off) too, so a saved `useWebCodecsPlayer: false`
+     * without the flag is the old default, not a choice, and reads as on.
+     * Also used by VideoPlayer, which starts before this class is created.
+     * @param {Object|null} saved  parsed teslacamviewer_settings
+     */
+    static wantsFastPlayer(saved) {
+        if (!saved || saved.videoPlayerChosen !== true) return true;
+        return saved.useWebCodecsPlayer !== false;
+    }
+
+    /**
+     * The user picked a player in Settings > Advanced. Remembered as a
+     * choice, so it is kept from now on. Picking the fast player again also
+     * forgets an earlier automatic fall-back in this browser, so the next
+     * page load tries it again.
+     * @param {boolean} fast
+     */
+    setVideoPlayerChoice(fast) {
+        this.settings.useWebCodecsPlayer = !!fast;
+        this.settings.videoPlayerChosen = true;
+        if (fast) window.PlayerFallback?.clear?.();
+        this.saveSettings();
+    }
+
+    /**
+     * The status line under the Video player choice: what plays now, and
+     * why when it isn't what the setting says.
+     */
+    _updateVideoPlayerStatus() {
+        const el = this.modal?.querySelector('#videoPlayerStatus');
+        if (!el) return;
+        const vp = window.app?.videoPlayer;
+        const wantFast = this.get('useWebCodecsPlayer') !== false;
+        const usingFast = vp ? !!vp._useWebCodecs : wantFast;
+        el.textContent = '';
+        el.className = 'setting-status';
+        let msg = '';
+        if (wantFast && !usingFast) {
+            const kind = vp?._compatReason || window.PlayerFallback?.active?.()?.kind || 'unsupported';
+            const reasons = {
+                unsupported: 'settings.performance.playerReason_unsupported',
+                library: 'settings.performance.playerReason_library',
+                codec: 'settings.performance.playerReason_codec',
+                decode: 'settings.performance.playerReason_decode',
+                file: 'settings.performance.playerReason_file'
+            };
+            msg = this.t('settings.performance.playerFallbackActive', {
+                reason: this.t(reasons[kind] || reasons.unsupported)
+            });
+        } else if (wantFast !== usingFast) {
+            msg = this.t('settings.performance.playerReload');
+        }
+        if (!msg) return;
+        el.className = 'setting-status loading';
+        el.appendChild(document.createTextNode(msg + ' '));
+        // A fall-back this browser remembers (codec) can be retried from here
+        if (wantFast && !usingFast && window.PlayerFallback?.active?.()) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'settings-inline-btn';
+            btn.id = 'videoPlayerRetryBtn';
+            btn.textContent = this.t('settings.performance.playerTryFast');
+            btn.addEventListener('click', () => {
+                window.PlayerFallback.clear();
+                el.textContent = this.t('settings.performance.playerReload');
+            });
+            el.appendChild(btn);
+        }
     }
 
     /**
@@ -341,14 +423,6 @@ class SettingsManager {
                                 <option value="midnight">${this.t('settings.ui.themeMidnight')}</option>
                                 <option value="tesla-red">${this.t('settings.ui.themeTeslaRed')}</option>
                             </select>
-                        </div>
-                        <div class="setting-row">
-                            <label for="setting-showKeyboardHints">${this.t('settings.ui.showKeyboardHints')}</label>
-                            <input type="checkbox" id="setting-showKeyboardHints" class="setting-checkbox">
-                        </div>
-                        <div class="setting-row">
-                            <label for="setting-showTimestampOverlay">${this.t('settings.ui.showTimestampOverlay')}</label>
-                            <input type="checkbox" id="setting-showTimestampOverlay" class="setting-checkbox">
                         </div>
                         <div class="setting-row">
                             <label for="setting-showWhatsNew">${this.t('settings.ui.showWhatsNew')}</label>
@@ -553,19 +627,13 @@ class SettingsManager {
                     <div class="settings-section">
                         <h3>${this.t('settings.sections.performance')}</h3>
                         <div class="setting-row">
-                            <label for="setting-preloadNextClip">${this.t('settings.performance.preloadNextClip')}</label>
-                            <input type="checkbox" id="setting-preloadNextClip" class="setting-checkbox">
-                            <span class="setting-hint">${this.t('settings.performance.preloadHint')}</span>
-                        </div>
-                        <div class="setting-row">
-                            <label for="setting-memoryOptimization">${this.t('settings.performance.memoryOptimization')}</label>
-                            <input type="checkbox" id="setting-memoryOptimization" class="setting-checkbox">
-                            <span class="setting-hint">${this.t('settings.performance.memoryHint')}</span>
-                        </div>
-                        <div class="setting-row">
-                            <label for="setting-useWebCodecsPlayer">${this.t('settings.performance.webCodecsPlayer')} <span class="ai-search-beta-pill" style="margin-left:6px;">${this.t('settings.performance.beta')}</span></label>
-                            <input type="checkbox" id="setting-useWebCodecsPlayer" class="setting-checkbox">
-                            <span class="setting-hint">${this.t('settings.performance.webCodecsHint')}</span>
+                            <label for="setting-videoPlayer">${this.t('settings.performance.videoPlayer')}</label>
+                            <select id="setting-videoPlayer" class="setting-select">
+                                <option value="fast">${this.t('settings.performance.playerFast')}</option>
+                                <option value="compat">${this.t('settings.performance.playerCompat')}</option>
+                            </select>
+                            <span class="setting-hint">${this.t('settings.performance.videoPlayerHint')}</span>
+                            <div id="videoPlayerStatus" class="setting-status"></div>
                         </div>
                     </div>
 
@@ -661,44 +729,43 @@ class SettingsManager {
         const status = window.aiSearch?.getStatus?.() || { enabled: false, indexing: false, eventCount: 0, frameCount: 0, model: 'base', strategy: 'sparse', webCodecs: false };
         const eventsCount = (window.app?.eventBrowser?.events || []).length;
         const enabledStateHtml = status.enabled
-            ? `<span style="color:#4ade80;">● Enabled</span> — ${status.eventCount} events indexed, ${status.frameCount} frames embedded`
-            : `<span style="color:#888;">○ Not enabled</span> — search is not set up yet`;
+            ? `<span style="color:#4ade80;">● ${this.t('settings.aiSearch.enabled')}</span> · ${this.t('settings.aiSearch.enabledDetail', { events: status.eventCount, frames: status.frameCount })}`
+            : `<span style="color:#888;">○ ${this.t('settings.aiSearch.notEnabled')}</span> · ${this.t('settings.aiSearch.notSetUp')}`;
         return `
             <div class="settings-section">
-                <h3>AI Search</h3>
+                <h3>${this.t('aiSearch.title')}</h3>
                 <p style="color:var(--text-muted, #888); font-size:0.9rem; line-height:1.5; margin:4px 0 12px;">
-                    Find events by describing the scene ("parking garage", "night drive", "pedestrian walking").
-                    Uses an on-device AI model. <strong>No video or data ever leaves your computer.</strong>
+                    ${this.t('settings.aiSearch.intro')} <strong>${this.t('settings.aiSearch.private')}</strong>
                 </p>
 
                 <div class="setting-row" style="display:block; padding:10px 0;">
                     <div style="margin-bottom:8px;">${enabledStateHtml}</div>
-                    ${!status.webCodecs ? '<div style="color:#ffb800; font-size:0.85rem; margin-top:4px;">⚠ Your browser doesn\'t support WebCodecs — indexing will use a slower fallback path.</div>' : ''}
+                    ${!status.webCodecs ? `<div style="color:#ffb800; font-size:0.85rem; margin-top:4px;">⚠ ${this.t('settings.aiSearch.noWebCodecs')}</div>` : ''}
                 </div>
 
                 <div class="setting-row" style="display:block; padding:10px 0;">
-                    <label for="ai-search-model" style="display:block; margin-bottom:4px;">Model quality</label>
+                    <label for="ai-search-model" style="display:block; margin-bottom:4px;">${this.t('settings.aiSearch.modelQuality')}</label>
                     <select id="ai-search-model" class="setting-select" style="width:100%; max-width:420px;">
-                        <option value="base" ${status.model === 'base' ? 'selected' : ''}>Fast — CLIP ViT-B/32 (175 MB download, 3× faster)</option>
-                        <option value="large" ${status.model === 'large' ? 'selected' : ''}>Quality — CLIP ViT-L/14 (~570 MB, more confident tags)</option>
+                        <option value="base" ${status.model === 'base' ? 'selected' : ''}>${this.t('settings.aiSearch.modelBase')}</option>
+                        <option value="large" ${status.model === 'large' ? 'selected' : ''}>${this.t('settings.aiSearch.modelLarge')}</option>
                     </select>
-                    <div style="color:var(--text-muted, #888); font-size:0.8rem; margin-top:4px;">The model is downloaded once and cached by your browser.</div>
+                    <div style="color:var(--text-muted, #888); font-size:0.8rem; margin-top:4px;">${this.t('settings.aiSearch.modelCached')}</div>
                 </div>
 
                 <div class="setting-row" style="display:block; padding:10px 0;">
-                    <label for="ai-search-strategy" style="display:block; margin-bottom:4px;">Default sampling</label>
+                    <label for="ai-search-strategy" style="display:block; margin-bottom:4px;">${this.t('settings.aiSearch.sampling')}</label>
                     <select id="ai-search-strategy" class="setting-select" style="width:100%; max-width:420px;">
-                        <option value="sparse" ${status.strategy === 'sparse' ? 'selected' : ''}>Sparse — 1 frame per clip (fast first-run)</option>
-                        <option value="motion" ${status.strategy === 'motion' ? 'selected' : ''}>Motion-filtered — every scene change (slower, catches short events)</option>
+                        <option value="sparse" ${status.strategy === 'sparse' ? 'selected' : ''}>${this.t('settings.aiSearch.sparse')}</option>
+                        <option value="motion" ${status.strategy === 'motion' ? 'selected' : ''}>${this.t('settings.aiSearch.motion')}</option>
                     </select>
-                    <div style="color:var(--text-muted, #888); font-size:0.8rem; margin-top:4px;">You can "Deep-index" individual events on demand regardless of this default.</div>
+                    <div style="color:var(--text-muted, #888); font-size:0.8rem; margin-top:4px;">${this.t('settings.aiSearch.samplingHint')}</div>
                 </div>
 
                 <div class="setting-row" style="display:block; padding:14px 0;">
                     <button id="ai-search-enable-btn" class="setting-button" style="background:var(--accent,#4a9eff); color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:500;">
-                        ${status.enabled ? 'Re-index all events' : 'Enable and index ' + eventsCount + ' events'}
+                        ${status.enabled ? this.t('settings.aiSearch.reindexAll') : this.t('settings.aiSearch.enableAndIndex', { count: eventsCount })}
                     </button>
-                    ${status.enabled ? '<button id="ai-search-clear-btn" class="setting-button" style="margin-left:8px; background:transparent; color:var(--err,#f87171); border:1px solid var(--err,#f87171); padding:8px 16px; border-radius:6px; cursor:pointer;">Clear index</button>' : ''}
+                    ${status.enabled ? `<button id="ai-search-clear-btn" class="setting-button" style="margin-left:8px; background:transparent; color:var(--err,#f87171); border:1px solid var(--err,#f87171); padding:8px 16px; border-radius:6px; cursor:pointer;">${this.t('settings.aiSearch.clearIndex')}</button>` : ''}
                 </div>
 
                 <div id="ai-search-progress" style="display:none; padding:10px 0;">
@@ -710,12 +777,9 @@ class SettingsManager {
             </div>
 
             <div class="settings-section">
-                <h3>Library Insights Scan</h3>
+                <h3>${this.t('settings.insightsScan.title')}</h3>
                 <p style="color:var(--text-muted); font-size:0.9rem; line-height:1.5; margin:4px 0 12px;">
-                    Pre-compute severity pills for every event in your library so they appear instantly on the sidebar the next
-                    time you open the app. Runs in the background only when you're not actively watching something, and pauses
-                    automatically if AI Search is indexing. Cancel or resume anytime. <em>This is separate from AI Search — no
-                    models or embeddings involved, just SEI telemetry parsing.</em>
+                    ${this.t('settings.insightsScan.description')} <em>${this.t('settings.insightsScan.separate')}</em>
                 </p>
 
                 <div class="setting-row" style="display:block; padding:10px 0;">
@@ -735,16 +799,12 @@ class SettingsManager {
             </div>
 
             <div class="settings-section">
-                <h3>About</h3>
+                <h3>${this.t('settings.aiSearch.about')}</h3>
                 <p style="color:var(--text-muted, #888); font-size:0.85rem; line-height:1.5;">
-                    AI Search uses CLIP (OpenAI's Contrastive Language-Image Pre-training) to match your natural-language
-                    queries against video frames. The model is loaded in your browser via Transformers.js and runs
-                    entirely on your GPU (or CPU if no WebGPU is available).
+                    ${this.t('settings.aiSearch.aboutClip')}
                 </p>
                 <p style="color:var(--text-muted, #888); font-size:0.85rem; line-height:1.5;">
-                    Best for: <em>scene types, locations, general objects</em>. Weaker at: <em>specific colors, fine attributes</em>.
-                    If a search doesn't find what you expect, right-click the event and choose "Deep-index" to
-                    sample more frames.
+                    ${this.t('settings.aiSearch.aboutBest')}
                 </p>
             </div>
         `;
@@ -803,13 +863,13 @@ class SettingsManager {
                     await window.aiSearch.enable({ strategy: stratSel.value });
                 }
             } catch (err) {
-                alert('Indexing failed: ' + err.message);
+                alert(this.t('aiSearch.indexingFailed', { error: err.message }));
             } finally {
                 enableBtn.disabled = false;
             }
         });
         if (clearBtn) clearBtn.addEventListener('click', () => {
-            if (confirm('Clear the AI search index? You\'ll need to re-index to search again.')) {
+            if (confirm(this.t('settings.aiSearch.clearConfirm'))) {
                 window.aiSearch.clearIndex();
             }
         });
@@ -849,10 +909,10 @@ class SettingsManager {
             const st = window.insightsScanner?.getState?.() || { state: 'idle' };
             const btnStyle = 'padding:8px 16px; border-radius:6px; cursor:pointer; font-weight:500;';
             if (st.state === 'scanning' || st.state === 'paused') {
-                const pauseLabel = st.state === 'paused' ? 'Resume' : 'Pause';
+                const pauseLabel = st.state === 'paused' ? this.t('aiSearch.resume') : this.t('aiSearch.pause');
                 buttonsRow.innerHTML = `
                     <button id="insScanSettingsPause" class="setting-button" style="background:var(--accent); color:white; border:none; ${btnStyle}">${pauseLabel}</button>
-                    <button id="insScanSettingsCancel" class="setting-button" style="margin-left:8px; background:transparent; color:var(--danger); border:1px solid var(--danger); ${btnStyle}">Cancel</button>
+                    <button id="insScanSettingsCancel" class="setting-button" style="margin-left:8px; background:transparent; color:var(--danger); border:1px solid var(--danger); ${btnStyle}">${this.t('common.cancel')}</button>
                 `;
                 buttonsRow.querySelector('#insScanSettingsPause')?.addEventListener('click', () => {
                     const s = window.insightsScanner.getState();
@@ -861,7 +921,7 @@ class SettingsManager {
                     setTimeout(renderButtons, 50);
                 });
                 buttonsRow.querySelector('#insScanSettingsCancel')?.addEventListener('click', () => {
-                    if (confirm('Cancel library scan? Already-scanned events will be kept.')) {
+                    if (confirm(this.t('settings.insightsScan.cancelConfirm'))) {
                         window.insightsScanner.cancel();
                         renderButtons();
                     }
@@ -869,18 +929,18 @@ class SettingsManager {
             } else {
                 buttonsRow.innerHTML = `
                     <button id="insScanSettingsStart" class="setting-button" style="background:var(--accent); color:white; border:none; ${btnStyle}">
-                        Scan library (${eligibleCount} events across all drives)
+                        ${this.t('settings.insightsScan.scan', { count: eligibleCount })}
                     </button>
-                    <button id="insScanSettingsClear" class="setting-button" style="margin-left:8px; background:transparent; color:var(--danger); border:1px solid var(--danger); ${btnStyle}">Clear cache</button>
+                    <button id="insScanSettingsClear" class="setting-button" style="margin-left:8px; background:transparent; color:var(--danger); border:1px solid var(--danger); ${btnStyle}">${this.t('settings.insightsScan.clearCache')}</button>
                 `;
                 buttonsRow.querySelector('#insScanSettingsStart')?.addEventListener('click', async () => {
                     const events = window.app?.allEvents || [];
-                    if (events.length === 0) { alert('No events loaded — select a TeslaCam folder first.'); return; }
+                    if (events.length === 0) { alert(this.t('settings.insightsScan.noEvents')); return; }
                     await window.insightsScanner.start(events);
                     renderButtons();
                 });
                 buttonsRow.querySelector('#insScanSettingsClear')?.addEventListener('click', async () => {
-                    if (!confirm('Clear all cached severity data? You\'ll need to open each event or re-scan to get it back.')) return;
+                    if (!confirm(this.t('settings.insightsScan.clearConfirm'))) return;
                     await window.eventInsightsCache?.clear?.();
                     await refreshCacheInfo();
                 });
@@ -891,8 +951,8 @@ class SettingsManager {
             if (!cacheInfo) return;
             const size = (await window.eventInsightsCache?.size?.()) || 0;
             cacheInfo.textContent = size > 0
-                ? `Cached insights: ${size} event${size === 1 ? '' : 's'}`
-                : 'No events cached yet.';
+                ? (window.i18n ? window.i18n.plural('settings.insightsScan.cached', size) : `Cached insights: ${size} event${size === 1 ? '' : 's'}`)
+                : this.t('settings.insightsScan.noneCached');
         };
 
         // Listen for scanner events and reflect in this panel
@@ -905,7 +965,7 @@ class SettingsManager {
             if (progressText) {
                 let line = `${d.done} / ${d.total}`;
                 if (d.currentName && !d.final) line += ' · ' + d.currentName;
-                if (d.paused) line += ' · paused';
+                if (d.paused) line += ' · ' + this.t('settings.insightsScan.paused');
                 progressText.textContent = line;
             }
             if (d.final) {
@@ -1042,6 +1102,12 @@ class SettingsManager {
         selects.forEach(select => {
             select.addEventListener('change', (e) => {
                 const key = e.target.id.replace('setting-', '');
+                // Video player: stored as useWebCodecsPlayer + "the user chose"
+                if (key === 'videoPlayer') {
+                    this.setVideoPlayerChoice(e.target.value !== 'compat');
+                    this._updateVideoPlayerStatus();
+                    return;
+                }
                 this.set(key, e.target.value);
 
                 // Special handling for language changes
@@ -1216,6 +1282,13 @@ class SettingsManager {
             }
         });
 
+        // Video player: the saved choice (fast unless the user picked Compatibility)
+        const playerElement = this.modal.querySelector('#setting-videoPlayer');
+        if (playerElement) {
+            playerElement.value = this.get('useWebCodecsPlayer') === false ? 'compat' : 'fast';
+            this._updateVideoPlayerStatus();
+        }
+
         // Set language dropdown to current i18n locale
         const langElement = this.modal.querySelector('#setting-language');
         if (langElement && window.i18n) {
@@ -1376,6 +1449,9 @@ class SessionManager {
 
         // Check for daily reset
         this._checkDailyReset();
+
+        // Header badge ("Free") in the new language
+        window.addEventListener('localeChanged', () => this._updateHeaderButton());
     }
 
     /**
@@ -1939,14 +2015,28 @@ class SessionManager {
     // ==================== Drive File Storage ====================
 
     /**
-     * Get or create the .tcvconfig directory handle
+     * The .tcvconfig directory handle. Read-only by default: creating it is a write, and any write on a drive
+     * makes the browser ask "Save changes to TeslaCam?" (#546), so only callers that write pass create.
      */
-    async _getConfigDir(rootHandle) {
+    async _getConfigDir(rootHandle, create = false) {
         try {
-            return await rootHandle.getDirectoryHandle('.tcvconfig', { create: true });
+            return await rootHandle.getDirectoryHandle('.tcvconfig', { create });
         } catch (e) {
-            console.warn('Failed to get config directory:', e);
+            if (create || e?.name !== 'NotFoundError') console.warn('Failed to get config directory:', e);
             return null;
+        }
+    }
+
+    /**
+     * True when the user has already given this drive write access (Drive Sync, notes backup, an earlier
+     * licence activation). Asking never happens here.
+     */
+    async _canWriteDrive(rootHandle) {
+        try {
+            if (typeof rootHandle?.queryPermission !== 'function') return false;
+            return (await rootHandle.queryPermission({ mode: 'readwrite' })) === 'granted';
+        } catch (e) {
+            return false;
         }
     }
 
@@ -1962,7 +2052,7 @@ class SessionManager {
      */
     async getDriveId(rootHandle) {
         try {
-            const configDir = await this._getConfigDir(rootHandle);
+            const configDir = await this._getConfigDir(rootHandle, true);
             if (!configDir) return null;
 
             // Try to read existing drive ID
@@ -1998,7 +2088,7 @@ class SessionManager {
         if (!this._sessionData || !this._prefsData) return false;
 
         try {
-            const configDir = await this._getConfigDir(rootHandle);
+            const configDir = await this._getConfigDir(rootHandle, true);
             if (!configDir) return false;
 
             const sessionData = {
@@ -2097,10 +2187,13 @@ class SessionManager {
     }
 
     /**
-     * Sync session to drive after activation
+     * Copy the licence session onto the drive (for recovery on another browser).
+     * ask: true only from a user action that needs it (activating a licence); then the browser may ask for
+     * write access. Otherwise it writes only when the drive already has write access, and never asks (#546).
      */
-    async syncToDrive(rootHandle) {
+    async syncToDrive(rootHandle, { ask = false } = {}) {
         if (!rootHandle) return false;
+        if (!ask && !(await this._canWriteDrive(rootHandle))) return false;
 
         // Save session to drive
         const saved = await this.saveSessionToDrive(rootHandle);
@@ -2112,13 +2205,14 @@ class SessionManager {
     }
 
     /**
-     * Check drive for session and prompt recovery if found
+     * Check drive for session and prompt recovery if found. Read-only unless the drive already has write
+     * access (#546): opening a drive must not ask "Save changes to TeslaCam?".
      */
     async checkDriveRecovery(rootHandle) {
         // Skip if already have active session
         const hasSession = await this.hasActiveSession();
         if (hasSession) {
-            // Just sync current session to drive
+            // Just sync current session to drive (skipped when that would need a write-access prompt)
             await this.syncToDrive(rootHandle);
             return;
         }
@@ -2466,7 +2560,7 @@ class SessionManager {
                 activated = true;
                 // Sync to drive if available
                 if (window.app?.folderParser?.rootHandle) {
-                    await this.syncToDrive(window.app.folderParser.rootHandle);
+                    await this.syncToDrive(window.app.folderParser.rootHandle, { ask: true });
                 }
 
                 // Update UI — await so the button flips to "Deactivate" before
@@ -2702,7 +2796,7 @@ class SessionManager {
             text.textContent = 'Pro';
         } else {
             btn.classList.remove('licensed');
-            text.textContent = 'Free';
+            text.textContent = window.i18n ? window.i18n.t('license.free') : 'Free';
         }
     }
 

@@ -163,14 +163,20 @@
                 const clipIdx = parseInt(key.split('_')[0], 10);
                 let clipStartSec = 0;
                 for (let idx = 0; idx < clipIdx; idx++) clipStartSec += lenOf(idx);
-                const clipDur = lenOf(clipIdx);
+                // the front's telemetry spreads over the front's own length, which can be shorter than the
+                // clip (a clip lasts until its longest camera ends, #587)
+                const clipDur = lenOf(clipIdx) > 0 && typeof VideoPlayer !== 'undefined'
+                    ? VideoPlayer.frontLength(cachedClipDurations, clipIdx) : lenOf(clipIdx);
                 if (!data?.frames?.length || clipDur <= 0) continue;
 
-                const framesPerSec = data.frames.length / clipDur;
                 for (let i = 0; i < data.frames.length; i++) {
                     const f = data.frames[i];
                     frames.push({
-                        eventTime: clipStartSec + (i / framesPerSec),
+                        // The frame's own video frame time (#516); the even
+                        // spread only without the overlay (unit tests)
+                        eventTime: clipStartSec + (typeof TelemetryOverlay !== 'undefined'
+                            ? TelemetryOverlay.seiClipTime(data, i, clipDur)
+                            : (i / data.frames.length) * clipDur),
                         gx: f.g_force_x ?? 0,
                         gy: f.g_force_y ?? 0,
                         // Z is ALREADY gravity-compensated by Tesla — do NOT subtract 1

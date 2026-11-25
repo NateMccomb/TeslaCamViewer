@@ -50,6 +50,9 @@ class DriveSync {
 
         // Constants
         this.VERIFY_CHUNK_SIZE = 8 * 1024 * 1024; // verify reads and compares 8 MB of each file at a time
+        // Size estimate before the real file sizes are read (#555): one camera's one-minute clip. HW3 clips run
+        // ~25-40 MB, HW4 more; it was 15 MB per clip SET (all cameras), so "60 MB" showed for 551 MB.
+        this.EST_BYTES_PER_CAMERA_FILE = 35 * 1024 * 1024;
         this.SYNC_SETTINGS_FILENAME = '.teslacam-sync.json';
         this.USERDATA_BACKUP_FILENAME = '.teslacam-userdata.json';
         this.PRESETS_STORAGE_KEY = 'teslacamviewer_sync_presets';
@@ -264,7 +267,8 @@ class DriveSync {
 
         const permission = await drive.handle.requestPermission({ mode: 'readwrite' });
         if (permission !== 'granted') {
-            throw new Error('Write permission denied for ' + (drive.label || drive.folderName));
+            throw new Error(this._t('driveSync.writeDenied', { drive: drive.label || drive.folderName },
+                'The browser did not allow writing to {{drive}}. Nothing was copied.'));
         }
         return true;
     }
@@ -373,7 +377,8 @@ class DriveSync {
 
                 if (!destEvent) {
                     // Missing on destination
-                    const fingerprint = await this.getEventFingerprint(sourceEvent);
+                    const fingerprint = await this.getEventFingerprint(sourceEvent, { probe: true });
+                    this._rememberSize(sourceEvent, fingerprint);
                     if (fingerprint.partial) {
                         results.warnings.push(this._partialWarning(sourceEvent.name, fingerprint));
                     }
@@ -385,8 +390,10 @@ class DriveSync {
                     results.totalSourceSize += fingerprint.totalSize;
                 } else {
                     // Exists on both - compare
-                    const sourceFingerprint = await this.getEventFingerprint(sourceEvent);
+                    const sourceFingerprint = await this.getEventFingerprint(sourceEvent, { probe: true });
                     const destFingerprint = await this.getEventFingerprint(destEvent);
+                    this._rememberSize(sourceEvent, sourceFingerprint);
+                    this._rememberSize(destEvent, destFingerprint);
                     if (sourceFingerprint.partial) {
                         results.warnings.push(this._partialWarning(sourceEvent.name, sourceFingerprint));
                     }
@@ -427,6 +434,7 @@ class DriveSync {
             for (const [name, destEvent] of destMap) {
                 if (!sourceMap.has(name)) {
                     const fingerprint = await this.getEventFingerprint(destEvent);
+                    this._rememberSize(destEvent, fingerprint);
                     results.destOnly.push({
                         event: destEvent,
                         fingerprint,
@@ -461,8 +469,13 @@ class DriveSync {
      * covers only part of the event. `partial` is true when any file could
      * not be read or the folder could not be listed to the end; Move refuses
      * such an event (#522).
+     * probe: also read the first byte of each file (#554). A file can list and
+     * report its size but still fail to read (no read permission, a bad
+     * sector at its start); without the probe Compare listed it as fine and
+     * the sync then left a partial copy. Used for source events only: one
+     * tiny read per file.
      */
-    async getEventFingerprint(event) {
+    async getEventFingerprint(event, { probe = false } = {}) {
         const files = [];
         const unreadable = [];
         let listError = null;
@@ -477,6 +490,7 @@ class DriveSync {
                     let file;
                     try {
                         file = await entry.getFile();
+                        if (probe && file.size > 0) await file.slice(0, 1).arrayBuffer();
                     } catch (readError) {
                         unreadable.push({ name: entry.name, error: readError?.message || String(readError) });
                         console.warn('Unable to read', entry.name, 'in', event.name, readError);
@@ -753,14 +767,93 @@ class DriveSync {
     }
 
     /**
-     * Get estimated size from an event (use fingerprint if available, else estimate from clips)
+     * An event's size: the real one once Compare or measureDriveSize() has read it, else an estimate of
+     * EST_BYTES_PER_CAMERA_FILE per camera file (#555; isSizeEstimate() tells which).
      */
     getEventSize(event) {
+        if (typeof event.syncSize === 'number') return event.syncSize;
         if (event.estimatedSize) return event.estimatedSize;
         if (event.fingerprint?.totalSize) return event.fingerprint.totalSize;
-        // Estimate ~15MB per clip group (all 4 cameras), ~60 seconds each
-        const clipCount = event.clipGroups?.length || event.clips?.length || 0;
-        return clipCount * 15 * 1024 * 1024; // 15MB per clip set
+        const cameraFiles = event.clips?.length
+            || (event.clipGroups || []).reduce((n, g) => n + Math.max(1, Object.keys(g?.clips || {}).length), 0);
+        return cameraFiles * this.EST_BYTES_PER_CAMERA_FILE;
+    }
+
+    /** True when getEventSize() is an estimate, not the sum of the real file sizes (#555). */
+    isSizeEstimate(event) {
+        return typeof event.syncSize !== 'number' && !event.fingerprint?.totalSize;
+    }
+
+    /** Keep the real size Compare just read on the event, for the drive's size line (#555). @private */
+    _rememberSize(event, fingerprint) {
+        if (event && fingerprint && !fingerprint.partial) event.syncSize = fingerprint.totalSize;
+    }
+
+    /**
+     * Read the real size of every clip on a drive (file metadata only, no clip data), so the drive's size line
+     * can change from an estimate to the exact number (#555). Stops early when `signal` aborts (another drive
+     * was picked) and then reports exact: false. Events whose clips can't all be read keep their estimate.
+     * @returns {Promise<{bytes: number, exact: boolean}>}
+     */
+    async measureDriveSize(drive, { signal } = {}) {
+        let exact = true;
+        for (const event of (drive?.events || [])) {
+            if (signal?.aborted) return { bytes: this.calculateTotalSize(drive.events), exact: false };
+            if (typeof event.syncSize === 'number') continue;
+            let sum = 0, ok = (event.clips || []).length > 0;
+            for (const clip of (event.clips || [])) {
+                try {
+                    sum += (await clip.fileHandle.getFile()).size;
+                } catch (e) {
+                    ok = false;
+                    break;
+                }
+            }
+            if (ok) event.syncSize = sum;
+            else exact = false;
+        }
+        return { bytes: this.calculateTotalSize(drive?.events || []), exact };
+    }
+
+    /**
+     * An error from copying, checking or deleting, in plain words: what happened, not the browser's own text
+     * ("The requested file could not be read, typically due to permission problems...", "network error") (#553).
+     * @param {Error|DOMException} error
+     * @param {string} [file] the file it happened on
+     * @param {'source'|'dest'} [side] which drive the failing step was using, when known
+     */
+    _plainError(error, file, side) {
+        const name = error?.name || '';
+        const msg = String(error?.message || error || '');
+        const f = file || this._t('driveSync.aFile', null, 'a file');
+        if (name === 'QuotaExceededError' || /quota|no space|disk.*full/i.test(msg)) {
+            return this._t('driveSync.errFull', null, 'The destination drive is full.');
+        }
+        if (name === 'NoModificationAllowedError' || name === 'InvalidModificationError' || (side === 'dest' && name === 'InvalidStateError')) {
+            return this._t('driveSync.errWriteRefused', { file: f },
+                'The destination drive did not accept the copy of {{file}} (it may be write-protected, or the file is open in another program).');
+        }
+        if (name === 'NotAllowedError' || name === 'SecurityError') {
+            return this._t('driveSync.errNoAccess', null,
+                'The browser no longer allows access to the drive. Close Drive Sync, open it again and allow access.');
+        }
+        if (name === 'NotFoundError') {
+            return side === 'dest'
+                ? this._t('driveSync.errGoneDest', { file: f }, '{{file}} is no longer on the destination drive (was it unplugged?).')
+                : this._t('driveSync.errGone', { file: f }, '{{file}} is no longer on the source drive (was the drive unplugged, or the file moved?).');
+        }
+        if ((name === 'TypeError' && /network/i.test(msg)) || /network error|failed to fetch|ERR_/i.test(msg)) {
+            return this._t('driveSync.errDriveGone', { file: f },
+                'The drive stopped answering while reading {{file}} (was it unplugged?).');
+        }
+        if (name === 'NotReadableError' || /could not be read/i.test(msg)) {
+            return side === 'check'
+                ? this._t('driveSync.errUnreadableCheck', { file: f },
+                    '{{file}} could not be read back for the check. A drive may have been unplugged.')
+                : this._t('driveSync.errUnreadable', { file: f },
+                    '{{file}} could not be read from the source drive. It may be damaged, or the drive was unplugged.');
+        }
+        return this._t('driveSync.errOther', { file: f, error: msg }, 'Something went wrong with {{file}}: {{error}}');
     }
 
     groupEventsByType(events) {
@@ -982,6 +1075,9 @@ class DriveSync {
             errors: [],
             warnings: []
         });
+        this._synced = [];              // events that made it, for the drive's sync file (audit 5.7)
+        this._movedNames = new Set();   // events Move removed from the source (#552)
+        this.clearResumePoint();        // the half-built resume was never read; drop an old key (audit 5.7)
 
         try {
             // Get or create destination type folders
@@ -1003,12 +1099,14 @@ class DriveSync {
                     currentFile: null
                 });
 
+                const isMove = mode === 'move';
+                let stage = 'copy';     // copy -> check -> delete: what the error text says about the source
                 try {
-                    const isMove = mode === 'move';
                     const fingerprint = item.fingerprint;
 
                     // Copy the event (only the files Compare listed and could read)
                     await this.copyEvent(event, fingerprint, destFolders);
+                    stage = 'check';
 
                     // Move always verifies, whatever "Verify after copy" says:
                     // the source is deleted only after its copy checked out.
@@ -1052,6 +1150,7 @@ class DriveSync {
                         if (this.abortController.signal.aborted) {
                             throw new Error('Sync cancelled');
                         }
+                        stage = 'delete';
                         const removal = await this.deleteSourceEvent(event, verification.files);
                         if (removal.failed && removal.failed.length > 0) {
                             // The copy is complete and checked, but the source could not be changed (no write
@@ -1065,6 +1164,7 @@ class DriveSync {
                             this.setState({ eventsProcessed: i + 1 });
                             continue;
                         }
+                        if (removal.kept.length === 0) this._movedNames.add(event.name);
                         if (removal.kept.length > 0) {
                             this.state.warnings.push({
                                 event: event.name,
@@ -1075,6 +1175,7 @@ class DriveSync {
                         }
                     }
 
+                    this._synced.push({ name: event.name, size: fingerprint.totalSize, verified: !!verification });
                     this.setState({
                         eventsCompleted: this.state.eventsCompleted + 1,
                         eventsProcessed: i + 1
@@ -1085,15 +1186,12 @@ class DriveSync {
                     const cancelled = this.abortController.signal.aborted;
                     this.state.errors.push({
                         event: event.name,
-                        error: !cancelled ? error.message
-                            : mode === 'move'
+                        error: !cancelled ? this._syncErrorText(error, isMove, stage)
+                            : isMove
                                 ? this._t('driveSync.cancelledKeptEvent', null, 'Cancelled. Nothing was deleted from the source for this event.')
                                 : this._t('driveSync.cancelledEvent', null, 'Cancelled before this event was finished.')
                     });
                     this.setState({ eventsProcessed: i + 1 });
-
-                    // Save resume point
-                    this.saveResumePoint(i, selectedEvents);
                 }
             }
 
@@ -1119,9 +1217,8 @@ class DriveSync {
                 await this.writeSyncSettings();
             }
 
-            // Refresh destination drive's event list so the next Compare
-            // sees the newly-copied events instead of the stale pre-sync list.
-            await this.refreshDriveEvents(this.destDrive);
+            // Read both drives' event lists again so the next Compare sees what is there now (#552)
+            await this._refreshAfterSync();
 
             this.setState({
                 status: 'complete',
@@ -1134,6 +1231,8 @@ class DriveSync {
             }
 
         } catch (error) {
+            // A cancelled or failed sync may have copied or moved some events already (#552)
+            try { await this._refreshAfterSync(); } catch (e) { console.warn('[DriveSync] refresh after sync:', e); }
             this.setState({
                 status: 'error',
                 currentEvent: null,
@@ -1145,6 +1244,35 @@ class DriveSync {
             }
 
             throw error;
+        }
+    }
+
+    /**
+     * The error text for one event that failed: plain words (#553), and for Move whether anything left the source.
+     * @private
+     */
+    _syncErrorText(error, isMove, stage) {
+        const side = error?.tcvSide || (stage === 'check' ? 'check' : undefined);
+        const text = this._plainError(error, this.state.currentFile, side);
+        if (!isMove) return text;
+        return text + ' ' + (stage === 'delete'
+            ? this._t('driveSync.partlyDeleted', null, 'Only files whose copy had been checked were deleted from the source.')
+            : this._t('driveSync.nothingDeleted', null, 'Nothing was deleted from the source.'));
+    }
+
+    /**
+     * After a sync (finished, failed or cancelled): read the destination's event list again, and after a Move the
+     * source's too, so a second Compare without a reload sees the moved events as gone from the source instead of
+     * "Different size" / "could not be read" (#552). Moved events leave the source list even if it can't be read.
+     * @private
+     */
+    async _refreshAfterSync() {
+        await this.refreshDriveEvents(this.destDrive);
+        if (this._movedNames && this._movedNames.size > 0 && this.sourceDrive) {
+            await this.refreshDriveEvents(this.sourceDrive);
+            const moved = this._movedNames;
+            this.sourceDrive.events = (this.sourceDrive.events || []).filter(e => !moved.has(e.name));
+            if (this.comparisonResults) this.comparisonResults = null;   // its fingerprints point at deleted files
         }
     }
 
@@ -1165,10 +1293,15 @@ class DriveSync {
     async refreshDriveEvents(drive) {
         if (!drive?.handle) return;
         const parser = window.app?.folderParser;
-        if (!parser) {
-            const msg = 'Unable to refresh destination event list — folderParser unavailable. Next Compare may incorrectly show just-synced events as "missing".';
+        const failed = (why) => {
+            const msg = this._t('driveSync.refreshFailed', { drive: drive.label || drive.folderName || '', error: why },
+                'The event list of {{drive}} could not be read again ({{error}}). Close Drive Sync and open it again before the next Compare.');
             console.warn('[DriveSync]', msg);
-            this.state.errors.push({ event: drive.label || 'destination', error: msg });
+            this.state.errors.push({ event: drive.label || drive.folderName || '', error: msg });
+        };
+        if (!parser) {
+            // Unit tests and a page without the app: Move still drops its events from the source list (#552)
+            console.warn('[DriveSync] no folder parser: event list of', drive.label, 'not read again');
             return;
         }
         try {
@@ -1176,9 +1309,7 @@ class DriveSync {
             await this.folderManager.parseSingleDrive(parser, drive.id);
             console.log(`[DriveSync] ${drive.label} now has ${drive.events?.length} events`);
         } catch (e) {
-            const msg = `Unable to refresh destination event list: ${e.message}`;
-            console.warn('[DriveSync]', msg);
-            this.state.errors.push({ event: drive.label || 'destination', error: msg });
+            failed(this._plainError(e).replace(/\.$/, ''));
         }
     }
 
@@ -1248,7 +1379,8 @@ class DriveSync {
     async copyEvent(event, fingerprint, destFolders) {
         const destTypeFolder = destFolders[event.type];
         if (!destTypeFolder) {
-            throw new Error('Destination folder not found for type: ' + event.type);
+            throw new Error(this._t('driveSync.destFolderMissing', { type: event.type },
+                'The {{type}} folder could not be made on the destination drive.'));
         }
 
         // Create event folder (RecentClips: the files go straight into RecentClips, like the car writes them, #535)
@@ -1303,8 +1435,26 @@ class DriveSync {
         }
     }
 
+    /**
+     * Copy one file. A failure is tagged with the drive it happened on (error.tcvSide 'source' while reading,
+     * 'dest' while writing), so the error can say which drive it was (#553).
+     */
     async copyFile(sourceHandle, destDir, onProgress) {
+        const at = { side: 'source' };
+        try {
+            return await this._copyFile(sourceHandle, destDir, onProgress, at);
+        } catch (error) {
+            if (error && typeof error === 'object' && !error.tcvSide) {
+                try { error.tcvSide = at.side; } catch (_) { /* frozen */ }
+            }
+            throw error;
+        }
+    }
+
+    /** @private */
+    async _copyFile(sourceHandle, destDir, onProgress, at) {
         const file = await sourceHandle.getFile();
+        at.side = 'dest';
         // A copy that fails or is cancelled removes only a file it created
         // itself. Before, it also removed a good copy that was already on the
         // destination (a "Newer on source" event re-copied over it): the
@@ -1329,9 +1479,11 @@ class DriveSync {
                     throw new Error('Sync cancelled');
                 }
 
+                at.side = 'source';
                 const { done, value } = await reader.read();
                 if (done) break;
 
+                at.side = 'dest';
                 await writable.write(value);
                 bytesWritten += value.length;
 
@@ -1340,6 +1492,7 @@ class DriveSync {
                 }
             }
 
+            at.side = 'dest';
             await writable.close();
             completed = true;
             return destFile;
@@ -1373,7 +1526,8 @@ class DriveSync {
     async verifyEvent(event, fingerprint, destFolders) {
         const destTypeFolder = destFolders[event.type];
         if (!destTypeFolder) {
-            return { ok: false, error: 'destination folder not found for ' + event.type, files: [] };
+            return { ok: false, files: [], error: this._t('driveSync.destFolderMissing', { type: event.type },
+                'The {{type}} folder could not be made on the destination drive.').replace(/\.$/, '') };
         }
 
         const files = [];
@@ -1385,6 +1539,7 @@ class DriveSync {
             if (this.onProgressCallback) this.onProgressCallback(this.state);
         };
         progress({ verifyFilesDone: 0, verifyFilesTotal: total, verifyBytesDone: 0, verifyBytesTotal: bytesTotal });
+        let checking = null;   // the file being checked, for the error text
         try {
             const destEventFolder = this._flatEventFiles(event)
                 ? destTypeFolder
@@ -1392,6 +1547,7 @@ class DriveSync {
 
             for (let i = 0; i < total; i++) {
                 const fileInfo = fingerprint.files[i];
+                checking = fileInfo.name;
                 progress({ currentFile: fileInfo.name, verifyFilesDone: i });
                 const destFileHandle = await destEventFolder.getFileHandle(fileInfo.name);
                 const checked = await this.verifyFile(fileInfo.handle, destFileHandle,
@@ -1417,7 +1573,7 @@ class DriveSync {
             // Cancel: pass it on, so the event stops here and nothing is deleted
             if (this.abortController?.signal.aborted) throw error;
             console.warn('Verification error:', error);
-            return { ok: false, error: error?.message || String(error), files };
+            return { ok: false, error: this._plainError(error, checking, 'check').replace(/\.$/, ''), files };
         }
     }
 
@@ -1674,20 +1830,15 @@ class DriveSync {
             lastKnownEventCount: this.sourceDrive.events?.length || 0
         };
 
-        // Add synced events
-        if (this.comparisonResults) {
-            const synced = [
-                ...this.comparisonResults.missing.filter(i => i.selected),
-                ...this.comparisonResults.newer.filter(i => i.selected)
-            ];
-
-            for (const item of synced) {
-                existingSettings.syncedEvents[item.event.name] = {
-                    syncedAt: new Date().toISOString(),
-                    sourceSize: item.fingerprint.totalSize,
-                    verified: this.settings.verifyAfterCopy
-                };
-            }
+        // Add the events that made it (not every selected one: failed events were listed as synced, and
+        // "verified" followed the setting, not whether they were checked; audit 5.7)
+        for (const item of (this._synced || [])) {
+            if (!item || typeof item.name !== 'string' || item.name === '__proto__') continue;
+            existingSettings.syncedEvents[item.name] = {
+                syncedAt: new Date().toISOString(),
+                sourceSize: item.size,
+                verified: item.verified
+            };
         }
 
         // Backup notes for destination events

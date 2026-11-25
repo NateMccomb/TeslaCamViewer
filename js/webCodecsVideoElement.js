@@ -197,6 +197,8 @@
             this._ended = false;
             this._playbackRate = 1;
             this._loop = false;
+            this._playIntent = 0;         // bumps on play()/pause(): a play() waiting for its clip checks it
+            this._playWaitAbort = null;   // ends that wait (pause)
             this._videoWidth = 0;
             this._videoHeight = 0;
 
@@ -299,11 +301,16 @@
                     return;
                 }
                 if (dec.usedFallback) {
-                    // Fallback path means WebCodecs couldn't handle this file —
-                    // degrade gracefully by surfacing an error so the caller
-                    // can fall back to HTML5 video if they want.
-                    this._fireError('WebCodecs decoder unavailable for this clip');
+                    // WebCodecs couldn't handle this file, but the browser's
+                    // own <video> could open it (FastClipDecoder's fallback
+                    // loaded it). Tell the player, which switches to the
+                    // Compatibility player: 'codec' = this browser can't
+                    // decode the codec at all, 'file' = only this file.
+                    const kind = dec.codecUnsupported ? 'codec' : 'file';
+                    const reason = dec.fallbackReason || 'WebCodecs decoder unavailable for this clip';
                     dec.close();
+                    this._fireFailure(kind, reason);
+                    this._fireError('WebCodecs decoder unavailable for this clip');
                     return;
                 }
                 this._decoder = dec;
@@ -427,10 +434,33 @@
 
         async _play() {
             if (!this._decoder || this._readyState < HAVE_METADATA) {
-                // Native behavior: play() may resolve once media is ready. We
-                // stash intent: when readyState reaches HAVE_METADATA we'll
-                // auto-start. For simplicity we just no-op if not ready.
-                return Promise.reject(new Error('NotReadyError: video not loaded'));
+                // Nothing to play: like a native <video> with no source.
+                if (!this._src) return Promise.reject(new Error('NotReadyError: video not loaded'));
+                // A clip is still loading (software decode is slow on a busy
+                // computer). Like a native <video>, play once it can, instead
+                // of failing: before, Play pressed during a load (or right
+                // after Next Clip) logged "Error playing videos" and nothing
+                // played. A pause(), another source or a failed load ends the
+                // wait, as they abort a native play().
+                const token = this._loadToken;
+                const intent = ++this._playIntent;
+                const ready = await new Promise((resolve) => {
+                    const evs = { canplay: true, error: false, emptied: false, loadstart: false };
+                    const handlers = {};
+                    const done = (v) => {
+                        for (const [t, h] of Object.entries(handlers)) this.removeEventListener(t, h);
+                        this._playWaitAbort = null;
+                        resolve(v);
+                    };
+                    for (const [t, v] of Object.entries(evs)) {
+                        handlers[t] = () => done(v);
+                        this.addEventListener(t, handlers[t]);
+                    }
+                    this._playWaitAbort = () => done(false);
+                });
+                if (!ready || token !== this._loadToken || intent !== this._playIntent || !this._decoder) {
+                    return Promise.reject(new DOMException('The play() request was interrupted', 'AbortError'));
+                }
             }
             if (!this._paused) return;
             this._paused = false;
@@ -444,6 +474,9 @@
         }
 
         _pause() {
+            // A play() still waiting for its clip is cancelled
+            this._playIntent++;
+            if (this._playWaitAbort) this._playWaitAbort();
             if (this._paused) return;
             this._paused = true;
             if (this._rafHandle) { cancelAnimationFrame(this._rafHandle); this._rafHandle = null; }
@@ -579,6 +612,7 @@
                     // it) is expected, not a failure.
                     if (e !== STALE && gen === this._queueGen && decoder === this._decoder) {
                         console.warn('[WebCodecsVideoElement] decode failed:', e);
+                        this._fireFailure('decode', String(e?.message || e));
                     }
                 } finally {
                     if (this._refillPromise === p) {
@@ -694,6 +728,19 @@
             try { this._canvas.dispatchEvent(new Event(type)); } catch {}
         }
 
+        /**
+         * WebCodecs can't play this source: 'webcodecsfailure' on the canvas,
+         * detail {kind, message}. VideoPlayer decides whether to switch to the
+         * Compatibility player (js/videoPlayer.js _onWebCodecsFailure).
+         */
+        _fireFailure(kind, message) {
+            try {
+                this._canvas.dispatchEvent(new CustomEvent('webcodecsfailure', {
+                    detail: { kind, message: String(message || '').slice(0, 300) }
+                }));
+            } catch {}
+        }
+
         _fireError(message) {
             console.warn('[WebCodecsVideoElement] error:', message);
             this._readyState = HAVE_NOTHING;
@@ -704,9 +751,88 @@
         }
     }
 
+    /**
+     * Why the fast player can't start here, or null when it can:
+     * 'unsupported' = no WebCodecs in this browser, 'library' = the MP4
+     * reader (mp4box, from a CDN) didn't load.
+     */
+    function unsupportedReason() {
+        if (typeof window.VideoDecoder === 'undefined' || typeof window.EncodedVideoChunk === 'undefined') return 'unsupported';
+        if (typeof window.MP4Box === 'undefined' || typeof window.FastClipDecoder === 'undefined'
+            || window.FastClipDecoder.WEBCODECS_AVAILABLE !== true) return 'library';
+        return null;
+    }
+
+    /**
+     * Can this browser decode Tesla's H.264 clips with WebCodecs? Checked
+     * once when the page loads (each clip is checked again when it opens).
+     * @returns {Promise<boolean>}
+     */
+    async function probeH264() {
+        try {
+            const r = await window.VideoDecoder.isConfigSupported({
+                codec: 'avc1.640028', codedWidth: 1280, codedHeight: 960,
+                hardwareAcceleration: 'prefer-software'
+            });
+            return !!(r && r.supported);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * The fast player's automatic switch to the Compatibility player.
+     * kinds: 'unsupported' / 'library' (see unsupportedReason), 'codec'
+     * (WebCodecs here can't decode H.264, the browser's own player can),
+     * 'file' (one clip it couldn't read), 'decode' (decode errors while
+     * playing). Only 'codec' is remembered, for this browser version (the
+     * user agent): the others are checked again on every page load, so a
+     * browser update, a CDN hiccup or one odd clip never pins a user to the
+     * Compatibility player. The note about the switch shows once per kind.
+     */
+    const FALLBACK_KEY = 'tcv.playerFallback';
+    const NOTED_KEY = 'tcv.playerFallbackNoted';
+    const PlayerFallback = {
+        active() {
+            try {
+                const r = JSON.parse(localStorage.getItem(FALLBACK_KEY) || 'null');
+                if (r && r.ua === navigator.userAgent) return r;
+            } catch (e) { /* unreadable: none */ }
+            return null;
+        },
+        record(kind, message) {
+            if (kind !== 'codec') return;
+            try {
+                localStorage.setItem(FALLBACK_KEY, JSON.stringify({
+                    kind, message: String(message || '').slice(0, 200),
+                    ua: navigator.userAgent, at: new Date().toISOString()
+                }));
+            } catch (e) { /* storage full or blocked: session only */ }
+        },
+        clear() {
+            try { localStorage.removeItem(FALLBACK_KEY); } catch (e) { /* nothing stored */ }
+        },
+        /** True the first time this kind of switch happens in this browser. */
+        firstNote(kind) {
+            try {
+                const seen = JSON.parse(localStorage.getItem(NOTED_KEY) || '[]');
+                const list = Array.isArray(seen) ? seen : [];
+                if (list.includes(kind)) return false;
+                list.push(kind);
+                localStorage.setItem(NOTED_KEY, JSON.stringify(list));
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+    };
+    window.PlayerFallback = PlayerFallback;
+
     window.WebCodecsVideoElement = {
         install,
         isSupported,
+        unsupportedReason,
+        probeH264,
         HAVE_NOTHING, HAVE_METADATA, HAVE_CURRENT_DATA, HAVE_FUTURE_DATA, HAVE_ENOUGH_DATA
     };
 })();

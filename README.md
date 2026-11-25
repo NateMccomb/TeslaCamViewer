@@ -238,6 +238,6 @@ MIT License - see LICENSE file for details.
 
 ## Version
 
-Current version: 2026.47.6.1
+Current version: 2026.48.5.1
 
 Click the version number in the app to view the full changelog.

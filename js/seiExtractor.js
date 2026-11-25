@@ -104,7 +104,8 @@ class SeiExtractor {
             return result;
         } catch (error) {
             console.error('SeiExtractor: Error extracting SEI data:', error);
-            return { frames: [], timescale: 30, frameDuration: 1 };
+            // readError: the file couldn't be read, which is not the same as a clip without telemetry (#635)
+            return { frames: [], timescale: 30, frameDuration: 1, readError: true };
         }
     }
 

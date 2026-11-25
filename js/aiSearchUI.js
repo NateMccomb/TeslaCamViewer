@@ -15,6 +15,18 @@
 
     const AISearchUI = {
         _searchResults: null,
+
+        /** Translated text (i18n.js); the key when i18n isn't loaded */
+        _t(key, params = {}) {
+            return window.i18n ? window.i18n.t(key, params) : key;
+        },
+
+        /** Scene tag name in the chosen language (the English label stays the search query) */
+        _tagLabel(cat) {
+            const key = `aiSearch.tags.${cat.key}`;
+            const t = this._t(key);
+            return t === key ? cat.label : t;
+        },
         _selectedChipKey: null,
 
         init() {
@@ -110,7 +122,7 @@
             if (!status?.enabled) { this.els.badge.textContent = ''; this.els.badge.style.display = 'none'; return; }
             this.els.badge.textContent = `${status.eventCount}`;
             this.els.badge.style.display = '';
-            this.els.badge.title = `${status.eventCount} events indexed · ${status.frameCount} frames`;
+            this.els.badge.title = this._t('aiSearch.badgeTitle', { events: status.eventCount, frames: status.frameCount });
         },
 
         hide() {
@@ -135,7 +147,7 @@
                 this.updateProgressWidget({
                     done: 0, total: 0,
                     currentName: '',
-                    status: detail.message || 'Indexing…',
+                    status: detail.message || this._t('aiSearch.indexing'),
                     paused: false, final: false,
                     indeterminate: true
                 });
@@ -172,10 +184,10 @@
             `;
             w.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                    <strong>🔍 AI Search indexing</strong>
+                    <strong>🔍 ${this._t('aiSearch.widgetTitle')}</strong>
                     <div style="display:flex; gap:6px;">
-                        <button id="aiIdxPause" title="Pause / Resume" style="background:transparent; color:var(--text-muted,#888); border:1px solid var(--border,#3a3a3a); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.75rem;">Pause</button>
-                        <button id="aiIdxCancel" title="Cancel" style="background:transparent; color:var(--err,#f87171); border:1px solid var(--err,#f87171); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.75rem;">Cancel</button>
+                        <button id="aiIdxPause" title="${this._t('aiSearch.pauseResume')}" style="background:transparent; color:var(--text-muted,#888); border:1px solid var(--border,#3a3a3a); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.75rem;">${this._t('aiSearch.pause')}</button>
+                        <button id="aiIdxCancel" title="${this._t('common.cancel')}" style="background:transparent; color:var(--err,#f87171); border:1px solid var(--err,#f87171); border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.75rem;">${this._t('common.cancel')}</button>
                     </div>
                 </div>
                 <div style="height:6px; background:var(--bg-tertiary,#141414); border-radius:3px; overflow:hidden; margin:6px 0;">
@@ -190,7 +202,7 @@
                 if (state.paused) { window.aiSearch.resume(); } else { window.aiSearch.pause(); }
             });
             w.querySelector('#aiIdxCancel').addEventListener('click', () => {
-                if (confirm('Cancel AI Search indexing? Indexed events so far will be kept.')) {
+                if (confirm(this._t('aiSearch.cancelConfirm'))) {
                     window.aiSearch.cancel();
                 }
             });
@@ -220,7 +232,7 @@
                 bar.style.animation = 'aiIdxPulse 1.4s ease-in-out infinite';
                 bar.style.opacity = '';
                 this._ensureIndeterminateKeyframes();
-                status.textContent = detail.status || 'Working…';
+                status.textContent = detail.status || this._t('aiSearch.working');
                 eta.textContent = detail.currentName || '';
             } else {
                 bar.style.animation = '';
@@ -231,12 +243,12 @@
                 if (detail.etaMs != null && detail.etaMs > 1000 && !detail.final) {
                     const s = Math.round(detail.etaMs / 1000);
                     const mm = Math.floor(s / 60), ss = s % 60;
-                    eta.textContent = mm > 0 ? `~${mm}m ${ss}s remaining` : `~${ss}s remaining`;
+                    eta.textContent = mm > 0 ? this._t('aiSearch.etaMinSec', { min: mm, sec: ss }) : this._t('aiSearch.etaSec', { sec: ss });
                 } else {
                     eta.textContent = detail.status || '';
                 }
             }
-            if (pauseBtn) pauseBtn.textContent = detail.paused ? 'Resume' : 'Pause';
+            if (pauseBtn) pauseBtn.textContent = detail.paused ? this._t('aiSearch.resume') : this._t('aiSearch.pause');
         },
 
         _ensureIndeterminateKeyframes() {
@@ -258,7 +270,7 @@
             populated.forEach(cat => {
                 const chip = document.createElement('span');
                 chip.className = 'ai-search-chip' + (this._selectedChipKey === cat.key ? ' active' : '');
-                chip.textContent = `${cat.label} (${cat.count})`;
+                chip.textContent = `${this._tagLabel(cat)} (${cat.count})`;
                 chip.title = cat.prompts?.[0] || cat.label;
                 chip.addEventListener('click', () => this.onChipClick(cat));
                 this.els.chips.appendChild(chip);
@@ -266,7 +278,7 @@
             if (populated.length === 0) {
                 const hint = document.createElement('span');
                 hint.style.cssText = 'color:var(--text-muted,#888); font-size:0.75rem;';
-                hint.textContent = 'No tagged events yet — indexing finishes shortly.';
+                hint.textContent = this._t('aiSearch.noTags');
                 this.els.chips.appendChild(hint);
             }
         },
@@ -292,7 +304,7 @@
                 this.renderChips();
             } catch (err) {
                 this.els.resultsHeader.style.display = 'block';
-                this.els.resultsHeader.textContent = 'Search failed: ' + err.message;
+                this.els.resultsHeader.textContent = this._t('aiSearch.searchFailed', { error: err.message });
             }
         },
 
@@ -309,13 +321,13 @@
             let summary = `<b>"${FolderParser.escapeHtml(results.query)}"</b>`;
             if (tagFilter) {
                 const tagMatchCount = [...confident, ...possible].filter(r => r.hasTagMatch).length;
-                summary += ` · <span style="color:var(--accent,#4a9eff)">${tagMatchCount} with ${tagFilter.label} tag, all events still ranked</span>`;
+                summary += ` · <span style="color:var(--accent,#4a9eff)">${this._t('aiSearch.withTag', { count: tagMatchCount, tag: FolderParser.escapeHtml(this._tagLabel(tagFilter)) })}</span>`;
             } else if (tagFallback) {
-                summary += ` · <span style="color:var(--warn,#ffb800)">no "${tagFallback}"-tagged events — ranking all indexed events</span>`;
+                summary += ` · <span style="color:var(--warn,#ffb800)">${this._t('aiSearch.noTagFallback', { tag: FolderParser.escapeHtml((() => { const c = (window.aiSearch.getTags?.() || []).find(x => x.label === tagFallback); return c ? this._tagLabel(c) : tagFallback; })()) })}</span>`;
             }
-            summary += `<br><span style="color:#4ade80">${confident.length} confident</span>`;
-            summary += ` · <span style="color:#ffb800">${possible.length} possible</span>`;
-            summary += ` · <span style="color:var(--text-muted,#888)">${hiddenCount} hidden</span>`;
+            summary += `<br><span style="color:#4ade80">${this._t('aiSearch.confidentCount', { count: confident.length })}</span>`;
+            summary += ` · <span style="color:#ffb800">${this._t('aiSearch.possibleCount', { count: possible.length })}</span>`;
+            summary += ` · <span style="color:var(--text-muted,#888)">${this._t('aiSearch.hiddenCount', { count: hiddenCount })}</span>`;
             this.els.resultsHeader.innerHTML = summary;
             this.els.resultsHeader.style.display = 'block';
 
@@ -349,11 +361,11 @@
             // Reorder: pull matching items in ranked order and insert tier dividers
             const list = this.els.eventList;
             const sortedMatches = [...confident, ...possible];
-            const dividerConf = this._makeTierDivider(`Confident matches (${confident.length})`, 'confident');
-            const dividerPoss = this._makeTierDivider(`Possible — lower confidence (${possible.length})`, 'possible');
+            const dividerConf = this._makeTierDivider(this._t('aiSearch.confidentMatches', { count: confident.length }), 'confident');
+            const dividerPoss = this._makeTierDivider(this._t('aiSearch.possibleMatches', { count: possible.length }), 'possible');
 
             // Tier dividers: always show confident + possible when results exist
-            const tierText = confident.length > 0 ? `Confident matches (${confident.length})` : 'No confident matches';
+            const tierText = confident.length > 0 ? this._t('aiSearch.confidentMatches', { count: confident.length }) : this._t('aiSearch.noConfident');
             const tierKind = confident.length > 0 ? 'confident' : 'none';
             const dividerMain = this._makeTierDivider(tierText, tierKind);
             list.prepend(dividerMain);
@@ -449,9 +461,9 @@
                     <img src="${f.thumbDataUrl}" style="width:48px; height:36px; object-fit:cover; border-radius:2px; flex-shrink:0;">
                     <div style="flex:1; min-width:0; font-size:0.72rem; line-height:1.3;">
                         <div style="color:var(--text,#e0e0e0);"><b>#${match.rank}</b> · ${FolderParser.escapeHtml(f.camera)} @ ${matchTime}</div>
-                        <div style="color:var(--text-muted,#888);">match: ${match.score.toFixed(3)}</div>
+                        <div style="color:var(--text-muted,#888);">${this._t('aiSearch.matchScore', { score: match.score.toFixed(3) })}</div>
                     </div>
-                    <button class="ai-deep-index-btn" title="Deep-index this event — sample every scene change on all cameras (slower, catches short moments)" style="background:transparent; color:var(--accent,#4a9eff); border:1px solid var(--accent,#4a9eff); padding:2px 6px; border-radius:3px; font-size:0.65rem; cursor:pointer; white-space:nowrap; flex-shrink:0;">⚡ Deep</button>
+                    <button class="ai-deep-index-btn" title="${this._t('aiSearch.deepTitle')}" style="background:transparent; color:var(--accent,#4a9eff); border:1px solid var(--accent,#4a9eff); padding:2px 6px; border-radius:3px; font-size:0.65rem; cursor:pointer; white-space:nowrap; flex-shrink:0;">⚡ ${this._t('aiSearch.deep')}</button>
                 </div>
             `;
             const btn = badge.querySelector('.ai-deep-index-btn');
@@ -624,11 +636,11 @@
             menu.innerHTML = `
                 <div style="padding:4px 12px; color:var(--text-muted,#888); font-size:0.72rem; border-bottom:1px solid var(--border,#3a3a3a);">
                     ${FolderParser.escapeHtml(eventName.slice(0, 40))}${eventName.length > 40 ? '…' : ''}<br>
-                    <span style="color:var(--accent,#4a9eff)">${frameCount} frames indexed</span>
+                    <span style="color:var(--accent,#4a9eff)">${this._t('aiSearch.framesIndexed', { count: frameCount })}</span>
                 </div>
                 <div class="ai-ctx-item" data-action="deep-index" style="padding:8px 14px; cursor:pointer; color:var(--text,#e0e0e0);">
-                    ⚡ Deep-index this event
-                    <div style="color:var(--text-muted,#888); font-size:0.7rem; margin-top:2px;">Sample every scene change for more thorough search (~10-30s)</div>
+                    ⚡ ${this._t('aiSearch.deepIndexEvent')}
+                    <div style="color:var(--text-muted,#888); font-size:0.7rem; margin-top:2px;">${this._t('aiSearch.deepIndexHint')}</div>
                 </div>
             `;
             document.body.appendChild(menu);
@@ -649,14 +661,14 @@
         },
 
         async runDeepIndex(eventId, btn) {
-            if (btn) { btn.disabled = true; btn.textContent = '⏳ Indexing…'; }
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ ' + this._t('aiSearch.indexing'); }
             try {
                 await window.aiSearch.deepIndex(eventId);
                 // Re-run the last search so the new frames participate in ranking
                 if (this._searchResults) await this.runSearch();
                 else this.renderChips();
             } catch (err) {
-                if (btn) { btn.textContent = '⚠ Failed'; btn.title = err.message; }
+                if (btn) { btn.textContent = '⚠ ' + this._t('aiSearch.failed'); btn.title = err.message; }
                 console.warn('[AISearch UI] deep-index failed:', err);
             }
         },
@@ -705,13 +717,11 @@
             toast.className = 'ai-search-toast';
             const estMin = Math.max(1, Math.round(events.length * 0.9 / 60));
             toast.innerHTML = `
-                <div class="ai-search-toast-title">🔍 Enable event search?</div>
-                <div>Search your events by text (e.g. "parking garage", "night drive").
-                     Processes ~${events.length} events in ~${estMin} min.
-                     All on your computer — nothing is uploaded.</div>
+                <div class="ai-search-toast-title">🔍 ${this._t('aiSearch.optinTitle')}</div>
+                <div>${this._t('aiSearch.optinBody', { events: events.length, minutes: estMin })}</div>
                 <div class="ai-search-toast-actions">
-                    <button class="ai-search-toast-btn" data-action="dismiss">Not now</button>
-                    <button class="ai-search-toast-btn primary" data-action="enable">Enable</button>
+                    <button class="ai-search-toast-btn" data-action="dismiss">${this._t('aiSearch.notNow')}</button>
+                    <button class="ai-search-toast-btn primary" data-action="enable">${this._t('aiSearch.enable')}</button>
                 </div>
             `;
             document.body.appendChild(toast);
@@ -738,11 +748,11 @@
                 await new Promise(r => requestAnimationFrame(r));
                 await new Promise(r => setTimeout(r, 0));
                 this.showProgressWidget();
-                this.updateProgressWidget({ done: 0, total: 1, status: 'Loading model…', currentName: '' });
+                this.updateProgressWidget({ done: 0, total: 1, status: this._t('aiSearch.loadingModel'), currentName: '' });
                 try {
                     await window.aiSearch.enable();
                 } catch (err) {
-                    alert('Indexing failed: ' + err.message);
+                    alert(this._t('aiSearch.indexingFailed', { error: err.message }));
                     this.hideProgressWidget();
                 }
             });

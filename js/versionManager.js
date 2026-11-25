@@ -19,12 +19,44 @@ class VersionManager {
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.47.6.1';
+        this.currentVersion = '2026.48.5.1';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
         // Features have: id (for tracking seen state), text, elementSelector (optional)
         this.changelog = [
+            {
+                version: '2026.48.5.1',
+                date: '2026-11-27',
+                title: 'Fast Player, Translations & Fixes',
+                features: [
+                    {
+                        id: 'fast-player-default',
+                        text: 'The faster video player is now on for everyone. If your browser can\'t use it, the app switches to the Compatibility player by itself, and you can pick either one in Settings, Advanced.',
+                        elementSelector: ['#settingsBtn', '.settings-nav-item[data-tab="advanced"]', '#setting-videoPlayer']
+                    },
+                    {
+                        id: 'summary-2026-48-translations',
+                        text: 'Much more of the app follows your language now: AI Search, the telemetry graphs, the weather line, the plate enhancer, Drive Sync and the map popups.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'summary-2026-48-drives',
+                        text: 'Opening your TeslaCam drive no longer asks for permission to save changes to it, and Drive Sync tells you in plain words what went wrong and whether anything was deleted.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'summary-2026-48-clip-ends',
+                        text: 'Every camera now plays and exports to its own end of each clip, and in an export a camera\'s label turns red only when that camera really ends.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'summary-2026-48-more-fixes',
+                        text: 'Plus smaller fixes: Pause works while the next clip is loading, the HUD and map you had on come back when an event\'s telemetry starts after its first clip, layouts with odd names (also from a shared layout file) now show safely, screenshots show the time of the frame and the street, dates follow your computer\'s format, and hover previews use less memory. The full list is in the release notes on GitHub.',
+                        elementSelector: null
+                    }
+                ]
+            },
             {
                 version: '2026.47.6.1',
                 date: '2026-11-21',
@@ -106,8 +138,8 @@ class VersionManager {
                     },
                     {
                         id: 'webcodecs-player',
-                        text: 'New WebCodecs-backed video player runs in parallel with the standard player — noticeably faster seeks, smoother scrubbing, and less buffering on large events. Opt-in (BETA) under Settings → Advanced → Performance.',
-                        elementSelector: ['#settingsBtn', '.settings-nav-item[data-tab="advanced"]', '#setting-useWebCodecsPlayer']
+                        text: 'New WebCodecs-backed video player runs in parallel with the standard player: noticeably faster seeks, smoother scrubbing, and less buffering on large events. Opt-in at first, under Settings → Advanced → Performance; now on for everyone (the Video player choice there).',
+                        elementSelector: null
                     },
                     {
                         id: 'recording-health-badge',
@@ -783,6 +815,11 @@ class VersionManager {
         // isn't in the DOM yet (e.g. Settings modal nav items). Watched by a
         // MutationObserver and dotted as soon as they appear.
         this.pendingSelectors = [];
+        // featureId + selector -> { featureId, selector, text, isLast } for every
+        // dotted feature not seen yet: an anchor that is rendered again (the
+        // Settings window rebuilds its tabs and controls each time it opens)
+        // gets its dot back (#623)
+        this._watched = new Map();
         this._mutationObserver = null;
 
         this.checkVersionUpgrade();
@@ -974,6 +1011,23 @@ class VersionManager {
             anchor = element.parentElement;
         }
 
+        // One dot per feature on an anchor (#623). addIndicators runs at page
+        // start twice and again on every settings change (app.js:
+        // settingsManager.onChange -> setShowWhatsNew), and each run added
+        // another dot and another click handler: 2 per anchor at load, then
+        // 4, 8, 16 on the same spot. Dots on elements that are gone (a window
+        // that rendered its content again) are dropped with their handlers.
+        const entry = this.indicators.get(featureId) || { dots: [], cleanups: [] };
+        entry.dots = entry.dots.filter(d => {
+            if (d.isConnected) return true;
+            if (d._cleanup) {
+                d._cleanup();
+                entry.cleanups = entry.cleanups.filter(c => c !== d._cleanup);
+            }
+            return false;
+        });
+        if (entry.dots.some(d => d.parentElement === anchor)) return;
+
         const dot = document.createElement('span');
         dot.className = 'whats-new-dot';
         dot.dataset.featureId = featureId;
@@ -1043,7 +1097,6 @@ class VersionManager {
         dot.addEventListener('mouseenter', titleSuppress);
         dot.addEventListener('mouseleave', titleRestore);
 
-        const entry = this.indicators.get(featureId) || { dots: [], cleanups: [] };
         entry.dots.push(dot);
 
         // Only the INNERMOST dot's anchor clicks mark the feature seen — outer
@@ -1054,7 +1107,8 @@ class VersionManager {
                 element.removeEventListener('click', markSeen);
             };
             element.addEventListener('click', markSeen);
-            entry.cleanups.push(() => element.removeEventListener('click', markSeen));
+            dot._cleanup = () => element.removeEventListener('click', markSeen);
+            entry.cleanups.push(dot._cleanup);
         }
 
         this.indicators.set(featureId, entry);
@@ -1073,8 +1127,12 @@ class VersionManager {
             for (const cleanup of entry.cleanups) cleanup();
         }
         this.indicators.delete(featureId);
-        // Also drop any pending selectors for this feature
+        // Also drop any pending or watched selectors for this feature
         this.pendingSelectors = this.pendingSelectors.filter(p => p.featureId !== featureId);
+        for (const [key, w] of this._watched) {
+            if (w.featureId === featureId) this._watched.delete(key);
+        }
+        this._stopObserverIfDone();
     }
 
     /**
@@ -1085,6 +1143,7 @@ class VersionManager {
             this.removeIndicator(featureId);
         }
         this.pendingSelectors = [];
+        this._watched.clear();
         if (this._mutationObserver) {
             this._mutationObserver.disconnect();
             this._mutationObserver = null;
@@ -1114,18 +1173,22 @@ class VersionManager {
 
             selectors.forEach((selector, idx) => {
                 const isLast = idx === selectors.length - 1;
+                this._watched.set(feature.id + '\n' + selector, { featureId: feature.id, selector, text: feature.text, isLast });
                 const element = document.querySelector(selector);
                 if (element) {
                     this.addIndicator(element, feature.id, feature.text, isLast);
                     placed++;
                 } else {
-                    this.pendingSelectors.push({ featureId: feature.id, selector, text: feature.text, isLast, idx });
+                    // queued once, however often this runs (#623)
+                    if (!this.pendingSelectors.some(p => p.featureId === feature.id && p.selector === selector)) {
+                        this.pendingSelectors.push({ featureId: feature.id, selector, text: feature.text, isLast, idx });
+                    }
                     pending++;
                 }
             });
         }
 
-        if (pending > 0) this._startPendingObserver();
+        if (pending > 0 || this._watched.size > 0) this._startPendingObserver();
 
         console.log(`[VersionManager] Blue dots: ${placed} placed, ${pending} pending (lazy DOM), ${noTarget} features without selector`);
 
@@ -1149,7 +1212,12 @@ class VersionManager {
      */
     _startPendingObserver() {
         if (this._mutationObserver) return;
-        this._mutationObserver = new MutationObserver(() => this._processPendingSelectors());
+        this._mutationObserver = new MutationObserver((records) => {
+            this._processPendingSelectors();
+            // Elements were added: an anchor may have been rendered again
+            if (records.some(r => Array.from(r.addedNodes).some(n => n.nodeType === 1))) this._reattachWatched();
+            this._stopObserverIfDone();
+        });
         this._mutationObserver.observe(document.body, { childList: true, subtree: true });
     }
 
@@ -1167,7 +1235,28 @@ class VersionManager {
             }
         }
         this.pendingSelectors = stillPending;
-        if (stillPending.length === 0 && this._mutationObserver) {
+        this._stopObserverIfDone();
+    }
+
+    /**
+     * Give an anchor that was rendered again its dot back (#623). The
+     * Settings window rebuilds its tabs and controls each time it opens: the
+     * dots of a Settings chain were on the old elements, so from the second
+     * time it opened the trail stopped at the gear and clicking the control
+     * no longer cleared the feature. (A settings change used to put them back
+     * by running addIndicators again, stacking a dot on every anchor.)
+     */
+    _reattachWatched() {
+        for (const [key, w] of this._watched) {
+            if (!this.isFeatureNew(w.featureId)) { this._watched.delete(key); continue; }
+            const el = document.querySelector(w.selector);
+            if (el) this.addIndicator(el, w.featureId, w.text, w.isLast);
+        }
+        this._stopObserverIfDone();
+    }
+
+    _stopObserverIfDone() {
+        if (this.pendingSelectors.length === 0 && this._watched.size === 0 && this._mutationObserver) {
             this._mutationObserver.disconnect();
             this._mutationObserver = null;
         }

@@ -92,8 +92,11 @@
      * @param {number} frameIndex   — 0-based within the clip
      * @param {number} totalFrames  — frame count of this clip
      * @param {Array<number>|null} clipDurations
+     * @param {Object} [data]       — the clip's SEI result: with the video frame
+     *                                count and each frame's video frame index, the
+     *                                frame's own time (telemetry that starts part-way, #516)
      */
-    function frameTimeInEvent(clipIndex, frameIndex, totalFrames, clipDurations) {
+    function frameTimeInEvent(clipIndex, frameIndex, totalFrames, clipDurations, data) {
         let preceding = 0;
         if (clipDurations && clipDurations.length) {
             for (let i = 0; i < clipIndex && i < clipDurations.length; i++) {
@@ -107,6 +110,9 @@
         const thisClipDuration = (clipDurations && Number.isFinite(clipDurations[clipIndex]) && clipDurations[clipIndex] > 0)
             ? clipDurations[clipIndex]
             : DEFAULT_CLIP_DURATION_SEC;
+        const vfc = data ? data.videoFrameCount : 0;
+        const fi = (data && data.frames && data.frames[frameIndex]) ? data.frames[frameIndex].frameIndex : undefined;
+        if (vfc > 0 && Number.isFinite(fi)) return preceding + (fi / vfc) * thisClipDuration;
         const fps = totalFrames > 0 ? totalFrames / thisClipDuration : 30;
         const inClip = fps > 0 ? frameIndex / fps : 0;
         return preceding + inClip;
@@ -147,8 +153,8 @@
 
             const flushIfQualified = () => {
                 if (runStartIdx < 0) return;
-                const startTime = frameTimeInEvent(clipIndex, runStartIdx, fc, clipDurations);
-                const endTime   = frameTimeInEvent(clipIndex, runEndIdx, fc, clipDurations);
+                const startTime = frameTimeInEvent(clipIndex, runStartIdx, fc, clipDurations, data);
+                const endTime   = frameTimeInEvent(clipIndex, runEndIdx, fc, clipDurations, data);
                 const duration  = Math.max(0, endTime - startTime);
                 if (duration >= LAUNCH_MIN_DURATION_SEC) {
                     launches.push({

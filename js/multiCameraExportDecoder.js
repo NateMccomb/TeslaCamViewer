@@ -38,7 +38,16 @@
     'use strict';
 
     const DECODE_CHUNK_SEC = 2.0;     // how far ahead each camera decodes before yielding
-    const FRAME_TOLERANCE_SEC = 0.05; // snap-to-frame tolerance when matching output time
+    const FRAME_TOLERANCE_SEC = 0.05; // a clip counts as decoded when the queue reaches this close to its end
+    // An output frame shows each camera's latest frame at or before its time,
+    // like the player (WebCodecsVideoElement draws the last frame <= t). This
+    // was 0.05 s, so exports showed frames up to 50 ms early: a frame ahead
+    // of the player, and the first frame of the next clip one output frame
+    // before the longest camera of this clip ended (#587). 1 ms is rounding.
+    const TAKE_TOLERANCE_SEC = 0.001;
+    // How far before the export's start the first decode window reaches, so
+    // the frame on screen at the start (its timestamp is before it) is there
+    const START_LOOKBACK_SEC = 0.1;
 
     class CameraPipeline {
         /**
@@ -129,7 +138,16 @@
                 const windowEnd = Math.min(clipEndEvent, effectiveTarget + DECODE_CHUNK_SEC);
                 const windowStart = Math.max(clipStartEvent,
                     this.queue.length ? queueLastTs + 1e-6 : this.startEventSec);
-                const clipLocalStart = Math.max(0, windowStart - clipStartEvent);
+                let clipLocalStart = Math.max(0, windowStart - clipStartEvent);
+                if (!this.queue.length) {
+                    // First frames of the export: start at the frame on screen
+                    // at the export's start, which began before it. For a
+                    // camera that has already ended there (a clip lasts until
+                    // its longest camera ends, #587), that is its last frame:
+                    // before, it had none and showed the next clip's first.
+                    const last = this._lastFrameSec(this.currentDecoder);
+                    clipLocalStart = Math.max(0, Math.min(clipLocalStart, last ?? clipLocalStart) - START_LOOKBACK_SEC);
+                }
                 const clipLocalEnd = Math.max(0, windowEnd - clipStartEvent);
 
                 if (clipLocalEnd <= clipLocalStart) {
@@ -196,11 +214,20 @@
             }
         }
 
+        /** Timestamp (s) of the clip's last frame, null when the decoder has no sample table. */
+        _lastFrameSec(dec) {
+            const s = dec && dec.samples;
+            if (!s || !s.length || !dec.timescale) return null;
+            let max = 0;
+            for (const x of s) if (x.cts > max) max = x.cts;
+            return max / dec.timescale;
+        }
+
         /** Return the frame whose timestamp is closest to (but not after) requestedEventSec.
          *  Drops queue entries older than that so memory stays bounded. */
         takeFrameAt(requestedEventSec) {
             // Drop frames strictly older than requested - 1 tick of tolerance
-            while (this.queue.length > 1 && this.queue[1].eventTimeSec <= requestedEventSec + FRAME_TOLERANCE_SEC) {
+            while (this.queue.length > 1 && this.queue[1].eventTimeSec <= requestedEventSec + TAKE_TOLERANCE_SEC) {
                 const stale = this.queue.shift();
                 try { stale.bitmap.close?.(); } catch {}
             }

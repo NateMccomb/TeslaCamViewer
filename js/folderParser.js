@@ -1030,6 +1030,17 @@ None`;
             const t = (typeof window !== 'undefined' && window.i18n) ? window.i18n.t(key) : key;
             return t === key ? english : t;
         };
+        // RecentClips hours: the event data keeps "N clips from 6:00-6:59 PM"; show it in the chosen language
+        const rc = reason.match(/^(\d+) clips from (\d{1,2}):00-\d{1,2}:59 (AM|PM)$/);
+        if (rc && typeof window !== 'undefined' && window.i18n) {
+            let range = `${rc[2]}:00-${rc[2]}:59 ${rc[3]}`;
+            if (window.i18n.getLocale() !== 'en') {
+                const h = (Number(rc[2]) % 12) + (rc[3] === 'PM' ? 12 : 0);
+                const at = (m) => new Date(2000, 0, 1, h, m).toLocaleTimeString(window.i18n.dateLocale(), { hour: 'numeric', minute: '2-digit' });
+                range = `${at(0)}-${at(59)}`;
+            }
+            return window.i18n.plural('events.reasons.recentClips', Number(rc[1]), { range });
+        }
         const reasonMap = {
             'user_interaction_dashcam_launcher_action_tapped': tr('events.reasons.manualSave', 'Manual Save'),
             'sentry_aware_object_detection': tr('events.reasons.objectDetected', 'Sentry: Object Detected'),

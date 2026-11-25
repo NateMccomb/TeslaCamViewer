@@ -151,7 +151,7 @@ class FrameStacker {
                 if (!method?.imageData) continue;
 
                 const methodStart = performance.now();
-                updateProgress(`Upscaling ${methodName}...`, 0.9 + (completed / methodsToUpscale.length) * 0.07);
+                updateProgress(`Upscaling ${methodName}...${completed === 0 ? ' (starting the AI model, a few seconds the first time)' : ''}`, 0.9 + (completed / methodsToUpscale.length) * 0.07);
 
                 try {
                     const upscaledResult = await this.applyMLUpscale(method.imageData, this.mlUpscaleScale);
@@ -914,7 +914,7 @@ class FrameStacker {
                 const method = enhancementMethods[methodName];
                 if (!method?.imageData) continue;
 
-                updateProgress(`Upscaling ${methodName}...`, 0.9 + (completed / methodsToUpscale.length) * 0.07);
+                updateProgress(`Upscaling ${methodName}...${completed === 0 ? ' (starting the AI model, a few seconds the first time)' : ''}`, 0.9 + (completed / methodsToUpscale.length) * 0.07);
 
                 try {
                     const upscaledResult = await this.applyMLUpscale(method.imageData, this.mlUpscaleScale);

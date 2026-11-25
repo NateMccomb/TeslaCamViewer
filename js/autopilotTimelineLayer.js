@@ -136,7 +136,10 @@
                 if (!data?.frames?.length) { clipStartSec += clipDuration; continue; }
 
                 const frames = data.frames;
-                const framesPerSec = frames.length / clipDuration;
+                // front telemetry: spread over the front's own length, which can be shorter than the clip (#587)
+                const seiDuration = (typeof VideoPlayer !== 'undefined' && clipDuration > 0)
+                    ? VideoPlayer.frontLength(durations, clipIdx) : clipDuration;
+                const framesPerSec = frames.length / seiDuration;
                 let runState = frames[0].autopilot_state ?? 0;
                 let runStartFrame = 0;
 

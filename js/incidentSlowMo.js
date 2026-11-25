@@ -272,7 +272,7 @@ class IncidentSlowMo {
         if (!this.videoPlayer) return null;
 
         const clipIndex = this.videoPlayer.currentClipIndex;
-        const videoTime = this.videoPlayer.videos.front?.currentTime || 0;
+        const videoTime = this.videoPlayer.getCurrentTime ? this.videoPlayer.getCurrentTime() : (this.videoPlayer.videos.front?.currentTime || 0);   // the clip clock (#587)
 
         // Calculate absolute time using cached clip durations or 60-second fallback
         let absoluteTime = 0;

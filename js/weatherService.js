@@ -355,25 +355,42 @@ class WeatherService {
         }
 
         const parts = [];
+        const description = this.describe(weather);
 
         // Icon + temp + description
         if (weather.temperature !== null) {
-            parts.push(`${weather.icon} ${weather.temperature}${weather.temperatureUnit} ${weather.description}`);
+            parts.push(`${weather.icon} ${weather.temperature}${weather.temperatureUnit} ${description}`);
         } else {
-            parts.push(`${weather.icon} ${weather.description}`);
+            parts.push(`${weather.icon} ${description}`);
         }
 
         // Humidity
         if (weather.humidity !== null && weather.humidity !== undefined) {
-            parts.push(`${weather.humidity}% humidity`);
+            parts.push(this._tr('weather.humidity', `${weather.humidity}% humidity`, { value: weather.humidity }));
         }
 
         // Wind
         if (weather.windSpeed) {
-            parts.push(`${weather.windSpeed} wind`);
+            parts.push(this._tr('weather.wind', `${weather.windSpeed} wind`, { value: weather.windSpeed }));
         }
 
         return parts.join(' · ');
+    }
+
+    /** Translated text, or the English one when i18n or the key isn't there */
+    _tr(key, english, params = {}) {
+        const t = window.i18n ? window.i18n.t(key, params) : key;
+        return t === key ? english : t;
+    }
+
+    /**
+     * The weather's description in the chosen language (cached data keeps the English one)
+     * @param {Object} weather - Weather data from getWeather()
+     * @returns {string}
+     */
+    describe(weather) {
+        if (!weather) return '';
+        return this._tr(`weather.code.${weather.weatherCode}`, weather.description || '');
     }
 
     /**

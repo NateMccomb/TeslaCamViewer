@@ -53,6 +53,8 @@
             this.trackId = 0;
             this.ready = false;
             this.usedFallback = false;
+            this.codecUnsupported = false;
+            this.fallbackReason = null;
             this._fallbackVideo = null;
             this._fallbackUrl = null;
         }
@@ -116,7 +118,12 @@
                     hardwareAcceleration: 'prefer-software'
                 };
                 const support = await window.VideoDecoder.isConfigSupported(configBase);
-                if (!support.supported) throw new Error(`decoder config not supported for ${this.codec}`);
+                if (!support.supported) {
+                    // This browser's WebCodecs can't decode the clip's codec
+                    // at all (not one odd file): the player uses this.
+                    this.codecUnsupported = true;
+                    throw new Error(`decoder config not supported for ${this.codec}`);
+                }
                 this._decoderConfig = configBase;
 
                 this.ready = true;
@@ -124,6 +131,7 @@
                 // Fall back to HTMLVideoElement if WebCodecs path fails
                 // (missing codec, unsupported config, or mp4box error).
                 console.warn('[FFE] WebCodecs init failed, falling back:', err?.message || err);
+                this.fallbackReason = String(err?.message || err);
                 this.usedFallback = true;
                 await this._initFallback();
             }

@@ -41,6 +41,12 @@ class DriveSyncUI {
         return window.i18n ? window.i18n.t(key) : key.split('.').pop();
     }
 
+    /** Event type name (Saved / Sentry / Recent, from "SavedClips" or "Saved"); unknown types as they are */
+    typeName(type) {
+        const plain = String(type || '').replace('Clips', '');
+        return this.tr('events.' + plain.toLowerCase(), {}, plain);
+    }
+
     /**
      * Translate with an English fallback for keys a locale doesn't have yet.
      */
@@ -288,10 +294,6 @@ class DriveSyncUI {
                             <input type="checkbox" id="settingWriteSyncFile" ${this.driveSync.settings.writeSyncFile ? 'checked' : ''}>
                             <span>${this.t('syncSettings.writeSyncFile')}</span>
                         </label>
-                        <label class="sync-checkbox-label">
-                            <input type="checkbox" id="settingConfirmDelete" ${this.driveSync.settings.confirmBeforeDelete ? 'checked' : ''}>
-                            <span>${this.t('syncSettings.confirmBeforeDelete')}</span>
-                        </label>
 
                         <div class="sync-settings-group">
                             <label>${this.t('syncSettings.noteConflict')}</label>
@@ -501,13 +503,32 @@ class DriveSyncUI {
         }
     }
 
+    /**
+     * The drive's size under its picker. Until the real clip sizes are read it is an estimate and says so
+     * ("about 1.4 GB"); the sizes are then read in the background (file metadata only) and the line turns exact.
+     * It said "60 MB" for 551 MB before (#555).
+     */
     updateDriveInfo(which, drive) {
         const infoEl = document.getElementById(which === 'source' ? 'sourceInfo' : 'destInfo');
-        const events = drive.events || [];
-        const totalSize = events.reduce((sum, e) => sum + this.driveSync.getEventSize(e), 0);
-
-        // Compact layout - just show size estimate
-        infoEl.textContent = this.driveSync.formatBytes(totalSize);
+        if (!infoEl) return;
+        const show = () => {
+            const events = drive.events || [];
+            const totalSize = events.reduce((sum, e) => sum + this.driveSync.getEventSize(e), 0);
+            const estimate = events.some(e => this.driveSync.isSizeEstimate(e));
+            const size = this.driveSync.formatBytes(totalSize);
+            infoEl.textContent = estimate ? this.tr('driveSync.sizeAbout', { size }, 'about {{size}}') : size;
+            infoEl.title = estimate ? this.tr('driveSync.sizeAboutHint', {}, 'An estimate until the file sizes have been read') : '';
+        };
+        show();
+        // Read the real sizes; a newer pick for this side stops the old count
+        this._sizeJobs = this._sizeJobs || {};
+        if (this._sizeJobs[which]) this._sizeJobs[which].abort();
+        if (!(drive.events || []).some(e => this.driveSync.isSizeEstimate(e))) return;
+        const job = new AbortController();
+        this._sizeJobs[which] = job;
+        this.driveSync.measureDriveSize(drive, { signal: job.signal })
+            .then(() => { if (!job.signal.aborted) show(); })
+            .catch(e => console.warn('[DriveSync] drive size:', e));
     }
 
     updateCompareButton() {
@@ -523,10 +544,10 @@ class DriveSyncUI {
         compareBtn.disabled = true;
         compareBtn.innerHTML = `
             <div class="sync-spinner"></div>
-            Comparing...
+            ${this.tr('driveSync.comparing', {}, 'Comparing...')}
         `;
 
-        document.title = 'Comparing... - TeslaCamViewer';
+        document.title = this.tr('driveSync.titleComparing', {}, 'Comparing... - TeslaCamViewer');
 
         try {
             const results = await this.driveSync.compareEvents();
@@ -540,14 +561,14 @@ class DriveSyncUI {
 
         } catch (error) {
             console.error('Comparison failed:', error);
-            alert('Comparison failed: ' + error.message);
+            alert(this.tr('driveSync.comparisonFailed', { error: error.message }, 'Comparison failed: {{error}}'));
         } finally {
             compareBtn.disabled = false;
             compareBtn.innerHTML = `
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M10 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h5v-2H5V5h5V3zm4 18h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-5v2h5v14h-5v2zm-4-7l-3-3 3-3v2h6v-2l3 3-3 3v-2h-6v2z"/>
                 </svg>
-                Compare
+                ${this.tr('driveSync.compare', {}, 'Compare')}
             `;
             document.title = this.originalTitle;
         }
@@ -576,10 +597,10 @@ class DriveSyncUI {
 
         resultsGrid.innerHTML = `
             ${warningsHtml}
-            ${this.renderResultCategory('missing', 'Missing on destination', results.missing, true)}
-            ${this.renderResultCategory('newer', 'Newer on source', results.newer, true)}
-            ${this.renderResultCategory('differentSize', 'Different size', results.differentSize, false)}
-            ${this.renderResultCategory('same', 'Already synced', results.same, false, true)}
+            ${this.renderResultCategory('missing', this.tr('driveSync.missingOnDest', {}, 'Missing on destination'), results.missing, true)}
+            ${this.renderResultCategory('newer', this.tr('driveSync.newerOnSource', {}, 'Newer on source'), results.newer, true)}
+            ${this.renderResultCategory('differentSize', this.tr('driveSync.differentSize', {}, 'Different size'), results.differentSize, false)}
+            ${this.renderResultCategory('same', this.tr('driveSync.alreadySynced', {}, 'Already synced'), results.same, false, true)}
         `;
 
         // Notes comparison
@@ -716,7 +737,7 @@ class DriveSyncUI {
         const totalSize = selected.reduce((sum, item) => sum + item.fingerprint.totalSize, 0);
 
         document.getElementById('selectionSummary').textContent =
-            `Selected: ${selected.length} events (${this.driveSync.formatBytes(totalSize)})`;
+            this.tr('driveSync.selectedSummary', { count: selected.length, size: this.driveSync.formatBytes(totalSize) }, 'Selected: {{count}} events ({{size}})');
 
         document.getElementById('startSyncBtn').disabled = selected.length === 0;
     }
@@ -729,7 +750,7 @@ class DriveSyncUI {
         ];
 
         if (selectedEvents.length === 0) {
-            alert('Please select at least one event to sync.');
+            alert(this.tr('driveSync.selectAtLeastOne', {}, 'Please select at least one event to sync.'));
             return;
         }
 
@@ -740,11 +761,11 @@ class DriveSyncUI {
         // Confirm if move mode
         if (this.syncMode === 'move') {
             const confirmed = confirm(
-                `You are about to MOVE ${selectedEvents.length} events.\n\n` +
-                `Files will be DELETED from the source drive after verification.\n\n` +
+                this.tr('driveSync.moveConfirm', { count: selectedEvents.length }, 'You are about to MOVE {{count}} events.') + `\n\n` +
+                this.tr('driveSync.moveDeletes', {}, 'Files will be DELETED from the source drive after verification.') + `\n\n` +
                 this.tr('driveSync.moveConfirmDetail', {},
                     'Only files that were copied and verified are deleted. Events with files that could not be read are copied but not deleted.') + `\n\n` +
-                `Continue?`
+                this.tr('driveSync.continueQ', {}, 'Continue?')
             );
             if (!confirmed) return;
         }
@@ -780,7 +801,7 @@ class DriveSyncUI {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
                 </svg>
-                Pause
+                ${this.tr('driveSync.pause', {}, 'Pause')}
             `;
         } else {
             this.driveSync.pause();
@@ -788,13 +809,13 @@ class DriveSyncUI {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M8 5v14l11-7z"/>
                 </svg>
-                Resume
+                ${this.tr('driveSync.resume', {}, 'Resume')}
             `;
         }
     }
 
     onCancelSync() {
-        const confirmed = confirm('Are you sure you want to cancel the sync?');
+        const confirmed = confirm(this.tr('driveSync.cancelConfirm', {}, 'Are you sure you want to cancel the sync?'));
         if (confirmed) {
             this.driveSync.cancel();
         }
@@ -806,11 +827,11 @@ class DriveSyncUI {
             const percent = state.bytesTotal > 0
                 ? Math.round((state.bytesCompleted / state.bytesTotal) * 100)
                 : 0;
-            document.title = `Syncing ${percent}% - TeslaCamViewer`;
+            document.title = this.tr('driveSync.titleSyncing', { percent }, 'Syncing {{percent}}% - TeslaCamViewer');
         } else if (state.status === 'paused') {
-            document.title = 'Paused - TeslaCamViewer';
+            document.title = this.tr('driveSync.titlePaused', {}, 'Paused - TeslaCamViewer');
         } else if (state.status === 'verifying') {
-            document.title = 'Verifying... - TeslaCamViewer';
+            document.title = this.tr('driveSync.titleVerifying', {}, 'Verifying... - TeslaCamViewer');
         }
     }
 
@@ -840,13 +861,15 @@ class DriveSyncUI {
             } else {
                 currentLabel.textContent = state.currentFile
                     ? `${state.currentEvent} (${state.currentFile})`
-                    : state.currentEvent || 'Preparing...';
+                    : state.currentEvent || this.tr('driveSync.preparing', {}, 'Preparing...');
             }
         }
 
         const eventProgress = document.getElementById('eventProgress');
         if (eventProgress) {
-            eventProgress.textContent = `${Math.min((state.eventsProcessed ?? state.eventsCompleted) + 1, state.eventsTotal)} / ${state.eventsTotal} events`;
+            eventProgress.textContent = this.tr('driveSync.eventProgress',
+                { current: Math.min((state.eventsProcessed ?? state.eventsCompleted) + 1, state.eventsTotal), total: state.eventsTotal },
+                '{{current}} / {{total}} events');
         }
 
         const bytesProgress = document.getElementById('bytesProgress');
@@ -860,10 +883,12 @@ class DriveSyncUI {
 
         const eta = this.driveSync.getETA();
         const etaStat = document.getElementById('etaStat');
-        if (etaStat) etaStat.textContent = `ETA: ${this.driveSync.formatDuration(eta)}`;
+        if (etaStat) etaStat.textContent = `${this.tr('driveSync.eta', {}, 'ETA:')} ${this.driveSync.formatDuration(eta)}`;
 
         // Update title
-        document.title = verifying ? 'Verifying... - TeslaCamViewer' : `Syncing ${percent}% - TeslaCamViewer`;
+        document.title = verifying
+            ? this.tr('driveSync.titleVerifying', {}, 'Verifying... - TeslaCamViewer')
+            : this.tr('driveSync.titleSyncing', { percent }, 'Syncing {{percent}}% - TeslaCamViewer');
     }
 
     onComplete(state) {
@@ -881,7 +906,7 @@ class DriveSyncUI {
 
         const summary = document.getElementById('completeSummary');
         if (summary) {
-            summary.textContent = `${state.eventsCompleted}/${state.eventsTotal} events | ${this.driveSync.formatBytes(state.bytesCompleted)} transferred`;
+            summary.textContent = this.tr('driveSync.completeSummary', { done: state.eventsCompleted, total: state.eventsTotal, bytes: this.driveSync.formatBytes(state.bytesCompleted) }, '{{done}}/{{total}} events | {{bytes}} transferred');
         }
 
         // Not every event made it: say so (amber badge; "Sync Failed" when none did) instead of a green "Sync Complete"
@@ -894,6 +919,7 @@ class DriveSyncUI {
                 titleEl.textContent = this.t(failed && state.eventsCompleted === 0 ? 'driveSync.syncFailed' : 'driveSync.syncComplete');
                 titleEl.style.color = '';   // a cancel or failure before may have coloured it
             }
+            this._tintComplete(!failed ? 'ok' : (state.eventsCompleted > 0 ? 'partial' : 'failed'));
         }
 
         const warnings = state.warnings || [];
@@ -929,7 +955,8 @@ class DriveSyncUI {
         const cancelled = !!error?.cancelled;
         const summary = document.getElementById('completeSummary');
         if (summary) {
-            summary.textContent = cancelled ? error.message : `Error: ${error.message}`;
+            summary.textContent = cancelled ? error.message
+                : this.tr('driveSync.errorMessage', { error: error.message }, 'Error: {{error}}');
             summary.style.color = cancelled ? '' : 'var(--danger)';
         }
 
@@ -959,11 +986,24 @@ class DriveSyncUI {
         if (title) {
             title.textContent = cancelled
                 ? this.tr('driveSync.syncCancelled', {}, 'Sync cancelled')
-                : this.t('driveSync.syncFailed');
+                : this.tr('driveSync.syncFailed', {}, 'Sync Failed');
             title.style.color = cancelled ? 'var(--warning, #ffb800)' : 'var(--danger)';
         }
+        this._tintComplete(cancelled ? 'partial' : 'failed');
 
         this.requestAttention();
+    }
+
+    /**
+     * The finish panel's tint follows the result (#584): green only when every event made it, amber when some did
+     * or the sync was cancelled, red when none did. "Sync Failed" sat on the green success panel before.
+     * @param {'ok'|'partial'|'failed'} kind
+     */
+    _tintComplete(kind) {
+        const panel = document.getElementById('completeSection');
+        if (!panel) return;
+        panel.classList.toggle('sync-complete-partial', kind === 'partial');
+        panel.classList.toggle('sync-complete-failed', kind === 'failed');
     }
 
     requestAttention() {
@@ -971,7 +1011,7 @@ class DriveSyncUI {
         this.stopTitleFlash();
         let flash = true;
         this.titleFlashInterval = setInterval(() => {
-            document.title = flash ? 'Sync Complete! - TeslaCamViewer' : this.originalTitle;
+            document.title = flash ? this.tr('driveSync.titleComplete', {}, 'Sync Complete! - TeslaCamViewer') : this.originalTitle;
             flash = !flash;
         }, 1000);
 
@@ -981,14 +1021,14 @@ class DriveSyncUI {
         // Try notification API
         if (Notification.permission === 'granted') {
             new Notification('TeslaCamViewer', {
-                body: 'Drive sync complete!',
+                body: this.tr('driveSync.notifyComplete', {}, 'Drive sync complete!'),
                 icon: '/favicon.svg'
             });
         } else if (Notification.permission !== 'denied') {
             Notification.requestPermission().then(permission => {
                 if (permission === 'granted') {
                     new Notification('TeslaCamViewer', {
-                        body: 'Drive sync complete!',
+                        body: this.tr('driveSync.notifyComplete', {}, 'Drive sync complete!'),
                         icon: '/favicon.svg'
                     });
                 }
@@ -1017,7 +1057,6 @@ class DriveSyncUI {
             verifyAfterCopy: document.getElementById('settingVerify').checked,
             syncNotes: document.getElementById('settingSyncNotes').checked,
             writeSyncFile: document.getElementById('settingWriteSyncFile').checked,
-            confirmBeforeDelete: document.getElementById('settingConfirmDelete').checked,
             noteConflictMode: document.getElementById('settingNoteConflict').value
         });
 
@@ -1031,7 +1070,7 @@ class DriveSyncUI {
 
         const preset = this.driveSync.getPreset(presetId);
         if (!preset) {
-            alert('Preset not found');
+            alert(this.tr('presets.notFound', {}, 'Preset not found'));
             return;
         }
 
@@ -1041,7 +1080,7 @@ class DriveSyncUI {
         const destDrive = drives.find(d => d.label === preset.destLabel);
 
         if (!sourceDrive || !destDrive) {
-            alert(`Could not find drives for this preset.\n\nLooking for:\n- Source: ${preset.sourceLabel}\n- Destination: ${preset.destLabel}\n\nMake sure both drives are loaded.`);
+            alert(`${this.tr('presets.couldNotFind', {}, 'Could not find drives for this preset.')}\n\n${this.tr('presets.lookingFor', {}, 'Looking for:')}\n- ${this.tr('presets.sourceLabel', {}, 'Source:')} ${preset.sourceLabel}\n- ${this.tr('presets.destLabel', {}, 'Destination:')} ${preset.destLabel}\n\n${this.tr('presets.makeSureLoaded', {}, 'Make sure both drives are loaded.')}`);
             return;
         }
 
@@ -1067,14 +1106,14 @@ class DriveSyncUI {
         const destId = document.getElementById('destDriveSelect').value;
 
         if (!sourceId || !destId) {
-            alert('Please select both source and destination drives first.');
+            alert(this.tr('presets.selectBoth', {}, 'Please select both source and destination drives first.'));
             return;
         }
 
         const sourceDrive = this.folderManager.getDrive(sourceId);
         const destDrive = this.folderManager.getDrive(destId);
 
-        const name = prompt('Enter a name for this preset:', `${sourceDrive.label} to ${destDrive.label}`);
+        const name = prompt(this.tr('presets.enterName', {}, 'Enter a name for this preset:'), this.tr('presets.defaultName', { source: sourceDrive.label, dest: destDrive.label }, '{{source}} to {{dest}}'));
         if (!name) return;
 
         const preset = this.driveSync.addPreset(name.trim(), sourceDrive.label, destDrive.label);
@@ -1090,7 +1129,7 @@ class DriveSyncUI {
             this.attachPresetDeleteListeners();
         }
 
-        alert('Preset saved successfully!');
+        alert(this.tr('presets.savedSuccess', {}, 'Preset saved successfully!'));
     }
 
     refreshPresetChips() {
@@ -1114,7 +1153,7 @@ class DriveSyncUI {
         const preset = this.driveSync.getPreset(presetId);
         if (!preset) return;
 
-        const confirmed = confirm(`Delete preset "${preset.name}"?`);
+        const confirmed = confirm(this.tr('presets.deleteConfirm', { name: preset.name }, 'Delete preset "{{name}}"?'));
         if (!confirmed) return;
 
         this.driveSync.deletePreset(presetId);
@@ -1179,11 +1218,11 @@ class DriveSyncUI {
         }
 
         if (errors.length > 0) {
-            alert(`Imported ${imported} presets.\n\nErrors:\n${errors.join('\n')}`);
+            alert(`${this.tr('presets.imported', { count: imported }, 'Imported {{count}} presets.')}\n\n${this.tr('presets.errors', {}, 'Errors:')}\n${errors.join('\n')}`);
         } else if (imported > 0) {
-            alert(`Successfully imported ${imported} presets from drives.`);
+            alert(this.tr('presets.importedSuccess', { count: imported }, 'Successfully imported {{count}} presets from drives.'));
         } else {
-            alert('No new presets found on any drives.');
+            alert(this.tr('presets.noNewPresets', {}, 'No new presets found on any drives.'));
         }
     }
 
@@ -1191,7 +1230,7 @@ class DriveSyncUI {
 
     showStatistics() {
         if (!this.comparisonResults || !this.comparisonResults.statistics) {
-            alert('Please compare drives first to see statistics.');
+            alert(this.tr('driveSync.compareFirst', {}, 'Please compare drives first to see statistics.'));
             return;
         }
 
@@ -1227,50 +1266,50 @@ class DriveSyncUI {
             <div class="sync-stats-overview">
                 <div class="sync-stat-card">
                     <span class="sync-stat-value">${stats.overview.totalSourceEvents}</span>
-                    <span class="sync-stat-label">Source Events</span>
+                    <span class="sync-stat-label">${this.tr('driveSync.sourceEvents', {}, 'Source Events')}</span>
                 </div>
                 <div class="sync-stat-card">
                     <span class="sync-stat-value">${stats.overview.totalDestEvents}</span>
-                    <span class="sync-stat-label">Destination Events</span>
+                    <span class="sync-stat-label">${this.tr('driveSync.destEvents', {}, 'Destination Events')}</span>
                 </div>
                 <div class="sync-stat-card">
                     <span class="sync-stat-value">${stats.overview.missingCount}</span>
-                    <span class="sync-stat-label">Missing</span>
+                    <span class="sync-stat-label">${this.tr('driveSync.missing', {}, 'Missing')}</span>
                 </div>
                 <div class="sync-stat-card">
                     <span class="sync-stat-value">${stats.overview.newerCount}</span>
-                    <span class="sync-stat-label">Newer on Source</span>
+                    <span class="sync-stat-label">${this.tr('driveSync.newerCount', {}, 'Newer on Source')}</span>
                 </div>
                 <div class="sync-stat-card">
                     <span class="sync-stat-value">${stats.overview.sameCount}</span>
-                    <span class="sync-stat-label">Already Synced</span>
+                    <span class="sync-stat-label">${this.tr('driveSync.synced', {}, 'Already Synced')}</span>
                 </div>
                 <div class="sync-stat-card">
                     <span class="sync-stat-value">${stats.overview.syncPercent}%</span>
-                    <span class="sync-stat-label">Sync Coverage</span>
+                    <span class="sync-stat-label">${this.tr('driveSync.syncCoverage', {}, 'Sync Coverage')}</span>
                 </div>
             </div>
 
             <!-- Storage Breakdown -->
             <div class="sync-stats-section-block">
-                <h4>Storage Breakdown</h4>
+                <h4>${this.tr('driveSync.storageBreakdown', {}, 'Storage Breakdown')}</h4>
                 <div class="sync-stats-bars">
                     <div class="sync-stat-bar-row">
-                        <span class="sync-stat-bar-label">Source Total</span>
+                        <span class="sync-stat-bar-label">${this.tr('driveSync.sourceTotal', {}, 'Source Total')}</span>
                         <div class="sync-stat-bar-container">
                             <div class="sync-stat-bar source" style="width: 100%"></div>
                         </div>
                         <span class="sync-stat-bar-value">${this.driveSync.formatBytes(stats.storage.sourceTotal)}</span>
                     </div>
                     <div class="sync-stat-bar-row">
-                        <span class="sync-stat-bar-label">Destination Total</span>
+                        <span class="sync-stat-bar-label">${this.tr('driveSync.destTotal', {}, 'Destination Total')}</span>
                         <div class="sync-stat-bar-container">
                             <div class="sync-stat-bar dest" style="width: ${Math.min(100, (stats.storage.destTotal / stats.storage.sourceTotal) * 100)}%"></div>
                         </div>
                         <span class="sync-stat-bar-value">${this.driveSync.formatBytes(stats.storage.destTotal)}</span>
                     </div>
                     <div class="sync-stat-bar-row">
-                        <span class="sync-stat-bar-label">To Transfer</span>
+                        <span class="sync-stat-bar-label">${this.tr('driveSync.toTransfer', {}, 'To Transfer')}</span>
                         <div class="sync-stat-bar-container">
                             <div class="sync-stat-bar transfer" style="width: ${Math.min(100, (stats.storage.toTransfer / stats.storage.sourceTotal) * 100)}%"></div>
                         </div>
@@ -1281,22 +1320,22 @@ class DriveSyncUI {
 
             <!-- Date Range -->
             <div class="sync-stats-section-block">
-                <h4>Date Range</h4>
+                <h4>${this.tr('driveSync.dateRange', {}, 'Date Range')}</h4>
                 <div class="sync-stats-date-range">
                     <div class="sync-date-range-item">
-                        <span class="sync-date-label">Source:</span>
-                        <span class="sync-date-value">${stats.dateRange.sourceStart || 'N/A'} to ${stats.dateRange.sourceEnd || 'N/A'}</span>
+                        <span class="sync-date-label">${this.tr('driveSync.source', {}, 'Source:')}</span>
+                        <span class="sync-date-value">${this.tr('driveSync.dateSpan', { start: stats.dateRange.sourceStart || this.tr('driveSync.na', {}, 'N/A'), end: stats.dateRange.sourceEnd || this.tr('driveSync.na', {}, 'N/A') }, '{{start}} to {{end}}')}</span>
                     </div>
                     <div class="sync-date-range-item">
-                        <span class="sync-date-label">Destination:</span>
-                        <span class="sync-date-value">${stats.dateRange.destStart || 'N/A'} to ${stats.dateRange.destEnd || 'N/A'}</span>
+                        <span class="sync-date-label">${this.tr('driveSync.destination', {}, 'Destination:')}</span>
+                        <span class="sync-date-value">${this.tr('driveSync.dateSpan', { start: stats.dateRange.destStart || this.tr('driveSync.na', {}, 'N/A'), end: stats.dateRange.destEnd || this.tr('driveSync.na', {}, 'N/A') }, '{{start}} to {{end}}')}</span>
                     </div>
                 </div>
             </div>
 
             <!-- By Type -->
             <div class="sync-stats-section-block">
-                <h4>Events by Type</h4>
+                <h4>${this.tr('driveSync.eventsByType', {}, 'Events by Type')}</h4>
                 <div class="sync-stats-type-grid">
                     ${this.renderTypeStats(stats.byType)}
                 </div>
@@ -1304,25 +1343,25 @@ class DriveSyncUI {
 
             <!-- By Location -->
             <div class="sync-stats-section-block">
-                <h4>Top Locations</h4>
+                <h4>${this.tr('driveSync.topLocations', {}, 'Top Locations')}</h4>
                 ${this.renderLocationStats(stats.byLocation)}
             </div>
 
             <!-- By Month -->
             <div class="sync-stats-section-block">
-                <h4>Events by Month</h4>
+                <h4>${this.tr('driveSync.eventsByMonth', {}, 'Events by Month')}</h4>
                 ${this.renderMonthStats(stats.byMonth)}
             </div>
 
             <!-- Detailed Breakdown Table -->
             <div class="sync-stats-section-block">
-                <h4>Detailed Event Breakdown</h4>
+                <h4>${this.tr('driveSync.detailedBreakdown', {}, 'Detailed Event Breakdown')}</h4>
                 <div class="sync-stats-filter">
                     <select id="statsFilterSelect" class="sync-stats-filter-select">
-                        <option value="all" ${this.statsFilter === 'all' ? 'selected' : ''}>All Events</option>
-                        <option value="missing" ${this.statsFilter === 'missing' ? 'selected' : ''}>Missing Only</option>
-                        <option value="newer" ${this.statsFilter === 'newer' ? 'selected' : ''}>Newer Only</option>
-                        <option value="same" ${this.statsFilter === 'same' ? 'selected' : ''}>Synced Only</option>
+                        <option value="all" ${this.statsFilter === 'all' ? 'selected' : ''}>${this.tr('driveSync.allEvents', {}, 'All Events')}</option>
+                        <option value="missing" ${this.statsFilter === 'missing' ? 'selected' : ''}>${this.tr('driveSync.missingOnly', {}, 'Missing Only')}</option>
+                        <option value="newer" ${this.statsFilter === 'newer' ? 'selected' : ''}>${this.tr('driveSync.newerOnly', {}, 'Newer Only')}</option>
+                        <option value="same" ${this.statsFilter === 'same' ? 'selected' : ''}>${this.tr('driveSync.syncedOnly', {}, 'Synced Only')}</option>
                     </select>
                 </div>
                 <div class="sync-stats-table-container">
@@ -1343,17 +1382,17 @@ class DriveSyncUI {
 
             return `
                 <div class="sync-type-stat">
-                    <div class="sync-type-header">${type.replace('Clips', '')}</div>
+                    <div class="sync-type-header">${FolderParser.escapeHtml(this.typeName(type))}</div>
                     <div class="sync-type-row">
-                        <span>Source:</span>
+                        <span>${this.tr('driveSync.source', {}, 'Source:')}</span>
                         <span>${source.count} (${this.driveSync.formatBytes(source.size)})</span>
                     </div>
                     <div class="sync-type-row">
-                        <span>Dest:</span>
+                        <span>${this.tr('driveSync.dest', {}, 'Dest:')}</span>
                         <span>${dest.count} (${this.driveSync.formatBytes(dest.size)})</span>
                     </div>
                     <div class="sync-type-row missing">
-                        <span>Missing:</span>
+                        <span>${this.tr('driveSync.missingLabel', {}, 'Missing:')}</span>
                         <span>${missing.count} (${this.driveSync.formatBytes(missing.size)})</span>
                     </div>
                 </div>
@@ -1367,7 +1406,7 @@ class DriveSyncUI {
             .slice(0, 10);
 
         if (locations.length === 0) {
-            return '<p class="sync-no-data">No location data available</p>';
+            return `<p class="sync-no-data">${this.tr('driveSync.noLocationData', {}, 'No location data available')}</p>`;
         }
 
         return `
@@ -1377,7 +1416,7 @@ class DriveSyncUI {
                     const missingData = byLocation.missing[location] || { count: 0, size: 0 };
                     return `
                         <div class="sync-location-item">
-                            <span class="sync-location-name">${FolderParser.escapeHtml(location || 'Unknown')}</span>
+                            <span class="sync-location-name">${FolderParser.escapeHtml(location || this.tr('driveSync.unknown', {}, 'Unknown'))}</span>
                             <span class="sync-location-counts">
                                 <span class="source">S: ${data.count}</span>
                                 <span class="dest">D: ${destData.count}</span>
@@ -1396,7 +1435,7 @@ class DriveSyncUI {
             .slice(0, 12);
 
         if (months.length === 0) {
-            return '<p class="sync-no-data">No monthly data available</p>';
+            return `<p class="sync-no-data">${this.tr('driveSync.noMonthlyData', {}, 'No monthly data available')}</p>`;
         }
 
         const maxCount = Math.max(...months.map(([_, data]) => data.count));
@@ -1417,7 +1456,7 @@ class DriveSyncUI {
                             </div>
                             <span class="sync-month-counts">
                                 ${data.count} / ${destData.count}
-                                ${missingData.count > 0 ? `<span class="missing">(${missingData.count} missing)</span>` : ''}
+                                ${missingData.count > 0 ? `<span class="missing">${this.tr('driveSync.monthMissing', { count: missingData.count }, '({{count}} missing)')}</span>` : ''}
                             </span>
                         </div>
                     `;
@@ -1463,28 +1502,28 @@ class DriveSyncUI {
             <table class="sync-stats-table">
                 <thead>
                     <tr>
-                        <th class="sortable" data-column="name">Event${sortIcon('name')}</th>
-                        <th class="sortable" data-column="type">Type${sortIcon('type')}</th>
-                        <th class="sortable" data-column="date">Date${sortIcon('date')}</th>
-                        <th class="sortable" data-column="location">Location${sortIcon('location')}</th>
-                        <th class="sortable" data-column="size">Size${sortIcon('size')}</th>
-                        <th class="sortable" data-column="status">Status${sortIcon('status')}</th>
+                        <th class="sortable" data-column="name">${this.tr('driveSync.colEvent', {}, 'Event')}${sortIcon('name')}</th>
+                        <th class="sortable" data-column="type">${this.tr('driveSync.colType', {}, 'Type')}${sortIcon('type')}</th>
+                        <th class="sortable" data-column="date">${this.tr('driveSync.colDate', {}, 'Date')}${sortIcon('date')}</th>
+                        <th class="sortable" data-column="location">${this.tr('driveSync.colLocation', {}, 'Location')}${sortIcon('location')}</th>
+                        <th class="sortable" data-column="size">${this.tr('driveSync.colSize', {}, 'Size')}${sortIcon('size')}</th>
+                        <th class="sortable" data-column="status">${this.tr('driveSync.colStatus', {}, 'Status')}${sortIcon('status')}</th>
                     </tr>
                 </thead>
                 <tbody>
                     ${events.slice(0, 100).map(e => `
                         <tr class="status-${e.status}">
                             <td class="event-name">${FolderParser.escapeHtml(e.name)}</td>
-                            <td>${e.type || '-'}</td>
+                            <td>${e.type ? FolderParser.escapeHtml(this.typeName(e.type)) : '-'}</td>
                             <td>${e.date || '-'}</td>
                             <td>${FolderParser.escapeHtml(e.location || '-')}</td>
                             <td>${this.driveSync.formatBytes(e.size || 0)}</td>
-                            <td><span class="status-badge ${e.status}">${e.status}</span></td>
+                            <td><span class="status-badge ${e.status}">${this.tr('driveSync.status.' + e.status, {}, e.status)}</span></td>
                         </tr>
                     `).join('')}
                 </tbody>
             </table>
-            ${events.length > 100 ? `<p class="sync-table-note">Showing first 100 of ${events.length} events</p>` : ''}
+            ${events.length > 100 ? `<p class="sync-table-note">${this.tr('driveSync.showingFirst', { count: 100, total: events.length }, 'Showing first {{count}} of {{total}} events')}</p>` : ''}
         `;
     }
 

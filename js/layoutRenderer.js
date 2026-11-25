@@ -666,9 +666,10 @@ class LayoutRenderer {
             const actualCamera = cameraMapping ? (cameraMapping[camName] || camName) : camName;
             const label = labelMap[actualCamera] || actualCamera.toUpperCase();
 
-            // Check if video has ended (for visual feedback)
+            // Ended (red label): from the export frame's own time when the
+            // caller knows it (options.endedCameras, #586), else the element
             const video = videos ? videos[actualCamera] : null;
-            const isEnded = video && video.ended;
+            const isEnded = options.endedCameras ? options.endedCameras.has(actualCamera) : !!(video && video.ended);
 
             // Measure text with letter spacing
             const metrics = ctx.measureText(label);

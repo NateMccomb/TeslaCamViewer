@@ -204,13 +204,13 @@ class SyncController {
             this.syncStatusElement.classList.add('synced');
             this.syncStatusElement.title = this._recoveryCount > 0
                 ? `Videos synchronized · ${this._recoveryCount} hardware-overlay recoveries this session`
-                : 'Videos are synchronized';
+                : (window.i18n ? window.i18n.t('sync.videosSynced') : 'Videos are synchronized');
             if (statusContainer) {
                 statusContainer.dataset.status = `Synced (all ${this.cameraCount} cameras in sync)`;
             }
         } else if (status === 'drifted') {
             this.syncStatusElement.classList.add('drifted');
-            this.syncStatusElement.title = 'Videos drifted - resyncing';
+            this.syncStatusElement.title = window.i18n ? window.i18n.t('sync.videosDrifted') : 'Videos drifted - resyncing';
             if (statusContainer) {
                 statusContainer.dataset.status = 'Drifted (auto-correcting)';
             }
