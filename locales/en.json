@@ -861,7 +861,17 @@
     "notLoaded": "Not loaded",
     "sync": "Sync",
     "syncNow": "Load events from this archive drive",
-    "editDrive": "Edit drive settings"
+    "editDrive": "Edit drive settings",
+    "restoring": "Restoring saved drives...",
+    "restoringDrive": "Restoring {{drive}}...",
+    "restoreSlow": "This is taking longer than usual. The drive may not be connected.",
+    "restoreSkip": "Skip",
+    "notConnected": "{{drive}} isn't connected.",
+    "needsPermission": "{{drive}} needs your permission to open.",
+    "restoreSkipped": "{{drive}} wasn't loaded.",
+    "stillNotConnected": "{{drive}} still isn't connected.",
+    "reconnect": "Reconnect",
+    "reconnectHint": "Connect the drive if needed, then use Reconnect."
   },
 
   "driveSetup": {

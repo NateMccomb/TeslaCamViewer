@@ -858,7 +858,17 @@
     "notLoaded": "未読み込み",
     "sync": "同期",
     "syncNow": "このアーカイブドライブからイベントを読み込む",
-    "editDrive": "ドライブ設定を編集"
+    "editDrive": "ドライブ設定を編集",
+    "restoring": "保存したドライブを復元しています...",
+    "restoringDrive": "{{drive}} を復元しています...",
+    "restoreSlow": "いつもより時間がかかっています。ドライブが接続されていない可能性があります。",
+    "restoreSkip": "スキップ",
+    "notConnected": "{{drive}} が接続されていません。",
+    "needsPermission": "{{drive}} を開くには許可が必要です。",
+    "restoreSkipped": "{{drive}} は読み込まれませんでした。",
+    "stillNotConnected": "{{drive}} はまだ接続されていません。",
+    "reconnect": "再接続",
+    "reconnectHint": "必要ならドライブを接続してから「再接続」を押してください。"
   },
 
   "driveSetup": {

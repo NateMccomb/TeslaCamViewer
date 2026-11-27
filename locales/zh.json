@@ -858,7 +858,17 @@
     "notLoaded": "未加载",
     "sync": "同步",
     "syncNow": "从此归档驱动器加载事件",
-    "editDrive": "编辑驱动器设置"
+    "editDrive": "编辑驱动器设置",
+    "restoring": "正在恢复已保存的驱动器...",
+    "restoringDrive": "正在恢复 {{drive}}...",
+    "restoreSlow": "这比平时要久。驱动器可能没有连接。",
+    "restoreSkip": "跳过",
+    "notConnected": "{{drive}} 未连接。",
+    "needsPermission": "打开 {{drive}} 需要你的许可。",
+    "restoreSkipped": "{{drive}} 未加载。",
+    "stillNotConnected": "{{drive}} 仍未连接。",
+    "reconnect": "重新连接",
+    "reconnectHint": "如有需要，请连接驱动器，然后点击“重新连接”。"
   },
 
   "driveSetup": {

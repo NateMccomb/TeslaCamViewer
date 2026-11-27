@@ -858,7 +858,17 @@
     "notLoaded": "Niet geladen",
     "sync": "Synchroniseren",
     "syncNow": "Gebeurtenissen van deze archiefschijf laden",
-    "editDrive": "Schijfinstellingen bewerken"
+    "editDrive": "Schijfinstellingen bewerken",
+    "restoring": "Opgeslagen schijven worden hersteld...",
+    "restoringDrive": "{{drive}} wordt hersteld...",
+    "restoreSlow": "Dit duurt langer dan normaal. De schijf is misschien niet aangesloten.",
+    "restoreSkip": "Overslaan",
+    "notConnected": "{{drive}} is niet aangesloten.",
+    "needsPermission": "{{drive}} heeft uw toestemming nodig om te openen.",
+    "restoreSkipped": "{{drive}} is niet geladen.",
+    "stillNotConnected": "{{drive}} is nog steeds niet aangesloten.",
+    "reconnect": "Opnieuw verbinden",
+    "reconnectHint": "Sluit de schijf zo nodig aan en kies dan Opnieuw verbinden."
   },
 
   "driveSetup": {

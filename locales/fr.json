@@ -858,7 +858,17 @@
     "notLoaded": "Non chargé",
     "sync": "Synchroniser",
     "syncNow": "Charger les événements de ce lecteur d'archive",
-    "editDrive": "Modifier les paramètres du lecteur"
+    "editDrive": "Modifier les paramètres du lecteur",
+    "restoring": "Restauration des lecteurs enregistrés...",
+    "restoringDrive": "Restauration de {{drive}}...",
+    "restoreSlow": "Cela prend plus de temps que d'habitude. Le lecteur n'est peut-être pas connecté.",
+    "restoreSkip": "Passer",
+    "notConnected": "Le lecteur {{drive}} n'est pas connecté.",
+    "needsPermission": "Le lecteur {{drive}} a besoin de votre autorisation pour s'ouvrir.",
+    "restoreSkipped": "Le lecteur {{drive}} n'a pas été chargé.",
+    "stillNotConnected": "Le lecteur {{drive}} n'est toujours pas connecté.",
+    "reconnect": "Reconnecter",
+    "reconnectHint": "Connectez le lecteur si besoin, puis utilisez Reconnecter."
   },
 
   "driveSetup": {

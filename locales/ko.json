@@ -858,7 +858,17 @@
     "notLoaded": "로드되지 않음",
     "sync": "동기화",
     "syncNow": "이 아카이브 드라이브에서 이벤트 로드",
-    "editDrive": "드라이브 설정 편집"
+    "editDrive": "드라이브 설정 편집",
+    "restoring": "저장된 드라이브를 복원하는 중...",
+    "restoringDrive": "{{drive}} 복원 중...",
+    "restoreSlow": "평소보다 오래 걸리고 있습니다. 드라이브가 연결되어 있지 않을 수 있습니다.",
+    "restoreSkip": "건너뛰기",
+    "notConnected": "{{drive}}이(가) 연결되어 있지 않습니다.",
+    "needsPermission": "{{drive}}을(를) 열려면 권한이 필요합니다.",
+    "restoreSkipped": "{{drive}}을(를) 불러오지 않았습니다.",
+    "stillNotConnected": "{{drive}}이(가) 아직 연결되어 있지 않습니다.",
+    "reconnect": "다시 연결",
+    "reconnectHint": "필요하면 드라이브를 연결한 다음 다시 연결을 누르세요."
   },
 
   "driveSetup": {

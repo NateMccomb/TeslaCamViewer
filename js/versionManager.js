@@ -19,7 +19,7 @@ class VersionManager {
 
         // Current version - UPDATE THIS when releasing new features
         // Format: Year.Week.DayOfWeek.Release
-        this.currentVersion = '2026.48.5.1';
+        this.currentVersion = '2026.48.5.2';
 
         // Changelog with feature identifiers for "what's new" dots
         // Each entry has: version, date, title, and features array
@@ -48,6 +48,11 @@ class VersionManager {
                     {
                         id: 'summary-2026-48-clip-ends',
                         text: 'Every camera now plays and exports to its own end of each clip, and in an export a camera\'s label turns red only when that camera really ends.',
+                        elementSelector: null
+                    },
+                    {
+                        id: 'fix-2026-48-restore',
+                        text: 'On phones and tablets, the page no longer gets stuck on "Restoring..." when a saved drive isn\'t plugged in; the drive is listed with a Reconnect button instead.',
                         elementSelector: null
                     },
                     {
@@ -863,6 +868,9 @@ class VersionManager {
      */
     checkVersionUpgrade() {
         const lastVersion = this.state.lastSeenVersion;
+        // The newest What's New entry. A fix-only release can ship without an entry of its own (its note goes in
+        // the entry before it), so this is not always currentVersion's.
+        const latest = this.changelog.length ? this.changelog[0].version : this.currentVersion;
 
         if (!lastVersion) {
             // First visit ever. Don't overwhelm with 10 years of changelog
@@ -874,7 +882,7 @@ class VersionManager {
             this.state.firstVisit = true;
             this.state.lastSeenVersion = this.currentVersion;
             for (const entry of this.changelog) {
-                if (entry.version === this.currentVersion) continue;
+                if (entry.version === latest) continue;
                 for (const feature of entry.features) {
                     if (!this.state.seenFeatures.includes(feature.id)) {
                         this.state.seenFeatures.push(feature.id);
@@ -896,8 +904,9 @@ class VersionManager {
             this.state.lastSeenVersion = this.currentVersion;
             this.saveState();
 
-            // Show changelog modal after a brief delay
-            if (this.state.showWhatsNew) {
+            // Show changelog modal after a brief delay, when there is an entry newer than the last version seen. A
+            // release without its own entry updates quietly: its note is in the entry the user was already shown.
+            if (this.state.showWhatsNew && this.compareVersions(latest, lastVersion) > 0) {
                 setTimeout(() => this.showUpgradeNotification(), 1500);
             }
         }

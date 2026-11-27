@@ -858,7 +858,17 @@
     "notLoaded": "Ikke lastet",
     "sync": "Synkroniser",
     "syncNow": "Last hendelser fra denne arkivstasjonen",
-    "editDrive": "Rediger stasjonsinnstillinger"
+    "editDrive": "Rediger stasjonsinnstillinger",
+    "restoring": "Gjenoppretter lagrede stasjoner...",
+    "restoringDrive": "Gjenoppretter {{drive}}...",
+    "restoreSlow": "Dette tar lengre tid enn vanlig. Stasjonen er kanskje ikke koblet til.",
+    "restoreSkip": "Hopp over",
+    "notConnected": "{{drive}} er ikke koblet til.",
+    "needsPermission": "{{drive}} trenger tillatelsen din for å åpnes.",
+    "restoreSkipped": "{{drive}} ble ikke lastet inn.",
+    "stillNotConnected": "{{drive}} er fortsatt ikke koblet til.",
+    "reconnect": "Koble til på nytt",
+    "reconnectHint": "Koble til stasjonen om nødvendig, og velg så Koble til på nytt."
   },
 
   "driveSetup": {

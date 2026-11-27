@@ -866,7 +866,17 @@
     "notLoaded": "Sin cargar",
     "sync": "Sincronizar",
     "syncNow": "Cargar eventos de esta unidad de archivo",
-    "editDrive": "Editar configuración de la unidad"
+    "editDrive": "Editar configuración de la unidad",
+    "restoring": "Restaurando las unidades guardadas...",
+    "restoringDrive": "Restaurando {{drive}}...",
+    "restoreSlow": "Esto está tardando más de lo normal. Puede que la unidad no esté conectada.",
+    "restoreSkip": "Omitir",
+    "notConnected": "La unidad {{drive}} no está conectada.",
+    "needsPermission": "La unidad {{drive}} necesita su permiso para abrirse.",
+    "restoreSkipped": "La unidad {{drive}} no se ha cargado.",
+    "stillNotConnected": "La unidad {{drive}} sigue sin estar conectada.",
+    "reconnect": "Volver a conectar",
+    "reconnectHint": "Conecte la unidad si hace falta y use Volver a conectar."
   },
 
   "driveSetup": {

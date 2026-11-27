@@ -4,6 +4,12 @@
  */
 
 class TeslaCamViewerApp {
+    // Saved drives at page load (2026.48.5.2): how long a drive gets to answer before it is listed as not
+    // connected, the same after a tap on Reconnect, and when the restore overlay offers Skip
+    static RESTORE_PROBE_MS = 4847;
+    static RESTORE_PROBE_TAP_MS = 15047;
+    static RESTORE_SKIP_MS = 8047;
+
     constructor() {
         // Check for other instances using BroadcastChannel
         this._initInstanceDetection();
@@ -288,24 +294,28 @@ class TeslaCamViewerApp {
     }
 
     /**
-     * Try to restore drives from IndexedDB if setting is enabled
+     * Try to restore drives from IndexedDB if setting is enabled.
+     * The page never waits on a drive (2026.48.5.2): at page load only drives the browser still allows are
+     * opened (it can't ask without a tap), each one answers a short probe before it is read, and after a few
+     * seconds the overlay offers Skip. Drives left out are listed in the sidebar with a Reconnect button.
      */
     async tryRestoreLastFolder() {
         if (!this.settingsManager.get('rememberLastFolder')) {
             return;
         }
 
-        this.showLoading('Restoring saved drives...');
+        const run = this._beginDriveRestore(this._t('driveManager.restoring'));
 
         try {
             // Load saved drives from IndexedDB
             await this.folderManager.loadDrives();
+            if (run.skipped) return;
             const drives = this.folderManager.getDrives();
 
             if (drives.length === 0) {
                 // Try legacy single-folder restore
                 const restored = await this.folderParser.loadSavedFolder();
-                if (restored) {
+                if (restored && !run.skipped) {
                     this.loadingText.textContent = 'Migrating to new drive system...';
                     const drive = await this.folderManager.addDrive(this.folderParser.rootHandle);
                     this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
@@ -314,6 +324,8 @@ class TeslaCamViewerApp {
                     });
                     const events = await this.folderParser.parseFolder();
                     this.folderParser.setProgressCallback(null);
+                    if (run.skipped) return;
+                    run.committed = true;
                     drive.events = events;
                     this.allEvents = events;
                     this.statisticsManager.setEvents(events);
@@ -324,63 +336,26 @@ class TeslaCamViewerApp {
                     this.selectFolderBtn.classList.add('hidden');
                     console.log(`Migrated ${events.length} events to new drive system`);
                 }
-                this.hideLoading();
                 return;
             }
 
-            // Restore each drive - request permissions and parse
-            let allEvents = [];
-            let successCount = 0;
-
+            // Restore each drive the browser still allows
             for (const drive of drives) {
                 if (!drive.handle) {
                     console.warn(`Drive ${drive.label} has no handle, skipping`);
-                    continue;
-                }
-
-                // Skip archive drives on startup
-                if (drive.isArchive) {
+                } else if (drive.isArchive) {
+                    // Skip archive drives on startup
                     console.log(`Skipping archive drive: ${drive.label}`);
-                    continue;
-                }
-
-                this.loadingText.textContent = `Restoring ${drive.label}...`;
-
-                try {
-                    // Request permission for the stored handle
-                    const permission = await drive.handle.requestPermission({ mode: 'read' });
-                    if (permission !== 'granted') {
-                        console.warn(`Permission denied for ${drive.label}`);
-                        continue;
-                    }
-
-                    // Parse events from this drive
-                    this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
-                    this.folderParser.rootHandle = drive.handle;
-                    this.folderParser.setProgressCallback((message, count) => {
-                        this.loadingText.textContent = `${drive.label}: ${message} (${count} events)`;
-                    });
-                    let events = await this.folderParser.parseFolder();
-                    this.folderParser.setProgressCallback(null);
-
-                    // Apply date filter if set
-                    const cutoff = this.folderManager.getDateFilterCutoff(drive.dateFilter);
-                    if (cutoff) {
-                        const beforeCount = events.length;
-                        events = events.filter(event => new Date(event.timestamp) >= cutoff);
-                        console.log(`Date filter (${drive.dateFilter}): ${beforeCount} → ${events.length} events`);
-                    }
-
-                    drive.events = events;
-                    allEvents = allEvents.concat(events);
-                    successCount++;
-                    console.log(`Restored ${events.length} events from ${drive.label}`);
-                } catch (error) {
-                    console.warn(`Failed to restore drive ${drive.label}:`, error);
                 }
             }
+            run.drives = drives.filter(d => d.handle && !d.isArchive);
+            const res = await this._restoreDrives(run.drives, run, TeslaCamViewerApp.RESTORE_PROBE_MS);
+            if (run.skipped) return;
 
-            if (successCount > 0) {
+            if (res.loaded.length > 0) {
+                run.committed = true;
+                this._adoptRestoredDrives(res.loaded);
+                const allEvents = res.events;
                 this.allEvents = allEvents;
                 this.statisticsManager.setEvents(allEvents);
                 await this.registerEventsAndLoadBackups(allEvents);
@@ -391,16 +366,297 @@ class TeslaCamViewerApp {
                 // unless we do it explicitly here.
                 this._syncFileSystemObservers(this.folderManager.getDrives());
                 this.selectFolderBtn.classList.add('hidden');
-                console.log(`Restored ${allEvents.length} total events from ${successCount} drives`);
+                console.log(`Restored ${allEvents.length} total events from ${res.loaded.length} drives`);
 
                 // Show diagnostic notification if there were issues
                 this.showParseDiagnostics();
             }
+            this._noteDrives(res.missing);
         } catch (error) {
             console.warn('Failed to restore drives:', error);
+        } finally {
+            this._endDriveRestore(run);
+        }
+    }
+
+    /**
+     * Probe, then read, each saved drive (page load or Reconnect). Changes nothing on screen: the caller shows
+     * the result, and a restore cut short by Skip shows nothing. Each drive is read by its own FolderParser, so
+     * a read still running after Skip can't mix into the next folder the user opens.
+     * @param {Array} drives
+     * @param {Object} run - from _beginDriveRestore
+     * @param {number} probeMs - how long each drive gets to answer the probe
+     * @returns {Promise<{events: Array, loaded: Array<{drive: Object, events: Array, parser: FolderParser}>, missing: Array<{id: string, why: string}>}>}
+     */
+    async _restoreDrives(drives, run, probeMs) {
+        const res = { events: [], loaded: [], missing: [] };
+        for (const drive of drives) {
+            if (run.skipped) break;
+            this.loadingText.textContent = this._t('driveManager.restoringDrive', { drive: drive.label });
+
+            const access = await this._probeDriveAccess(drive.handle, probeMs);
+            if (run.skipped) break;
+            if (access !== 'granted') {
+                console.warn(`[App] ${drive.label} not restored: ${access}`);
+                const why = (access === 'prompt' || access === 'denied') ? 'permission' : 'gone';
+                res.missing.push({ id: drive.id, why });
+                run.found[drive.id] = why;
+                continue;
+            }
+
+            try {
+                const parser = new FolderParser();
+                parser.setDriveContext(drive.id, drive.label, drive.color);
+                parser.rootHandle = drive.handle;
+                parser.setProgressCallback((message, count) => {
+                    if (!run.skipped) this.loadingText.textContent = `${drive.label}: ${message} (${count} events)`;
+                });
+                let events = await parser.parseFolder();
+                parser.setProgressCallback(null);
+                if (run.skipped) break;
+
+                // Apply date filter if set
+                const cutoff = this.folderManager.getDateFilterCutoff(drive.dateFilter);
+                if (cutoff) {
+                    const beforeCount = events.length;
+                    events = events.filter(event => new Date(event.timestamp) >= cutoff);
+                    console.log(`Date filter (${drive.dateFilter}): ${beforeCount} → ${events.length} events`);
+                }
+
+                res.loaded.push({ drive, events, parser });
+                res.events = res.events.concat(events);
+                console.log(`Restored ${events.length} events from ${drive.label}`);
+            } catch (error) {
+                console.warn(`Failed to restore drive ${drive.label}:`, error);
+                res.missing.push({ id: drive.id, why: 'gone' });
+                run.found[drive.id] = 'gone';
+            }
+        }
+        return res;
+    }
+
+    /**
+     * Can this saved drive be read now, without asking? queryPermission never shows a prompt, and one folder
+     * entry says whether the folder is there and answers. Settles within `ms`, whatever the drive does.
+     * @returns {Promise<string>} 'granted', 'prompt', 'denied', 'gone' or 'timeout'
+     */
+    _probeDriveAccess(handle, ms) {
+        const probe = (async () => {
+            if (typeof handle.queryPermission === 'function') {
+                const state = await handle.queryPermission({ mode: 'read' });
+                if (state !== 'granted') return state;
+            }
+            await handle.values().next();
+            return 'granted';
+        })().catch(e => {
+            console.warn(`[App] Drive probe: ${e && e.name}: ${e && e.message}`);
+            return (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) ? 'denied' : 'gone';
+        });
+        let timer = null;
+        const limit = new Promise(resolve => { timer = setTimeout(() => resolve('timeout'), ms); });
+        return Promise.race([probe, limit]).finally(() => clearTimeout(timer));
+    }
+
+    /**
+     * Restored drives become the loaded ones: their events, encrypted-event records and the main parser's
+     * drive (the last one read, as before) and parse diagnostics.
+     */
+    _adoptRestoredDrives(loaded) {
+        for (const { drive, events, parser } of loaded) {
+            drive.events = events;
+            const enc = parser.encryptedByDrive.get(drive.id);
+            if (enc) this.folderParser.encryptedByDrive.set(drive.id, enc);
+            this.folderParser.setDriveContext(drive.id, drive.label, drive.color);
+            this.folderParser.rootHandle = drive.handle;
+            this.folderParser._lastDiagnostics = parser.getDiagnosticSummary();
+            this._dropDriveNotice(drive.id, false);
+        }
+    }
+
+    /**
+     * The restore overlay; after RESTORE_SKIP_MS it offers Skip.
+     * @returns {Object} the run: skipped, done, committed (results shown), drives
+     */
+    _beginDriveRestore(message) {
+        const run = { skipped: false, done: false, committed: false, drives: [], found: {}, timer: null };
+        this._driveRestore = run;
+        this.showLoading(message);
+        run.timer = setTimeout(() => this._offerRestoreSkip(run), TeslaCamViewerApp.RESTORE_SKIP_MS);
+        return run;
+    }
+
+    _offerRestoreSkip(run) {
+        if (run.done) return;
+        document.getElementById('loadingSkip')?.remove();
+        const box = document.createElement('div');
+        box.id = 'loadingSkip';
+        box.className = 'loading-skip';
+        const text = document.createElement('p');
+        text.className = 'loading-skip-text';
+        text.textContent = this._t('driveManager.restoreSlow');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'loadingSkipBtn';
+        btn.className = 'loading-skip-btn';
+        btn.textContent = this._t('driveManager.restoreSkip');
+        btn.addEventListener('click', () => this._skipDriveRestore(run));
+        box.append(text, btn);
+        this.loadingOverlay.appendChild(box);
+    }
+
+    /** Skip: the overlay goes now; drives this restore hadn't shown yet are listed for Reconnect. */
+    _skipDriveRestore(run) {
+        if (run.done) return;
+        run.skipped = true;
+        console.warn('[App] Drive restore skipped');
+        this._endDriveRestore(run);
+        if (!run.committed) this._noteDrives(run.drives.map(d => ({ id: d.id, why: run.found[d.id] || 'skipped' })));
+    }
+
+    _endDriveRestore(run) {
+        if (run.done) return;
+        run.done = true;
+        clearTimeout(run.timer);
+        document.getElementById('loadingSkip')?.remove();
+        this.hideLoading();
+    }
+
+    /**
+     * The sidebar notice under Select TeslaCam Folder: saved drives that didn't load, each with Reconnect.
+     * @param {Array<{id: string, why: string}>} entries - why: 'gone', 'permission', 'skipped' or 'still'
+     */
+    _noteDrives(entries) {
+        if (!this._driveNotice) this._driveNotice = new Map();
+        for (const e of entries || []) this._driveNotice.set(e.id, e.why);
+        this._renderDriveNotice();
+    }
+
+    _dropDriveNotice(driveId, render = true) {
+        if (!this._driveNotice || !this._driveNotice.delete(driveId)) return;
+        if (render) this._renderDriveNotice();
+    }
+
+    _renderDriveNotice() {
+        if (!this._driveNotice) return;
+        if (!this._driveNoticeLocale) {
+            this._driveNoticeLocale = true;
+            window.addEventListener('localeChanged', () => this._renderDriveNotice());
+        }
+        const rows = [];
+        for (const [id, why] of this._driveNotice) {
+            const drive = this.folderManager.getDrive(id);
+            if (drive && drive.handle) rows.push([drive, why]);
+            else this._driveNotice.delete(id);
+        }
+        let box = document.getElementById('driveRestoreNotice');
+        if (!rows.length) {
+            if (box) box.remove();
+            return;
+        }
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'driveRestoreNotice';
+            box.className = 'drive-restore-notice';
+            box.setAttribute('role', 'status');
+            this.selectFolderBtn.insertAdjacentElement('afterend', box);
+        }
+        box.textContent = '';
+        const TEXT = {
+            gone: 'driveManager.notConnected', permission: 'driveManager.needsPermission',
+            skipped: 'driveManager.restoreSkipped', still: 'driveManager.stillNotConnected'
+        };
+        for (const [drive, why] of rows) {
+            const row = document.createElement('div');
+            row.className = 'drive-restore-row';
+            row.dataset.driveId = drive.id;
+            row.dataset.state = why;
+            const dot = document.createElement('span');
+            dot.className = 'drive-restore-dot';
+            dot.style.background = drive.color || '';
+            const text = document.createElement('span');
+            text.className = 'drive-restore-text';
+            text.textContent = this._t(TEXT[why] || TEXT.gone, { drive: drive.label });
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'drive-restore-btn';
+            btn.dataset.driveId = drive.id;
+            btn.textContent = this._t('driveManager.reconnect');
+            btn.addEventListener('click', () => this._reconnectDrive(drive.id));
+            row.append(dot, text, btn);
+            box.appendChild(row);
+        }
+        const foot = document.createElement('div');
+        foot.className = 'drive-restore-foot';
+        const hint = document.createElement('p');
+        hint.className = 'drive-restore-hint';
+        hint.textContent = this._t('driveManager.reconnectHint');
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'drive-restore-close';
+        close.title = this._t('sidebar.dismiss');
+        close.setAttribute('aria-label', this._t('sidebar.dismiss'));
+        close.textContent = '×';
+        close.addEventListener('click', () => {
+            this._driveNotice.clear();
+            this._renderDriveNotice();
+        });
+        foot.append(hint, close);
+        box.appendChild(foot);
+    }
+
+    /**
+     * Reconnect (a tap in the sidebar notice): ask for access now, when the browser can show its prompt, then
+     * read the drive like at page load (probe, overlay with Skip) and add its events to the list.
+     */
+    async _reconnectDrive(driveId) {
+        if (this._driveRestore && !this._driveRestore.done) return;
+        const drive = this.folderManager.getDrive(driveId);
+        if (!drive || !drive.handle) {
+            this._dropDriveNotice(driveId);
+            return;
+        }
+        let state = 'granted';
+        try {
+            if (typeof drive.handle.requestPermission === 'function') {
+                state = await drive.handle.requestPermission({ mode: 'read' });
+            }
+        } catch (e) {
+            console.warn(`[App] Unable to get access to ${drive.label}:`, e);
+            state = (e && e.name === 'NotFoundError') ? 'gone' : 'denied';
+        }
+        if (state !== 'granted') {
+            this._noteDrives([{ id: drive.id, why: state === 'gone' ? 'still' : 'permission' }]);
+            return;
         }
 
-        this.hideLoading();
+        const run = this._beginDriveRestore(this._t('driveManager.restoringDrive', { drive: drive.label }));
+        run.drives = [drive];
+        try {
+            const res = await this._restoreDrives([drive], run, TeslaCamViewerApp.RESTORE_PROBE_TAP_MS);
+            if (run.skipped) return;
+            if (!res.loaded.length) {
+                this._noteDrives(res.missing.map(m => ({ id: m.id, why: m.why === 'permission' ? 'permission' : 'still' })));
+                return;
+            }
+            run.committed = true;
+            this._adoptRestoredDrives(res.loaded);
+            const events = res.events;
+            this.allEvents = this.allEvents.filter(e => e.driveId !== drive.id).concat(events);
+            this.allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            this.statisticsManager.setEvents(this.allEvents);
+            await this.registerEventsAndLoadBackups(events);
+            this.applyFilters();
+            this.updateDriveSelector(this.folderManager.getDrives());
+            this._syncFileSystemObservers(this.folderManager.getDrives());
+            this.selectFolderBtn.classList.add('hidden');
+            this._renderDriveNotice();
+            console.log(`[App] ${drive.label} reconnected successfully: ${events.length} events`);
+        } catch (error) {
+            console.warn(`[App] Unable to reconnect ${drive.label}:`, error);
+            this._noteDrives([{ id: drive.id, why: 'still' }]);
+        } finally {
+            this._endDriveRestore(run);
+        }
     }
 
     /**
@@ -1326,6 +1582,9 @@ class TeslaCamViewerApp {
         if (this.folderManager.activeDriveId) {
             this.driveSelect.value = this.folderManager.activeDriveId;
         }
+
+        // The not-connected notice follows renames and removed drives
+        if (this._driveNotice && this._driveNotice.size) this._renderDriveNotice();
     }
 
     /**
@@ -1409,6 +1668,7 @@ class TeslaCamViewerApp {
 
                 // Update drive selector
                 this.updateDriveSelector(this.folderManager.getDrives());
+                this._dropDriveNotice(drive.id);
 
                 this.hideLoading();
 
@@ -2182,6 +2442,7 @@ class TeslaCamViewerApp {
 
                 // Hide select folder button after successful load
                 this.selectFolderBtn.classList.add('hidden');
+                this._dropDriveNotice(drive.id);
 
                 // Save folder handle if setting is enabled
                 if (this.settingsManager.get('rememberLastFolder')) {

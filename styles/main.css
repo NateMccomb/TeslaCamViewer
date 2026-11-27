@@ -4274,6 +4274,120 @@ select option:hover,
     letter-spacing: 0.05em;
 }
 
+/* Restoring saved drives: Skip after a few seconds (2026.48.5.2) */
+.loading-skip {
+    margin-top: 1.5rem;
+    max-width: 22rem;
+    padding: 0 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: center;
+}
+
+.loading-skip-text {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+
+.loading-skip-btn {
+    padding: 0.55rem 1.75rem;
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: var(--font-ui);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.loading-skip-btn:hover,
+.loading-skip-btn:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Saved drives that didn't load, under Select TeslaCam Folder */
+.drive-restore-notice {
+    margin: 0 0 0.5rem;
+    padding: 0.6rem 0.7rem 0.5rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--warning);
+    border-radius: 8px;
+    font-size: 0.8rem;
+}
+
+.drive-restore-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+}
+
+.drive-restore-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.drive-restore-text {
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.drive-restore-btn {
+    flex-shrink: 0;
+    padding: 0.3rem 0.7rem;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.drive-restore-btn:hover {
+    background: var(--accent);
+    color: var(--bg-void);
+}
+
+.drive-restore-foot {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+
+.drive-restore-hint {
+    flex: 1;
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+}
+
+.drive-restore-close {
+    flex-shrink: 0;
+    padding: 0 0.3rem;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.drive-restore-close:hover {
+    color: var(--text-primary);
+}
+
 /* ==================== BUFFERING INDICATOR ==================== */
 .buffering-indicator {
     position: fixed;

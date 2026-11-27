@@ -858,7 +858,17 @@
     "notLoaded": "Nicht geladen",
     "sync": "Synchronisieren",
     "syncNow": "Ereignisse von diesem Archivlaufwerk laden",
-    "editDrive": "Laufwerkseinstellungen bearbeiten"
+    "editDrive": "Laufwerkseinstellungen bearbeiten",
+    "restoring": "Gespeicherte Laufwerke werden wiederhergestellt...",
+    "restoringDrive": "{{drive}} wird wiederhergestellt...",
+    "restoreSlow": "Das dauert länger als üblich. Das Laufwerk ist möglicherweise nicht angeschlossen.",
+    "restoreSkip": "Überspringen",
+    "notConnected": "{{drive}} ist nicht angeschlossen.",
+    "needsPermission": "{{drive}} braucht Ihre Erlaubnis zum Öffnen.",
+    "restoreSkipped": "{{drive}} wurde nicht geladen.",
+    "stillNotConnected": "{{drive}} ist immer noch nicht angeschlossen.",
+    "reconnect": "Neu verbinden",
+    "reconnectHint": "Schließen Sie das Laufwerk bei Bedarf an und wählen Sie dann Neu verbinden."
   },
 
   "driveSetup": {
